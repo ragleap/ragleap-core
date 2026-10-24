@@ -29,7 +29,7 @@ spec:
             allowPrivilegeEscalation: false
       containers:
         - name: voice
-          image: ghcr.io/ragleap/ragleap-app:0.11.0
+          image: ghcr.io/ragleap/ragleap-app:0.11.1
           securityContext:
             runAsNonRoot: true
             runAsUser: 10001

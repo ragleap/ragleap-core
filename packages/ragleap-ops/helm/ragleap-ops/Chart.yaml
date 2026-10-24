@@ -2,5 +2,5 @@ apiVersion: v2
 name: ragleap-ops
 description: Helm chart for RagLeap Core — wraps the live-tested db/app/voice/neo4j Kubernetes manifests
 type: application
-version: 0.6.1
-appVersion: "0.6.1"
+version: 0.6.2
+appVersion: "0.6.2"

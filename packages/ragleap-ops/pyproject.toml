@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ragleap-ops"
-version = "0.6.1"
+version = "0.6.2"
 description = "Kubernetes deployment manifests and Helm chart for RagLeap Core, tested in CI on throwaway kind and k3d clusters"
 readme = "README.md"
 keywords = ["kubernetes", "k8s", "helm", "helm-chart", "devops", "deployment", "rag", "pgvector", "postgresql", "neo4j", "networkpolicy", "serviceaccount", "backup", "disaster-recovery"]

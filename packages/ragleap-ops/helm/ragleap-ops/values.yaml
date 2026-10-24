@@ -18,7 +18,7 @@ db:
 
 app:
   replicaCount: 1
-  image: ghcr.io/ragleap/ragleap-app:0.11.0
+  image: ghcr.io/ragleap/ragleap-app:0.11.1
   imagePullSecret: ghcr-pull-secret
   port: 8000
   # Numeric UID of the image's ragleap user (the Dockerfile creates it with --uid 10001).
@@ -43,7 +43,7 @@ app:
 
 voice:
   replicaCount: 1
-  image: ghcr.io/ragleap/ragleap-app:0.11.0
+  image: ghcr.io/ragleap/ragleap-app:0.11.1
   imagePullSecret: ghcr-pull-secret
   port: 8765
   # Numeric UID of the image's ragleap user (the Dockerfile creates it with --uid 10001).

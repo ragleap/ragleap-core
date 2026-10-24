@@ -5,13 +5,26 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-10-24
+
 ### Documentation
 
 - RUNBOOK Appendix A: the statement that k3s's default storage very likely behaves like kind's was an untested inference and is wrong for k3s v1.34.12. A CI run on k3s in Docker (k3d v5.9.0, run 40087055391) observed that its default `local-path` storage creates `local` PersistentVolumes, not `hostPath`. The Velero test also passed on that cluster with static `local` volumes. Not tested: Velero on k3s's default dynamic storage, and a systemd k3s install.
 
 ### Changed
 
-- The package description no longer says "live-tested against a real cluster". It takes effect on PyPI with the next release.
+- The `app` and `voice` image defaults, in the Helm values and in the raw `k8s/` manifests, now point to `ghcr.io/ragleap/ragleap-app:0.11.1` (pinned). `0.11.1` is `0.11.0` plus only a `requirements.lock` change (Pillow 12.3.0 to 13.0.0, pypdf 6.20.1 to 6.21.1). Anything that sets `app.image` and `voice.image` itself is unaffected. To keep the previous image, set both to `ghcr.io/ragleap/ragleap-app:0.11.0`.
+- The package description no longer says "live-tested against a real cluster". It is in this release.
+
+### Verified
+
+- On kind (GitHub runner), with chart 0.6.1 and the image overridden by `--set`, both the `app` and `voice` pods became Ready and the library versions read from inside the running container were `pillow=13.0.0 pypdf=6.21.1` (ops-app-pods-test: run 40111412227 for `sha-9f986ae`, run 40111878857 for `latest` after the tag). The same test on `0.11.0` read `pillow=12.3.0 pypdf=6.20.1` (run 40110869430). Readiness is a TCP check on the port.
+
+### Known limitations
+
+- Application behaviour with Pillow 13 and pypdf 6.21.1 was not tested: the tests show that the image starts, listens and has those versions.
+- The chart does not create the Secret `ragleap-app-env`, which both pods read through `envFrom`. Create it yourself, or the pods stay in `CreateContainerConfigError`.
+- The `ragleap-app` package is private: the `ghcr-pull-secret` must hold credentials with read access to it.
 
 ## [0.6.1] - 2026-10-21
 
