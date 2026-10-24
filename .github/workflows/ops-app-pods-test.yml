@@ -6,6 +6,11 @@ name: ops-app-pods-test
 # Not a required check.
 on:
   workflow_dispatch:
+    inputs:
+      image:
+        description: 'Optional app image to test, e.g. ghcr.io/ragleap/ragleap-app:sha-9f986ae (empty = the chart default)'
+        required: false
+        default: ''
   pull_request:
     branches: [main]
     paths:
@@ -30,4 +35,5 @@ jobs:
       - name: Run the chart's app and voice pods with the ragleap image
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APP_IMAGE: ${{ inputs.image }}
         run: bash .github/scripts/ops-app-pods-test.sh

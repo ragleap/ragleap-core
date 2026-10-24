@@ -39,6 +39,16 @@ CLUSTERS=$(kind get clusters 2>&1 || true)
 if grep -q -x -e "$CL" <<< "$CLUSTERS"; then stop "kind cluster $CL already exists"; fi
 IMG=$(helm template t "$OPS" | grep -m1 -o 'ghcr.io/[^" ]*ragleap-app:[^" ]*') || stop "could not read the app image from the chart"
 echo "chart $(sed -n 's/^version: //p' "$OPS/Chart.yaml") uses image: $IMG"
+IMG_ARGS=()
+if [ -n "${APP_IMAGE:-}" ]; then
+  case "$APP_IMAGE" in
+    ghcr.io/ragleap/ragleap-app:*) ;;
+    *) stop "APP_IMAGE must start with ghcr.io/ragleap/ragleap-app: (got '$APP_IMAGE')" ;;
+  esac
+  IMG="$APP_IMAGE"
+  IMG_ARGS=(--set "app.image=$IMG" --set "voice.image=$IMG")
+  echo "image overridden for this run: $IMG"
+fi
 
 echo "== can the workflow token read the image? (docker manifest inspect, no pull)"
 echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin >/dev/null
@@ -71,7 +81,7 @@ kubectl -n "$NS" create secret generic ghcr-pull-secret --type=kubernetes.io/doc
 kubectl -n "$NS" create secret generic ragleap-app-env --from-literal=EXPERIMENT_PLACEHOLDER=1
 
 echo "== installing the chart with app and voice at one replica (no --wait: we want to watch)"
-helm install ops "$OPS" -n "$NS"
+helm install ops "$OPS" -n "$NS" ${IMG_ARGS[@]+"${IMG_ARGS[@]}"}
 
 snapshot() { # prints one line per pod kind and the verdict token as the last line
   kubectl -n "$NS" get pods -o json | python3 -c "
@@ -125,6 +135,12 @@ while [ $((SECONDS - START)) -le 360 ]; do
   sleep 15
 done
 
+echo "== library versions inside the running app container"
+if [ "$VERDICT" = "READY" ]; then
+  kubectl -n "$NS" exec deploy/ragleap-app -c app -- python -c "import importlib.metadata as m; print('IMAGE_LIBS: pillow=' + m.version('pillow') + ' pypdf=' + m.version('pypdf'))" 2>&1 | tail -3 || true
+else
+  echo "IMAGE_LIBS: not read (verdict is $VERDICT)"
+fi
 echo "== final state"
 kubectl -n "$NS" get pods -o wide
 echo "== events (last 25)"
