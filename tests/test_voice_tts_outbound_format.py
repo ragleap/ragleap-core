@@ -105,6 +105,8 @@ def _speak(provider, count=720, trailing=b"", outcome="audio"):
 
 @pytest.mark.parametrize("provider,count,trailing", [
     pytest.param("openai", 720, b"", id="openai-pcm"),
+    # 721 samples -> 241 bytes; dropping one complete sample loses a grid point.
+    pytest.param("openai", 721, b"", id="openai-remainder-one"),
     pytest.param("openai", 722, b"", id="openai-non-multiple-of-three"),
     pytest.param("openai", 722, b"\x91", id="openai-odd-length-pcm"),
     pytest.param("elevenlabs", 720, b"", id="elevenlabs-ulaw"),
