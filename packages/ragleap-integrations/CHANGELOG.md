@@ -5,6 +5,31 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Verified (after 0.2.0)
+
+- Live-checked on 2026-10-25 with the published 0.2.0 wheel on Python 3.10.12
+  against Google Cloud's Pub/Sub MCP endpoint (`https://pubsub.googleapis.com/mcp`,
+  modern path, `tools/list` only, no credentials, no `tools/call`), using
+  `scripts/connect_live.py` (repository only, not in the wheel). All 15 tools
+  carry the four boolean hints (plus a `title`, which is dropped).
+  `connect()` with the default limits registered 11 tools and skipped the four
+  whose input schemas exceed `max_schema_chars` (`create_topic`,
+  `update_topic`, `create_subscription`, `update_subscription`), with the
+  stated reason. With `trust_annotations=False` all 11 are flagged
+  `requires_approval`. With `trust_annotations=True` exactly six are not (the
+  `get_` and `list_` tools for topics, subscriptions and snapshots, which
+  declare `readOnlyHint: true` and `destructiveHint: false`); `publish`,
+  `create_snapshot` and every `delete_` tool stay flagged. In both runs the
+  flags and the stored hints equal an independent calculation from the raw
+  hints, and each `connect()` produced one `discover` event (11 ready, 4
+  skipped, 95 to 111 ms) and no `call` event.
+
+### Not verified
+
+- The `approve` hook, its denial text and the per-call audit events against a
+  real server: they need a real `tools/call`, and this server requires
+  credentials. `connect(token=...)` against a real authorization server.
+
 ## [0.2.0] - 2026-10-24
 
 ### Added

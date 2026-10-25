@@ -110,5 +110,13 @@ list (no wildcard). `connect_config(config, specs=None)` does the same for any
 - Verified: 67 new tests (275 in total) pass on Python 3.10 and 3.12, against
   fake servers and the existing local TLS transport tests; 53 deliberate breaks of
   the new code, all caught by the new tests.
-- Not verified: `connect()`, the annotation handling and the events against a
-  real MCP server (a read-only discovery check is planned).
+- Verified live (2026-10-25, published 0.2.0 wheel, Pub/Sub MCP endpoint,
+  `tools/list` only, no credentials): `connect()` registers 11 tools and skips
+  the four with oversized schemas; all 15 tools carry the four boolean hints;
+  with `trust_annotations=False` all 11 are flagged, with `True` exactly the
+  six `get_` and `list_` tools (read-only, not destructive) are not, equal to
+  an independent calculation from the raw hints; one `discover` event per
+  `connect()` and no `call` event (`scripts/connect_live.py`).
+- Not verified: the `approve` hook, its denial text and the per-call events
+  against a real server (they need a real `tools/call`, and that server
+  requires credentials).

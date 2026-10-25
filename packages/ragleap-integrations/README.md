@@ -213,6 +213,19 @@ handshake with protocol version 2025-06-18 only (an explicit allowlist, not
   (the reply that triggered the fallback was not recorded); (d) a tool that
   reports an error returned `success=False` with the server's message in
   `error` and nothing raised.
+- **Live-checked on 2026-10-25** with the published 0.2.0 wheel on Python
+  3.10.12 against Google Cloud's Pub/Sub MCP endpoint
+  (`https://pubsub.googleapis.com/mcp`, modern path, `tools/list` only, no
+  credentials, no `tools/call`), using `scripts/connect_live.py` (repository
+  only, not in the wheel): `connect()` with the default limits registered 11
+  tools and skipped the four whose input schemas exceed `max_schema_chars`.
+  All 15 tools carry the four boolean hints. With `trust_annotations=False`
+  all 11 are flagged `requires_approval`; with `trust_annotations=True`
+  exactly six are not (the `get_` and `list_` tools for topics,
+  subscriptions and snapshots, which declare `readOnlyHint: true` and
+  `destructiveHint: false`). In both runs the flags equal an independent
+  calculation from the raw hints, and each `connect()` produced one
+  `discover` event and no `call` event.
 - **Not live-verified:** `x-mcp-header` mirroring (none of the four tools on
   the complex-schema server carries the annotation), pagination (none of the
   servers checked paginated) and this client's own handling of a `-32022`
@@ -221,6 +234,10 @@ handshake with protocol version 2025-06-18 only (an explicit allowlist, not
   in `error.data.supported`, which is where the client looks). They follow
   the public specification and are covered by tests against fakes only;
   treat them as best-effort until confirmed live.
+- **Not live-verified (new in 0.2.0):** the `approve` hook, its denial text
+  and the per-call audit events against a real server (they need a real
+  `tools/call`, and the Pub/Sub server requires credentials), and
+  `connect(token=...)` against a real authorization server.
 
 ## License
 
