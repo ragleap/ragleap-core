@@ -25,6 +25,7 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
+whisper = ["faster-whisper==1.2.1"]
 test = ["pytest>=8.0.0", "tomli>=2.0.0; python_version < '3.11'"]
 
 [project.scripts]

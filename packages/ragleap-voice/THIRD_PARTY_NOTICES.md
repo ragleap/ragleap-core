@@ -15,7 +15,7 @@ third-party material used only for benchmarking.
 ## Models and packages used for measurement (downloaded at run time, not vendored)
 - Whisper large-v3 (OpenAI) converted by Systran (`Systran/faster-whisper-large-v3`),
   MIT per the model card (checked by the benchmark script at run time).
-- faster-whisper 1.1.1: licence to be confirmed before it becomes a package dependency.
+- faster-whisper 1.2.1 (optional extra `whisper`): MIT per its GitHub repository, checked 2026-10-25. CTranslate2 is MIT and PyAV is BSD-3-Clause per their repositories. The licences of its other dependencies (huggingface_hub, tokenizers, onnxruntime, tqdm) have not been reviewed.
 - IndicConformer-600M-Multi (AI4Bharat), MIT per the model card and the AI4Bharat GitHub page.
   Gated on Hugging Face and loaded with the repo's own code (`trust_remote_code`); revision
   pinned in `models.toml`. Training-data licences not reviewed.

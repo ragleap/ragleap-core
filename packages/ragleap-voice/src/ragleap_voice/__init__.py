@@ -7,8 +7,11 @@ from .errors import (AudioDecodeError, ConsentRequiredError, EngineError, Engine
 from .registry import Registry, engines, register_engine
 from .results import Segment, Speech, Transcript
 from .api import transcribe
+from .whisper_engine import WhisperEngine
 
 __version__ = "0.0.2"
+
+register_engine(WhisperEngine())
 
 __all__ = ["AudioDecodeError", "Capabilities", "ConsentRequiredError", "Engine", "EngineError", "EngineInfo",
            "EngineNotInstalledError", "EngineUnavailableError", "LicenceError", "ModelNotFoundError",
