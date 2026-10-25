@@ -65,6 +65,9 @@
             <resource>
                 <directory>${project.basedir}/../../packages/ragleap-terraform/examples</directory>
                 <targetPath>ragleap_terraform/examples</targetPath>
+                <excludes>
+                    <exclude>kind/.terraform.lock.hcl</exclude>
+                </excludes>
             </resource>
         </resources>
         <plugins>
