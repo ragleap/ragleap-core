@@ -99,7 +99,20 @@ Cloud adapters (for example OpenAI, or Sarvam with the user's own key) may exist
 
 The demo runs each TTS engine in its own Python 3.11 environment because they pin conflicting packages, and because some models ship code that runs on load.
 
-Proposal: isolation is a requirement for any engine that has conflicting pins or loads model-supplied code (`trust_remote_code`). Those engines declare `isolated=True` and run as a worker process with a JSON-lines protocol over stdin and stdout, the same shape as the demo workers. The worker gets a clean environment (section 7), and its stderr goes to a log file whose path appears in `EngineError`. Engines without those problems may run in process. The core never installs environments for the user; the user installs the extra into the environment the worker uses.
+What the demo does (`benchmarks/voice/colab_tts_roundtrip.py`, checked 2026-10-25): it is a batch, not a protocol. It writes a jobs file, builds one environment per engine with uv, runs one script per engine with a clean environment and a timeout, and reads WAV files and a `timing.json` back from a folder. It has no stdin/stdout protocol and no long-lived process. The gated Parler repository is downloaded outside the TTS environment, so that environment never sees the token.
+
+Proposal **[plan, nothing is built]**: isolation is a requirement for any engine that has conflicting pins or loads model-supplied code (`trust_remote_code`). Those engines declare `isolated=True` and run as a long-lived worker process, so the model is not reloaded on every call.
+
+- **Protocol.** The parent sends `load`, `run` and `close` as JSON lines over the worker's stdin; the worker answers with JSON lines on stdout. The worker redirects file descriptor 1 to stderr at start and keeps the real stdout only for the protocol, because libraries print to stdout.
+- **Audio goes through files.** The worker writes the WAV into a private temporary folder and answers with its path. Audio never travels over the protocol.
+- **Logs.** Stderr goes to a log file whose path appears in `EngineError`.
+- **Clean environment.** No token variables, `HF_HUB_OFFLINE=1`, `TRANSFORMERS_OFFLINE=1` and an empty temporary Hugging Face home (section 7). The parent verifies the model folders and sends only their paths.
+- **Limits.** A timeout per call. A worker that dies, times out or answers badly becomes `EngineError`. `close()` ends the process.
+- **Setup is the user's.** The interpreter of the worker environment comes from an option or an environment variable. The core never installs environments for the user; the user installs the engine's extra into the environment the worker uses.
+- **Library code.** Libraries installed from GitHub (for example `parler-tts` at a pinned commit, Apache-2.0 per its repository) are not covered by the lock files. The README states this gap.
+- **Not a sandbox.** Isolation separates conflicting dependencies and keeps the token out. The worker still runs library code with the user's own permissions, and the documentation must not call it secure.
+
+Engines without conflicting pins or model-supplied code may run in process.
 
 ## 9. Errors
 
