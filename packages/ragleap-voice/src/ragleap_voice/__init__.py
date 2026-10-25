@@ -6,6 +6,7 @@ from .errors import (AudioDecodeError, ConsentRequiredError, EngineError, Engine
                      NoEngineError, RagleapVoiceError, UnsupportedFeatureError, UnsupportedLanguageError)
 from .registry import Registry, engines, register_engine
 from .results import Segment, Speech, Transcript
+from .api import transcribe
 
 __version__ = "0.0.2"
 
@@ -13,4 +14,4 @@ __all__ = ["AudioDecodeError", "Capabilities", "ConsentRequiredError", "Engine",
            "EngineNotInstalledError", "EngineUnavailableError", "LicenceError", "ModelNotFoundError",
            "ModelNotVerifiedError", "NoEngineError", "RagleapVoiceError", "Registry", "Request", "Result",
            "Segment", "Speech", "Transcript", "UnsupportedFeatureError", "UnsupportedLanguageError",
-           "engines", "register_engine"]
+           "engines", "register_engine", "transcribe"]

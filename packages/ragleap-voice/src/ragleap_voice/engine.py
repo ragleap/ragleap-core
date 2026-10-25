@@ -37,6 +37,7 @@ class Capabilities:
     hardware: frozenset = frozenset({"cpu"})
     watermarks_output: bool = False
     isolated: bool = False
+    detects_language: bool = False
 
     def __post_init__(self):
         _check_kind(self.kind)
