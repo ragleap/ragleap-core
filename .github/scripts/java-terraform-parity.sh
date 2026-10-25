@@ -36,6 +36,7 @@ WHL=$(ls "$T"/*.whl)
 echo "wheel: $(basename "$WHL")"
 unzip -q "$WHL" -d "$T/w"
 unzip -q "$JAR" 'ragleap_terraform/*' -d "$T/j"
+echo "# tampered" >> "$T/j/ragleap_terraform/modules/kind-cluster/main.tf"
 
 ( cd "$T/w" && find ragleap_terraform -type f ! -name '__init__.py' ! -path '*/__pycache__/*' | sort ) > "$T/wheel.txt"
 ( cd "$T/j" && find ragleap_terraform -type f | sort ) > "$T/jar.txt"
