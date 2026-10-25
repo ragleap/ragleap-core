@@ -2,8 +2,10 @@
 Speech-to-text and text-to-speech for the RagLeap Core voice channel.
 STT: OpenAI Whisper (default) or Deepgram. TTS: OpenAI TTS (default) or
 ElevenLabs. The provider is selected per deployment via VOICE_STT_PROVIDER
-and VOICE_TTS_PROVIDER (see config.py).
+and VOICE_TTS_PROVIDER (see config.py). Both TTS functions return
+headerless 8 kHz mono G.711 mu-law for Twilio playback.
 """
+import audioop
 import io
 import logging
 
@@ -44,18 +46,21 @@ def transcribe_audio(pcm_audio: bytes, api_key: str, sample_rate: int = 8000) ->
 
 
 def text_to_speech(text: str, api_key: str, voice: str = "nova") -> bytes:
-    """Generate speech audio from text using OpenAI TTS. Returns raw audio bytes (mp3)."""
+    """Generate OpenAI speech as headerless 8 kHz mono G.711 mu-law for Twilio."""
     if not api_key:
         logger.error("No OpenAI API key configured for TTS — set OPENAI_API_KEY in .env")
         return b""
 
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-    payload = {"model": "tts-1", "input": text, "voice": voice, "response_format": "mp3"}
+    payload = {"model": "tts-1", "input": text, "voice": voice, "response_format": "pcm"}
 
     try:
         response = requests.post(OPENAI_TTS_URL, headers=headers, json=payload, timeout=30)
         response.raise_for_status()
-        return response.content
+        # OpenAI PCM is headerless 24 kHz mono signed 16-bit little-endian; drop a partial sample.
+        pcm = response.content[:len(response.content) // 2 * 2]
+        pcm, _ = audioop.ratecv(pcm, 2, 1, 24000, 8000, None)
+        return audioop.lin2ulaw(pcm, 2)
     except Exception as e:
         logger.error(f"OpenAI TTS failed: {e}")
         return b""
@@ -90,7 +95,7 @@ def transcribe_with_deepgram(pcm_audio: bytes, api_key: str, sample_rate: int = 
 
 
 def text_to_speech_elevenlabs(text: str, api_key: str, voice: str) -> bytes:
-    """Generate speech audio from text using ElevenLabs. Returns raw audio bytes (mp3)."""
+    """Generate ElevenLabs speech as headerless 8 kHz mono G.711 mu-law for Twilio."""
     if not api_key:
         logger.error("No ElevenLabs API key configured for TTS — set ELEVENLABS_API_KEY in .env")
         return b""
@@ -100,7 +105,8 @@ def text_to_speech_elevenlabs(text: str, api_key: str, voice: str) -> bytes:
 
     try:
         response = requests.post(
-            ELEVENLABS_TTS_URL.format(voice_id=voice), headers=headers, json=payload, timeout=30
+            ELEVENLABS_TTS_URL.format(voice_id=voice), headers=headers, json=payload,
+            params={"output_format": "ulaw_8000"}, timeout=30
         )
         response.raise_for_status()
         return response.content

@@ -5,7 +5,7 @@ Handles Twilio Media Streams via WebSocket: receives real-time mu-law
 8kHz audio, buffers it using voice-activity detection (VAD), transcribes
 completed utterances through the configured STT provider (Whisper by
 default, Deepgram when selected), answers via core.chat.ask(), and
-streams the reply back as TTS audio.
+streams the reply back as headerless 8 kHz mono G.711 mu-law TTS audio.
 
 Single-tenant: one bot, one document set, configured entirely via .env
 (see channels/voice/config.py). VAD tuning values below are carried over
@@ -39,7 +39,7 @@ ECHO_TAIL_FRAMES = 50       # 1s suppress after AI finishes speaking (echo tail)
 
 
 async def send_audio(ws, stream_sid: str, audio_bytes: bytes):
-    """Send raw audio bytes to the caller via Twilio's Media Streams protocol."""
+    """Send headerless 8 kHz mono G.711 mu-law via Twilio's Media Streams protocol."""
     payload = base64.b64encode(audio_bytes).decode("utf-8")
     message = {
         "event": "media",
@@ -64,7 +64,7 @@ async def send_mark(ws, stream_sid: str, name: str = "reply-done"):
 
 
 async def speak_reply(ws, stream_sid: str, text: str, cfg: dict):
-    """Convert text to speech (dispatching on the configured TTS provider) and stream it to the caller, then mark completion."""
+    """Stream headerless 8 kHz mono mu-law from the configured TTS provider, then mark completion."""
     loop = asyncio.get_running_loop()
     if cfg["tts_provider"] == "elevenlabs":
         tts_fn = voice_audio.text_to_speech_elevenlabs
