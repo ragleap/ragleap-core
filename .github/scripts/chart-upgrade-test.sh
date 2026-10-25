@@ -173,6 +173,7 @@ if [ "$APPS_ON" = "1" ]; then
       fail "second helm upgrade with explicit replica counts failed"
     fi
   fi
+  kubectl -n "$NS" scale deploy/ragleap-app --replicas=0
   need_running ragleap-app
   need_running ragleap-voice
 fi
