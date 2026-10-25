@@ -1,6 +1,6 @@
 # A justified exception to the pickle-format rule for Whisper (CTranslate2) weights (draft)
 
-Status: draft for review. Nothing below is implemented; every item is **planned**.
+Status: the exception is implemented (checked 2026-10-25): `FORMAT_EXCEPTIONS` and the header check in `locks.py`, the `--format` option in `cli.py` and `pull.py`, and `tests/test_format_exception.py`. No model is `verified` yet; the verification criteria for speech-to-text are still undecided (section 6, item 5).
 Any change to `models.toml` or `locks/*.json` needs the maintainer's personal review.
 
 ## 1. Problem
@@ -47,13 +47,13 @@ Only the header was read. This is evidence about the file's shape, not proof tha
 
 ## 6. Order of work
 
-1. Correct the Whisper entry (`source_url`, full revision) after listing the repository files. Needs maintainer review.
-2. Implement the exception with the tests above.
+1. Done: the Whisper entry in `models.toml` points at `Systran/faster-whisper-large-v3` with a full revision.
+2. Done: implemented, with tests in `tests/test_format_exception.py`.
 3. Build the lock on Colab (the weights are about 3 GB; never on the production VPS).
-4. Compare the LFS file's SHA-256 with the Hub's own value, as was done for Parler.
+4. Done on 2026-10-25 in a Colab run: the Hub's SHA-256 and size of `model.bin` matched the lock (`69f74147...`, 3087284237 bytes). It was reported in issue #960 and needs the maintainer's review.
 5. Verification criteria for a speech-to-text model are not defined yet and are a separate decision.
 
 ## 7. Open questions
 
-1. Is `"format"` an optional field inside lock schema 1, or does it need schema 2? It depends on how strict the current validator is.
+1. Settled in practice: `"format"` is an optional key inside lock schema 1, and `validate_lock` accepts it only with a known tag that matches the file suffix.
 2. Is a header check enough, or should the table also pin the expected spec name (`WhisperSpec`) per model?
