@@ -1,0 +1,31 @@
+name: java-terraform-test
+
+# Builds and tests the Java jar of ragleap-terraform and checks that it holds the same files as the PyPI wheel.
+# Never publishes. Manual (workflow_dispatch) or when a PR touches the Java folder, the Python package or this check.
+# Not a required check.
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/java-terraform-test.yml
+      - .github/scripts/java-terraform-parity.sh
+      - java/ragleap-terraform/**
+      - packages/ragleap-terraform/**
+
+permissions:
+  contents: read
+
+jobs:
+  java-terraform-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: 'maven'
+      - name: Build, test and check parity with the wheel
+        run: bash .github/scripts/java-terraform-parity.sh
