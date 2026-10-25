@@ -386,3 +386,25 @@ CREATE TABLE IF NOT EXISTS folder_ingest_approvals (
     approved_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     approved_files INTEGER
 );
+
+-- People and personal keys (core/users.py, core/permissions.py). The shared RAGLEAP_API_KEY still works and counts as
+-- the owner. A key is shown once; only its sha256 hash is stored. org_id is empty today (reserved for multi-tenant).
+CREATE TABLE IF NOT EXISTS users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    org_id UUID,
+    name TEXT NOT NULL,
+    role TEXT NOT NULL CHECK (role IN ('viewer', 'operator', 'admin', 'owner')),
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS users_name_lower_idx ON users (lower(name));
+CREATE TABLE IF NOT EXISTS user_keys (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    key_hash TEXT NOT NULL UNIQUE,
+    key_prefix TEXT NOT NULL,
+    label TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_used_at TIMESTAMPTZ,
+    revoked_at TIMESTAMPTZ
+);

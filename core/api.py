@@ -41,6 +41,8 @@ from core import vector_dims as core_vector_dims
 from core import setup_status
 from core import observability
 from core import folder_ingest
+from core import permissions
+from core import users as core_users
 from core import queue
 from core.employees.sensitivity import is_sensitive_role
 
@@ -156,7 +158,7 @@ def _too_many_attempts(wait_seconds: int):
 @app.middleware("http")
 async def require_api_key(request: Request, call_next):
     if not RAGLEAP_API_KEY:
-        return await call_next(request)
+        return await call_next(request)         # open API: /me falls back to the open actor
     path = request.url.path
     if path in API_KEY_EXEMPT_PATHS or path.startswith(API_KEY_EXEMPT_PREFIXES):
         return await call_next(request)
@@ -170,7 +172,11 @@ async def require_api_key(request: Request, call_next):
     supplied = request.headers.get("x-api-key", "")
     if not supplied:
         return JSONResponse(status_code=401, content={"detail": "Missing or invalid API key."})
-    if not hmac.compare_digest(supplied.encode("utf-8"), RAGLEAP_API_KEY.encode("utf-8")):
+    if hmac.compare_digest(supplied.encode("utf-8"), RAGLEAP_API_KEY.encode("utf-8")):
+        actor = permissions.BOOTSTRAP_ACTOR            # the shared key counts as the owner
+    else:
+        actor = await asyncio.to_thread(core_users.resolve, supplied)    # a personal key, or None
+    if actor is None:
         if throttle:
             locked = auth_throttle.record_failure(client)
             if locked:
@@ -179,6 +185,11 @@ async def require_api_key(request: Request, call_next):
         return JSONResponse(status_code=401, content={"detail": "Missing or invalid API key."})
     if throttle:
         auth_throttle.record_success(client)
+    need = permissions.required_role(request.method, path)
+    if not permissions.allows(actor["role"], need):
+        return JSONResponse(status_code=403, content={
+            "detail": f"Your role ({actor['role']}) cannot do this. It needs {need} or higher."})
+    request.state.actor = actor
     return await call_next(request)
 
 
@@ -1069,6 +1080,65 @@ def office_file_grants():
     """Folder grants and the file-access switches for the dashboard Files tab (names only, never host paths)."""
     from core import file_access
     return file_access.overview()
+
+
+@app.get("/me")
+def whoami(request: Request):
+    """Who the API thinks you are: the shared key counts as the owner; a personal key shows its person and role."""
+    actor = getattr(request.state, "actor", None) or permissions.OPEN_ACTOR
+    return {k: actor.get(k) for k in ("kind", "name", "role", "user_id")}
+
+
+class UserCreateRequest(BaseModel):
+    name: str
+    role: str
+
+
+class UserUpdateRequest(BaseModel):
+    role: str | None = None
+    status: str | None = None
+
+
+class KeyCreateRequest(BaseModel):
+    label: str = ""
+
+
+def _users_call(fn, *args, **kwargs):
+    try:
+        return fn(*args, **kwargs)
+    except core_users.UserError as e:
+        raise HTTPException(status_code=e.status, detail=e.message)
+    except Exception as e:
+        if e.__class__.__name__ in ("UndefinedTable", "UndefinedColumn"):
+            raise HTTPException(status_code=503, detail="The database has no users tables yet (apply db/schema.sql).")
+        raise
+
+
+@app.get("/users")
+def users_list():
+    """People and how many live personal keys each has. Owner only. Key values are never shown again."""
+    return {"users": _users_call(core_users.list_users), "roles": list(permissions.ROLES)}
+
+
+@app.post("/users")
+def users_create(req: UserCreateRequest):
+    return _users_call(core_users.create_user, req.name, req.role)
+
+
+@app.patch("/users/{user_id}")
+def users_update(user_id: str, req: UserUpdateRequest):
+    return _users_call(core_users.update_user, user_id, req.role, req.status)
+
+
+@app.post("/users/{user_id}/keys")
+def users_key_create(user_id: str, req: KeyCreateRequest):
+    """Make a personal key. It is in this answer once and is never stored or shown again."""
+    return _users_call(core_users.create_key, user_id, req.label)
+
+
+@app.delete("/users/{user_id}/keys/{key_id}")
+def users_key_revoke(user_id: str, key_id: str):
+    return _users_call(core_users.revoke_key, user_id, key_id)
 
 
 @app.get("/folder-ingest")
