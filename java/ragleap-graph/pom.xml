@@ -6,7 +6,7 @@
 
     <groupId>io.github.antonyrag</groupId>
     <artifactId>ragleap-graph</artifactId>
-    <version>0.2.0</version>
+    <version>0.3.0</version>
     <packaging>jar</packaging>
 
     <name>ragleap-graph (Java port)</name>
@@ -21,7 +21,7 @@
         relations; six lookups (documents by entities, related entities, typed relations,
         lineage, entities by type, document entities); GraphRetriever (hybrid vector plus
         graph retrieval, or graph only, with citations); and one-time backfills with a
-        schema migration runner. Not yet ported: the Postgres audit writer. Independently
+        schema migration runner. A PostgreSQL audit writer (PostgresAuditSink, over a PostgreSQL JDBC driver you supply; tested against a real PostgreSQL on the maintainer's machine, not in CI) is included. Independently
         versioned from the Python package (see https://pypi.org/project/ragleap-graph/).
     </description>
     <url>https://github.com/ragleap/ragleap-core</url>

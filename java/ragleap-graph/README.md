@@ -6,7 +6,7 @@ Java port of the Python package `packages/ragleap-graph` (knowledge-graph-augmen
 <dependency>
     <groupId>io.github.antonyrag</groupId>
     <artifactId>ragleap-graph</artifactId>
-    <version>0.2.0</version>
+    <version>0.3.0</version>
 </dependency>
 ```
 
@@ -18,6 +18,7 @@ It is versioned independently from the Python package. It talks to Neo4j over it
 - `GraphIndex`: `upsertDocument` (per-document weights, co-occurrence edges, typed relations), and the lookups `findDocumentsByEntities`, `documentEntities`, `searchRelatedEntities`, `findRelations`, `findLineage`, `findEntitiesByType`. If the server cannot be reached, the index is unavailable and the lookups return empty results, like the Python package.
 - `GraphRetriever` and `GraphRetrievalConfig`: hybrid (vector plus graph) or graph-only retrieval with chunk and graph-path citations.
 - One-time backfills on `GraphIndex` and a schema migration runner (`Migration`, `MigrationRunner`).
+- `PostgresAuditSink`: an audit writer for graph upserts (pass it to a `GraphIndex` constructor), using the libpq-style connection url you give it and any PostgreSQL JDBC driver you add to your own project; it never throws from `log()`. The default stays a no-op sink.
 - Optional adapters over `ragleap-rag` (add `io.github.antonyrag:ragleap-rag` to your own project to use them): `RagLeapGenerationClient` for LLM extraction and `RagLeapVectorSearch` for the vector side of retrieval.
 
 ## Quick start
@@ -52,16 +53,17 @@ GraphIndex graph = new GraphIndex(config, extraction);
 - LLM extraction against a real model provider: it is tested with scripted model answers and a local fake OpenAI-style server only.
 - Any Neo4j other than 5.26.29 Community, single server (bookmarks are not passed along).
 - `RagLeapVectorSearch.of(RagLeap)` against a live ragleap-rag facade (its conversion and error handling are tested with a stand-in).
+- `PostgresAuditSink` was tested against a real PostgreSQL (a pgvector/pg16 test database) on the maintainer's machine; CI runs only the offline tests.
 
 ## Not ported yet
 
-- The Postgres audit writer (a no-op audit sink is the default).
+No further parts of the Python package are known to be missing; the port was done slice by slice and compared with recordings from the real Python code.
 
 ## Tests and parity
 
 `mvn -B test` runs the offline tests; parity and live tests skip when their environment is not set.
 
-Parity: outputs are compared with recordings generated from the real Python code at commit 226fa4de (the nine scripts `parity/gen_fixtures_*.py`). To run them:
+Parity: outputs are compared with recordings generated from the real Python code at commit 226fa4de (the ten scripts `parity/gen_fixtures_*.py`). To run them:
 
 ```bash
 mkdir -p /tmp/py-graph-pinned
