@@ -1,0 +1,27 @@
+name: ansible-container-test
+
+# Runs the ragleap-ansible roles twice inside a throwaway ubuntu:22.04 container with the package's own
+# tests/container_test.sh: idempotence, the deploy user, opt-in SSH hardening (and the refusal without a key,
+# and the rollback of a bad sshd config) and the opt-in firewall. It never touches the runner itself.
+# Manual (workflow_dispatch) or when a PR changes this file or the Ansible package. Not a required check.
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/ansible-container-test.yml
+      - packages/ragleap-ansible/**
+
+permissions:
+  contents: read
+
+jobs:
+  ansible-container-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Docker version
+        run: docker version --format 'server {{.Server.Version}}'
+      - name: Run the roles twice in an Ubuntu 22.04 container and check the result
+        run: bash packages/ragleap-ansible/tests/container_test.sh && echo "ANSIBLE CONTAINER TEST PASSED"
