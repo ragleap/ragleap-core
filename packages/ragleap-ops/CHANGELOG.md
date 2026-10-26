@@ -7,7 +7,7 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Documentation
 
-- README: how upgrades between published chart versions behave. In CI on kind (`chart-upgrade-test`, run 40221366116), `helm upgrade` from the published `0.5.2` to the `0.6.2` chart left the Postgres and Neo4j pods, volumes and data untouched, and a plain `helm upgrade` with no `--set` kept the `app.replicaCount` and `voice.replicaCount` values set at install (both stayed at zero). One version pair only. Not tested: upgrades that change values, rollbacks, other Kubernetes versions, multi-node scheduling, application behaviour.
+- README: how upgrades between published chart versions behave. In CI on kind (`chart-upgrade-test`: run 40221366116 on the runner's default cluster, and run 40267480140 on Kubernetes v1.34.11, v1.36.4 and v1.37.0, single-node each), `helm upgrade` from the published `0.5.2` to the `0.6.2` chart left the Postgres and Neo4j pods, volumes and data untouched, and a plain `helm upgrade` with no `--set` kept the `app.replicaCount` and `voice.replicaCount` values set at install (both stayed at zero). One chart version pair only. Not tested: upgrades that change values, rollbacks, Kubernetes versions other than those three, multi-node scheduling, application behaviour.
 
 ## [0.6.2] - 2026-10-24
 
