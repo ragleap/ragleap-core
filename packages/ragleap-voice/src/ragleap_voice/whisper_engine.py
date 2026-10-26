@@ -24,7 +24,9 @@ _OPTIONS = ("beam_size", "device")
 # device -> compute type. cpu/int8 ran on Colab; cuda/float16 has not run yet.
 _DEVICES = {"auto": "default", "cpu": "int8", "cuda": "float16"}
 _CUDA_WORDS = ("libcublas", "libcudnn", "cuda")
-_CUDA_HINT = 'pass options={"device": "cpu"} to run on the CPU, or install the CUDA 12 libraries that ctranslate2 needs.'
+_CUDA_HINT = ('pass options={"device": "cpu"} to run on the CPU, or install the CUDA 12 libraries that ctranslate2 needs. '
+              'On one Colab T4 image, pip install nvidia-cublas-cu12 nvidia-cudnn-cu12 and loading their .so files with '
+              'ctypes (RTLD_GLOBAL) before the model made device cuda work; this is one observation, not a guarantee.')
 
 
 @contextlib.contextmanager

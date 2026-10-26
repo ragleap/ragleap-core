@@ -170,7 +170,7 @@ def test_cuda_failure_while_running(fake_fw, tmp_path):
     FakeModel.fail = RuntimeError("Library libcublas.so.12 is not found or cannot be loaded")
     with pytest.raises(EngineUnavailableError) as info:
         eng.run(req())
-    assert "cpu" in str(info.value) and isinstance(info.value.__cause__, RuntimeError)
+    assert "cpu" in str(info.value) and "nvidia-cublas-cu12" in str(info.value) and isinstance(info.value.__cause__, RuntimeError)
 
 
 def test_other_runtime_errors_pass_through(fake_fw, tmp_path):

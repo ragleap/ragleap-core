@@ -28,7 +28,7 @@ Nothing in the package uses the network unless you run `models pull` or `models 
 Not in the PyPI release. Install from a checkout of the repository to try it. Pre-alpha: names and signatures can still change.
 
 - `transcribe()` and `synthesize()`, which check the licence, the lock and the verification status of every model before an engine sees it, and hand engines verified folders only. Every model is `unverified` and none is a default, so calls need `allow_unverified=True`.
-- A Whisper large-v3 engine (optional extra `whisper`, faster-whisper). Run with the real model on two clips (English and Spanish) on a CPU. The GPU path has not run. Input must be mono 16-bit 16 kHz WAV.
+- A Whisper large-v3 engine (optional extra `whisper`, faster-whisper). Run with the real model on two clips (English and Spanish) on a CPU, and on one Colab T4 with NVIDIA's cublas and cudnn pip packages preloaded by hand (the engine does not preload them). Other GPUs and CUDA versions have not been tried. Input must be mono 16-bit 16 kHz WAV.
 - An Indic Parler-TTS engine, run as an isolated worker from a Python environment you set up yourself (`RAGLEAP_VOICE_PARLER_PYTHON`). Run once with the real model on a T4 for Hindi and English. The model is gated on Hugging Face. The `parler-tts` library is installed from GitHub and is not covered by the lock files, and the versions of its dependencies are not pinned by us.
 - No emotion names are declared. Style goes through `options={"description": "..."}`, and what that changes has not been measured. Voice cloning is not built.
 - Isolation separates conflicting dependencies and keeps tokens out of the worker. It is not a security sandbox.
