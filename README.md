@@ -19,6 +19,8 @@
 [![PyPI ragleap-terraform](https://img.shields.io/pypi/v/ragleap-terraform?label=ragleap-terraform)](https://pypi.org/project/ragleap-terraform/) [![Downloads](https://img.shields.io/pepy/dt/ragleap-terraform?label=downloads)](https://pypi.org/project/ragleap-terraform/)
 [![PyPI ragleap-ansible](https://img.shields.io/pypi/v/ragleap-ansible?label=ragleap-ansible)](https://pypi.org/project/ragleap-ansible/) [![Downloads](https://img.shields.io/pepy/dt/ragleap-ansible?label=downloads)](https://pypi.org/project/ragleap-ansible/)
 [![PyPI ragleap-voice](https://img.shields.io/pypi/v/ragleap-voice?label=ragleap-voice)](https://pypi.org/project/ragleap-voice/) [![Downloads](https://img.shields.io/pepy/dt/ragleap-voice?label=downloads)](https://pypi.org/project/ragleap-voice/)
+[![PyPI ragleap-memory](https://img.shields.io/pypi/v/ragleap-memory?label=ragleap-memory)](https://pypi.org/project/ragleap-memory/) [![Downloads](https://img.shields.io/pepy/dt/ragleap-memory?label=downloads)](https://pypi.org/project/ragleap-memory/)
+[![PyPI ragleap-security](https://img.shields.io/pypi/v/ragleap-security?label=ragleap-security)](https://pypi.org/project/ragleap-security/) [![Downloads](https://img.shields.io/pepy/dt/ragleap-security?label=downloads)](https://pypi.org/project/ragleap-security/)
 [![Maven Central ragleap-rag (Java)](https://img.shields.io/maven-central/v/io.github.antonyrag/ragleap-rag?label=ragleap-rag%20(Java))](https://central.sonatype.com/artifact/io.github.antonyrag/ragleap-rag)
 [![Maven Central ragleap-graph (Java)](https://img.shields.io/maven-central/v/io.github.antonyrag/ragleap-graph?label=ragleap-graph%20(Java))](https://central.sonatype.com/artifact/io.github.antonyrag/ragleap-graph) [![Maven Central ragleap-vectorstores (Java)](https://img.shields.io/maven-central/v/io.github.antonyrag/ragleap-vectorstores?label=ragleap-vectorstores%20(Java))](https://central.sonatype.com/artifact/io.github.antonyrag/ragleap-vectorstores)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://github.com/ragleap/ragleap-core) [![Discord](https://img.shields.io/badge/Discord-Join%20us-5865F2?logo=discord&logoColor=white)](https://discord.gg/mQwJuQDVrA) [![Repo clones](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/ragleap/ragleap-core/main/.github/badges/clone-count.json)](https://github.com/ragleap/ragleap-core/pulse)
@@ -187,6 +189,22 @@ Looking at open, local speech models? `ragleap-voice` is a pre-alpha model manag
 pip install ragleap-voice
 # or, with uv
 uv add ragleap-voice
+```
+
+Need durable, tenant-scoped long-term memory for an LLM app? `ragleap-memory` stores it in one SQLite file with FTS5 keyword search, typed entries with trust labels, supersede and erase (alpha, not independently audited):
+
+```bash
+pip install ragleap-memory
+# or, with uv
+uv add ragleap-memory
+```
+
+Need tenant scopes, a tamper-evident audit log and secret handling in a Python AI app? `ragleap-security` is a small standard-library-only package of security primitives (alpha, not independently audited):
+
+```bash
+pip install ragleap-security
+# or, with uv
+uv add ragleap-security
 ```
 
 Or run the full self-hosted app (channels, the AI Office dashboard, Docker Compose) — see [Quickstart](#quickstart) below. Browse every package at [packages.ragleap.com](https://packages.ragleap.com). Try it hands-on with the runnable scripts in [examples/](examples/) — `01_ingest_and_query.py` (upload a document, ask a question via the API) and `02_test_channel_directly.py` (test channel answering logic without real bot credentials).
