@@ -4,7 +4,15 @@ Java port of [ragleap-vectorstores](https://pypi.org/project/ragleap-vectorstore
 [ragleap-rag](../ragleap-rag). Every backend implements ragleap-rag's `VectorBackend` interface and talks to its store
 over REST with the JDK `HttpClient` and Jackson, with no vendor SDK.
 
-**Status: work in progress, not published to Maven Central yet.** OpenSearch, Upstash and Redis exist so far.
+Published on Maven Central as `io.github.antonyrag:ragleap-vectorstores` (Java 21; [ragleap-rag](../ragleap-rag) comes in as a dependency). OpenSearch, Upstash and Redis backends exist so far; Chroma and LanceDB are not ported.
+
+```xml
+<dependency>
+    <groupId>io.github.antonyrag</groupId>
+    <artifactId>ragleap-vectorstores</artifactId>
+    <version>0.1.0</version>
+</dependency>
+```
 
 ## OpenSearch
 

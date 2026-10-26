@@ -61,7 +61,7 @@ provider key). The database url has the same form as `RAGLEAP_JAVA_TEST_DATABASE
   clients; `custom` takes a base URL. Seven embedding providers: gemini, openai, mistral, together, ollama, cohere and
   voyage.
 - **Vector backends:** pgvector (default; dense, sparse and hybrid search with RRF), FAISS, Qdrant, Weaviate, Milvus
-  and Pinecone. The sibling module `java/ragleap-vectorstores` (not published yet) adds OpenSearch, Upstash and Redis
+  and Pinecone. The sibling module `java/ragleap-vectorstores` (published separately as `io.github.antonyrag:ragleap-vectorstores`) adds OpenSearch, Upstash and Redis
   backends for the same `VectorBackend` interface.
 - **Ingestion:** a document parser for 27 of the Python package's 28 formats (no Parquet; legacy `.xls` needs the
   optional Apache POI dependency), OCR through the Tesseract binary, audio extraction from video through the ffmpeg

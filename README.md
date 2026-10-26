@@ -20,7 +20,7 @@
 [![PyPI ragleap-ansible](https://img.shields.io/pypi/v/ragleap-ansible?label=ragleap-ansible)](https://pypi.org/project/ragleap-ansible/) [![Downloads](https://img.shields.io/pepy/dt/ragleap-ansible?label=downloads)](https://pypi.org/project/ragleap-ansible/)
 [![PyPI ragleap-voice](https://img.shields.io/pypi/v/ragleap-voice?label=ragleap-voice)](https://pypi.org/project/ragleap-voice/) [![Downloads](https://img.shields.io/pepy/dt/ragleap-voice?label=downloads)](https://pypi.org/project/ragleap-voice/)
 [![Maven Central ragleap-rag (Java)](https://img.shields.io/maven-central/v/io.github.antonyrag/ragleap-rag?label=ragleap-rag%20(Java))](https://central.sonatype.com/artifact/io.github.antonyrag/ragleap-rag)
-[![Maven Central ragleap-graph (Java)](https://img.shields.io/maven-central/v/io.github.antonyrag/ragleap-graph?label=ragleap-graph%20(Java))](https://central.sonatype.com/artifact/io.github.antonyrag/ragleap-graph)
+[![Maven Central ragleap-graph (Java)](https://img.shields.io/maven-central/v/io.github.antonyrag/ragleap-graph?label=ragleap-graph%20(Java))](https://central.sonatype.com/artifact/io.github.antonyrag/ragleap-graph) [![Maven Central ragleap-vectorstores (Java)](https://img.shields.io/maven-central/v/io.github.antonyrag/ragleap-vectorstores?label=ragleap-vectorstores%20(Java))](https://central.sonatype.com/artifact/io.github.antonyrag/ragleap-vectorstores)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://github.com/ragleap/ragleap-core) [![Discord](https://img.shields.io/badge/Discord-Join%20us-5865F2?logo=discord&logoColor=white)](https://discord.gg/mQwJuQDVrA) [![Repo clones](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/ragleap/ragleap-core/main/.github/badges/clone-count.json)](https://github.com/ragleap/ragleap-core/pulse)
 
 English · [Afrikaans](readmes/README.af.md) · [العربية](readmes/README.ar.md) · [Български](readmes/README.bg.md) · [বাংলা](readmes/README.bn.md) · [Català](readmes/README.ca.md) · [Čeština](readmes/README.cs.md) · [Cymraeg](readmes/README.cy.md) · [Dansk](readmes/README.da.md) · [Deutsch](readmes/README.de.md) · [Ελληνικά](readmes/README.el.md) · [Español](readmes/README.es.md) · [Eesti](readmes/README.et.md) · [فارسی](readmes/README.fa.md) · [Suomi](readmes/README.fi.md) · [Français](readmes/README.fr.md) · [ગુજરાતી](readmes/README.gu.md) · [עברית](readmes/README.he.md) · [हिन्दी](readmes/README.hi.md) · [Hrvatski](readmes/README.hr.md) · [Magyar](readmes/README.hu.md) · [Bahasa Indonesia](readmes/README.id.md) · [Italiano](readmes/README.it.md) · [日本語](readmes/README.ja.md) · [ಕನ್ನಡ](readmes/README.kn.md) · [한국어](readmes/README.ko.md) · [Lietuvių](readmes/README.lt.md) · [Latviešu](readmes/README.lv.md) · [Македонски](readmes/README.mk.md) · [മലയാളം](readmes/README.ml.md) · [मराठी](readmes/README.mr.md) · [नेपाली](readmes/README.ne.md) · [Nederlands](readmes/README.nl.md) · [Norsk](readmes/README.no.md) · [ਪੰਜਾਬੀ](readmes/README.pa.md) · [Polski](readmes/README.pl.md) · [Português](readmes/README.pt.md) · [Română](readmes/README.ro.md) · [Русский](readmes/README.ru.md) · [Slovenčina](readmes/README.sk.md) · [Slovenščina](readmes/README.sl.md) · [Soomaali](readmes/README.so.md) · [Shqip](readmes/README.sq.md) · [Svenska](readmes/README.sv.md) · [Kiswahili](readmes/README.sw.md) · [தமிழ்](readmes/README.ta.md) · [తెలుగు](readmes/README.te.md) · [ไทย](readmes/README.th.md) · [Tagalog](readmes/README.tl.md) · [Türkçe](readmes/README.tr.md) · [Українська](readmes/README.uk.md) · [اردو](readmes/README.ur.md) · [Tiếng Việt](readmes/README.vi.md) · [简体中文](readmes/README.zh-cn.md) · [繁體中文](readmes/README.zh-tw.md)
@@ -86,15 +86,25 @@ Prefer Java? `ragleap-rag` is also on Maven Central:
 ```
 Independently versioned from the Python package above — see [`java/ragleap-rag`](java/ragleap-rag) for current scope.
 
-The Neo4j graph index has a Java port too, over the HTTP Query API (regex or, optionally, LLM entity and relation extraction, deduplication, document indexing and lookups, `GraphRetriever`, backfills and migrations; the Postgres audit writer is not ported yet):
+The Neo4j graph index has a Java port too, over the HTTP Query API (regex or, optionally, LLM entity and relation extraction, deduplication, document indexing and lookups, `GraphRetriever`, backfills and migrations, and the Postgres audit writer):
 ```xml
 <dependency>
     <groupId>io.github.antonyrag</groupId>
     <artifactId>ragleap-graph</artifactId>
-    <version>0.2.0</version>
+    <version>0.3.0</version>
 </dependency>
 ```
 See [`java/ragleap-graph`](java/ragleap-graph) for current scope.
+
+The extra vector backends have a Java port too (OpenSearch, Upstash Vector and Redis Stack, each over its own protocol with no vendor SDK, implementing ragleap-rag's `VectorBackend`):
+```xml
+<dependency>
+    <groupId>io.github.antonyrag</groupId>
+    <artifactId>ragleap-vectorstores</artifactId>
+    <version>0.1.0</version>
+</dependency>
+```
+See [`java/ragleap-vectorstores`](java/ragleap-vectorstores) for current scope.
 
 Add `ragleap-graph` too if you want Neo4j-backed knowledge graph retrieval:
 ```bash
@@ -325,7 +335,7 @@ ragleap-core/
 ├── skills/ragleap/        # Read-only skill for coding agents
 ├── .codex-plugin/         # Plugin manifest for that skill
 ├── packages/              # Standalone pip packages (ragleap-rag, -graph, -tools, ...)
-├── java/                  # Java ports of ragleap-rag and ragleap-graph
+├── java/                  # Java ports of ragleap-rag, ragleap-graph and ragleap-vectorstores
 ├── .github/workflows/     # CI: compile check, Docker build, smoke tests
 ├── docker-compose.yml     # app + db + voice, plus optional neo4j, redis, worker, sandbox and ollama profiles
 └── Dockerfile
