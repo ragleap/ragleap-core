@@ -1,0 +1,47 @@
+name: ansible-vm-observe
+
+# OBSERVATION ONLY, changes nothing on the runner: prints what a fresh GitHub runner looks like before the
+# ragleap-ansible roles are ever run on a real host (OS, sshd and its units, firewall, sudo, apt activity, Python).
+# The job is green whatever it prints: read the OBSERVED lines. Manual (workflow_dispatch) or when a PR changes
+# this file. Not a required check.
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/ansible-vm-observe.yml
+
+permissions:
+  contents: read
+
+jobs:
+  ansible-vm-observe:
+    name: ansible-vm-observe (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+    steps:
+      - name: Look around (read-only)
+        shell: bash {0}
+        run: |
+          echo "OBSERVED os: $(. /etc/os-release; echo "$PRETTY_NAME"), kernel $(uname -r)"
+          echo "OBSERVED user: $(id)"
+          sudo -n true 2>/dev/null && echo "OBSERVED sudo: passwordless sudo works" || echo "OBSERVED sudo: passwordless sudo does NOT work"
+          echo "OBSERVED systemd: $(systemctl --version | head -1), state $(systemctl is-system-running 2>&1)"
+          echo "OBSERVED sshd binary: $(command -v sshd || ls /usr/sbin/sshd 2>&1)"
+          echo "OBSERVED openssh-server package: $(dpkg -s openssh-server 2>&1 | grep -E '^(Status|Version)' | tr '\n' ' ')"
+          echo "OBSERVED ssh.service: active=$(systemctl is-active ssh 2>&1) enabled=$(systemctl is-enabled ssh 2>&1)"
+          echo "OBSERVED ssh.socket: active=$(systemctl is-active ssh.socket 2>&1) enabled=$(systemctl is-enabled ssh.socket 2>&1)"
+          echo "OBSERVED sshd_config.d: $(ls /etc/ssh/sshd_config.d 2>&1 | tr '\n' ' ')"
+          echo "OBSERVED sshd effective: $(sudo sshd -T 2>&1 | grep -E '^(port|passwordauthentication|kbdinteractiveauthentication|permitrootlogin|pubkeyauthentication) ' | tr '\n' ';')"
+          echo "OBSERVED ufw: $(dpkg -s ufw 2>&1 | grep -E '^Status'), status: $(sudo ufw status 2>&1 | head -1)"
+          echo "OBSERVED unattended-upgrades: $(dpkg -s unattended-upgrades 2>&1 | grep -E '^Status'), service: $(systemctl is-active unattended-upgrades 2>&1)"
+          echo "OBSERVED apt timers: $(systemctl is-active apt-daily.timer apt-daily-upgrade.timer 2>&1 | tr '\n' ' ')"
+          echo "OBSERVED apt/dpkg lock holders: $(sudo fuser /var/lib/dpkg/lock-frontend /var/lib/apt/lists/lock 2>&1 | tr '\n' ' ')"
+          echo "OBSERVED python: $(python3 --version 2>&1), pip: $(python3 -m pip --version 2>&1 | cut -c1-60)"
+          echo "OBSERVED ansible: $(command -v ansible || echo 'not installed')"
+          echo "OBSERVED listening tcp: $(sudo ss -ltn 2>&1 | awk 'NR>1 {print $4}' | tr '\n' ' ')"
+          echo "OBSERVED iptables rules: $(sudo iptables -S 2>&1 | head -5 | tr '\n' ';')"
