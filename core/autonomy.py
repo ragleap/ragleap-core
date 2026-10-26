@@ -113,21 +113,37 @@ def set_autonomy(mode: str, channels: Optional[List[str]] = None,
 
 def log_autonomous_action(action_type: str, channel: str, target: str,
                            content: str, result: str, approved: bool = True,
-                           role: Optional[str] = None) -> None:
+                           role: Optional[str] = None, decided_by: Optional[Dict] = None) -> None:
     """Log an autonomous action. Table keeps unbounded history; callers
     wanting production's "last 200" behavior should query with LIMIT.
-    role is optional and nullable -- older callers/rows keep working."""
+    role is optional and nullable -- older callers/rows keep working.
+    decided_by is the person (or the owner's chat) who approved or rejected it, as
+    {"name", "role", "kind", "user_id"}; an action that ran on its own has none."""
     if action_type in ("list_files", "read_file"):
         # Keep only the fixed first line (size, truncation). The log never stores file contents.
         result = (result or "").split("\n", 1)[0]
     conn = get_connection()
     try:
         cur = conn.cursor()
-        cur.execute(
-            "INSERT INTO autonomy_log (action_type, channel, target, content, result, approved, role) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s)",
-            (action_type, channel, target, content[:2000], result[:2000], approved, role),
-        )
+        base = (action_type, channel, target, content[:2000], result[:2000], approved, role)
+        if decided_by:
+            try:
+                cur.execute(
+                    "INSERT INTO autonomy_log (action_type, channel, target, content, result, approved, role, "
+                    "decided_by, decided_by_role, decided_by_user, decided_kind) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                    base + (str(decided_by.get("name") or "")[:120] or None, decided_by.get("role"),
+                            decided_by.get("user_id"), decided_by.get("kind")),
+                )
+            except Exception as e:
+                if e.__class__.__name__ != "UndefinedColumn":
+                    raise
+                conn.rollback()      # db/schema.sql is not applied yet: keep the entry, without the person
+                decided_by = None
+        if not decided_by:
+            cur.execute(
+                "INSERT INTO autonomy_log (action_type, channel, target, content, result, approved, role) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s)", base)
         conn.commit()
         cur.close()
     except Exception as e:
@@ -242,7 +258,7 @@ def list_pending(limit: int = 50) -> List[Dict]:
     return out
 
 
-def resolve_pending(action_id: str, approve: bool) -> Optional[str]:
+def resolve_pending(action_id: str, approve: bool, decided_by: Optional[Dict] = None) -> Optional[str]:
     """
     Approve or reject one pending action through the SAME path as an owner chat
     reply ("YES/NO <id>"), so execution, logging and learning are identical.
@@ -253,7 +269,7 @@ def resolve_pending(action_id: str, approve: bool) -> Optional[str]:
         return None
     if not any(p["action_id"] == action_id for p in list_pending(200)):
         return None
-    return process_approval_response(f"{'YES' if approve else 'NO'} {action_id}")
+    return process_approval_response(f"{'YES' if approve else 'NO'} {action_id}", decided_by=decided_by)
 
 
 def _decision_instructions(action_id: str) -> str:
@@ -398,7 +414,7 @@ def _notify_agent_loop(action_id: str, approved: bool, result: str, action_type:
         logger.warning(f"agent loop notification failed (non-fatal): {e}")
 
 
-def process_approval_response(message: str) -> Optional[str]:
+def process_approval_response(message: str, decided_by: Optional[Dict] = None) -> Optional[str]:
     """
     Process an owner reply of the form "YES ABC123" or "NO ABC123".
     Returns a human-readable reply, or None if the message isn't an
@@ -435,7 +451,8 @@ def process_approval_response(message: str) -> Optional[str]:
         conn.close()
 
     if not approved:
-        log_autonomous_action(action_type, channel, target, content, "REJECTED by owner", approved=False, role=role)
+        log_autonomous_action(action_type, channel, target, content, "REJECTED by owner", approved=False, role=role,
+                              decided_by=decided_by)
         employee_learning.learn_from_owner_approval(
             action_type, content, "REJECTED by owner", approved=False
         )
@@ -443,7 +460,8 @@ def process_approval_response(message: str) -> Optional[str]:
         return f"Action {action_id} rejected and cancelled."
 
     result = _send_via_channel(channel, target, content)
-    log_autonomous_action(action_type, channel, target, content, result, approved=True, role=role)
+    log_autonomous_action(action_type, channel, target, content, result, approved=True, role=role,
+                          decided_by=decided_by)
     employee_learning.learn_from_owner_approval(
         action_type, content, result, approved=True
     )
@@ -482,7 +500,8 @@ def process_approval_from(channel: str, sender, message: str) -> Optional[str]:
         if re.match(r"^\s*(YES|NO)\s+[A-Za-z0-9]{8}\s*$", message or "", re.IGNORECASE):
             logger.warning(f"Approval-style message from a non-owner sender on {channel} ignored")
         return None
-    return process_approval_response(message)
+    return process_approval_response(message, decided_by={
+        "name": f"the owner's {channel} chat", "role": "owner", "kind": "channel", "user_id": None})
 
 
 def generate_autonomy_daily_report() -> str:

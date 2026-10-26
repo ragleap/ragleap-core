@@ -41,6 +41,7 @@ from core import vector_dims as core_vector_dims
 from core import setup_status
 from core import observability
 from core import folder_ingest
+from core import audit
 from core import permissions
 from core import users as core_users
 from core import queue
@@ -187,10 +188,13 @@ async def require_api_key(request: Request, call_next):
         auth_throttle.record_success(client)
     need = permissions.required_role(request.method, path)
     if not permissions.allows(actor["role"], need):
+        audit.schedule(actor, request.method, path, 403)
         return JSONResponse(status_code=403, content={
             "detail": f"Your role ({actor['role']}) cannot do this. It needs {need} or higher."})
     request.state.actor = actor
-    return await call_next(request)
+    response = await call_next(request)
+    audit.schedule(actor, request.method, path, response.status_code)
+    return response
 
 
 ALLOWED_EXTENSIONS = set(PARSER_EXTENSIONS)
@@ -1023,18 +1027,18 @@ def get_pending_actions(limit: int = 50):
 
 
 @app.post("/autonomy/pending/{action_id}/approve")
-def approve_pending_action(action_id: str):
-    """Approve and run one pending action (same path as replying YES <id>)."""
-    reply = autonomy.resolve_pending(action_id, approve=True)
+def approve_pending_action(action_id: str, request: Request = None):
+    """Approve and run one pending action (same path as replying YES <id>). The log records who approved it."""
+    reply = autonomy.resolve_pending(action_id, approve=True, decided_by=_actor_of(request))
     if reply is None:
         raise HTTPException(status_code=404, detail="No such pending action.")
     return {"result": reply}
 
 
 @app.post("/autonomy/pending/{action_id}/reject")
-def reject_pending_action(action_id: str):
-    """Reject and discard one pending action (same path as replying NO <id>)."""
-    reply = autonomy.resolve_pending(action_id, approve=False)
+def reject_pending_action(action_id: str, request: Request = None):
+    """Reject and discard one pending action (same path as replying NO <id>). The log records who rejected it."""
+    reply = autonomy.resolve_pending(action_id, approve=False, decided_by=_actor_of(request))
     if reply is None:
         raise HTTPException(status_code=404, detail="No such pending action.")
     return {"result": reply}
@@ -1080,6 +1084,22 @@ def office_file_grants():
     """Folder grants and the file-access switches for the dashboard Files tab (names only, never host paths)."""
     from core import file_access
     return file_access.overview()
+
+
+def _actor_of(request):
+    """The signed-in person behind a request (None when called without one)."""
+    return getattr(getattr(request, "state", None), "actor", None)
+
+
+@app.get("/audit")
+def audit_events(limit: int = 100, actor: str | None = None):
+    """Who did what: state-changing requests by signed-in people, newest first. Admin and owner only."""
+    try:
+        return {"events": audit.list_events(limit=limit, actor=actor)}
+    except Exception as e:
+        if e.__class__.__name__ in ("UndefinedTable", "UndefinedColumn"):
+            raise HTTPException(status_code=503, detail="The database has no audit table yet (apply db/schema.sql).")
+        raise
 
 
 @app.get("/me")

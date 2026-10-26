@@ -408,3 +408,22 @@ CREATE TABLE IF NOT EXISTS user_keys (
     last_used_at TIMESTAMPTZ,
     revoked_at TIMESTAMPTZ
 );
+
+-- Who decided and who did what (core/autonomy.py, core/audit.py). Names are copied into the rows so the history stays
+-- readable after a person is removed. decided_kind is user, bootstrap (the shared key), open, or channel.
+ALTER TABLE autonomy_log ADD COLUMN IF NOT EXISTS decided_by TEXT;
+ALTER TABLE autonomy_log ADD COLUMN IF NOT EXISTS decided_by_role TEXT;
+ALTER TABLE autonomy_log ADD COLUMN IF NOT EXISTS decided_by_user UUID;
+ALTER TABLE autonomy_log ADD COLUMN IF NOT EXISTS decided_kind TEXT;
+CREATE TABLE IF NOT EXISTS audit_events (
+    id BIGSERIAL PRIMARY KEY,
+    at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    actor_name TEXT NOT NULL,
+    actor_role TEXT NOT NULL,
+    actor_kind TEXT NOT NULL,
+    actor_user UUID,
+    method TEXT NOT NULL,
+    path TEXT NOT NULL,
+    status INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS audit_events_at_idx ON audit_events (at DESC);

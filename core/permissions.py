@@ -64,6 +64,7 @@ RULES = (
     ("POST", "/autonomy/pending/{action_id}/approve", "operator"),
     ("POST", "/autonomy/pending/{action_id}/reject", "operator"),
     # Admins change how the system is set up and what it may spend
+    ("GET", "/audit", "admin"),
     ("GET", "/settings", "admin"),
     ("PUT", "/settings", "admin"),
     ("POST", "/settings/test/embedding", "admin"),

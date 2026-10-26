@@ -76,7 +76,8 @@ def test_non_owner_cannot_approve_and_is_told_nothing():
 def test_owner_approval_is_delegated():
     with _cfg(), patch.object(autonomy, "process_approval_response", return_value="done") as real:
         assert autonomy.process_approval_from("telegram", 424242, "YES ABCD1234") == "done"
-    real.assert_called_once_with("YES ABCD1234")
+    real.assert_called_once_with("YES ABCD1234", decided_by={
+        "name": "the owner's telegram chat", "role": "owner", "kind": "channel", "user_id": None})
 
 
 def test_non_owner_approval_attempt_is_logged(caplog):

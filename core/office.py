@@ -101,23 +101,32 @@ def overview() -> Dict:
 
 def autonomy_log(limit: int = 50, approved: Optional[bool] = None) -> List[Dict]:
     limit = max(1, min(int(limit), 200))
-    sql = ("SELECT id, action_type, channel, target, content, result, approved, created_at, role "
-           "FROM autonomy_log")
+    tail = ""
     params: list = []
     if approved is not None:
-        sql += " WHERE approved = %s"
+        tail += " WHERE approved = %s"
         params.append(bool(approved))
-    sql += " ORDER BY id DESC LIMIT %s"
+    tail += " ORDER BY id DESC LIMIT %s"
     params.append(limit)
+    keys = ("id", "action_type", "channel", "target", "content", "result", "approved", "created_at", "role",
+            "decided_by", "decided_by_role", "decided_kind")
     conn = get_connection()
     try:
         cur = conn.cursor()
-        cur.execute(sql, params)
-        rows = cur.fetchall()
+        try:
+            cur.execute("SELECT id, action_type, channel, target, content, result, approved, created_at, role, "
+                        "decided_by, decided_by_role, decided_kind FROM autonomy_log" + tail, params)
+            rows = cur.fetchall()
+        except Exception as e:
+            if e.__class__.__name__ != "UndefinedColumn":
+                raise
+            conn.rollback()      # db/schema.sql is not applied yet: no "who" columns
+            cur.execute("SELECT id, action_type, channel, target, content, result, approved, created_at, role "
+                        "FROM autonomy_log" + tail, params)
+            rows = [tuple(r) + (None, None, None) for r in cur.fetchall()]
         cur.close()
     finally:
         conn.close()
-    keys = ("id", "action_type", "channel", "target", "content", "result", "approved", "created_at", "role")
     out = []
     for r in rows:
         d = dict(zip(keys, r))
