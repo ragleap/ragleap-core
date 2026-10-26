@@ -2,7 +2,7 @@
 
 Open-source (MIT), local-first speech tooling, with Indian languages as a priority.
 
-**Status: pre-alpha. Version 0.0.2 on PyPI is the model-management layer only. There are no speech engines in that release: you cannot transcribe or synthesize audio with it. The repository's main branch already has more (see "On main, not released" below); none of it is on PyPI yet.**
+**Status: pre-alpha. Version 0.1.0 adds `transcribe()` and `synthesize()` with a Whisper large-v3 engine and an Indic Parler-TTS engine (see "What 0.1.0 adds" below). Every model is unverified and none is a default. Each engine has been run on only a few clips on one maintainer's machine. This is a first release for testing, not a finished product.**
 
 ## What works today
 
@@ -23,9 +23,9 @@ A command line and a small standard-library-only Python core (no runtime depende
 
 Nothing in the package uses the network unless you run `models pull` or `models lock`.
 
-## On main, not released
+## What 0.1.0 adds
 
-Not in the PyPI release. Install from a checkout of the repository to try it. Pre-alpha: names and signatures can still change.
+Pre-alpha: names and signatures can still change. The core has no runtime dependencies. Engines are separate: the Whisper engine needs its extra (`pip install "ragleap-voice[whisper]"`; without it the call raises an error that names this command), and the Parler engine has no extra, because you set up its Python environment yourself (see issue 990 below).
 
 - `transcribe()` and `synthesize()`, which check the licence, the lock and the verification status of every model before an engine sees it, and hand engines verified folders only. Every model is `unverified` and none is a default, so calls need `allow_unverified=True`.
 - A Whisper large-v3 engine (optional extra `whisper`, faster-whisper). Run with the real model on two clips (English and Spanish) on a CPU, and on one Colab T4 with NVIDIA's cublas and cudnn pip packages preloaded by hand (the engine does not preload them). Other GPUs and CUDA versions have not been tried. Input must be mono 16-bit 16 kHz WAV.

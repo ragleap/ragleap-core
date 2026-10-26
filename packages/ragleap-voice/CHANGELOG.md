@@ -4,6 +4,11 @@ All notable changes to `ragleap-voice` are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
+
+## [0.1.0] - 2026-10-26
+### Status
+- First release with speech engines. Pre-alpha: every model is `unverified`, none is a default, and calls need `allow_unverified=True`. The core still has no runtime dependencies.
+- Some entries below were written before the real-model runs and say "tested with fakes only" or "CUDA not run". Since then (reported in issues #960 and #970): the Whisper engine ran with the real model on two clips (en, es) on a CPU, and on one Colab T4 with `nvidia-cublas-cu12` and `nvidia-cudnn-cu12` preloaded by hand; the Parler engine ran on a T4 for Hindi and English. These are a few clips on one machine, not accuracy or quality measurements.
 ### Added
 - Whisper `device="cuda"` ran on two clips (en, es) on one Colab T4 after installing `nvidia-cublas-cu12` and `nvidia-cudnn-cu12` and preloading them with `ctypes`. The CUDA error hint and the README now say so; the engine still does not preload libraries itself.
 - Indic Parler-TTS engine (`parler`), the first text-to-speech engine, as an isolated worker (`parler_engine.py`, `parler_worker.py`). The user sets up the Python environment (torch, transformers, parler-tts) and names it in `RAGLEAP_VOICE_PARLER_PYTHON`. The worker reads only the verified model folders and takes the description tokenizer from the locked flan-t5 tokenizer folder. Languages hi, ta, te, ml, kn, en; no named emotion controls (style goes through `options={"description": ...}`); `speed` and `emotion` are refused. Tested with fakes only: not run with the real model, and the model is gated on Hugging Face and still `unverified`.
