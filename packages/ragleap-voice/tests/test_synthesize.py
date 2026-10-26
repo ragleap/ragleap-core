@@ -150,6 +150,6 @@ def test_bad_engine_output(tmp_path):
             go(env, bad)
 
 
-def test_public_function_without_tts_engine():
-    with pytest.raises(NoEngineError):
-        synthesize("hello", language="en")
+def test_public_function_without_engine_for_the_language():
+    with pytest.raises(UnsupportedLanguageError):
+        synthesize("hello", language="zz")
