@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ragleap-voice"
-version = "0.1.0"
+version = "0.1.1"
 description = "Pre-alpha, open, local speech-to-text and text-to-speech: licence-checked manifest, hash-verified downloads, transcribe() and synthesize() with a Whisper engine (optional extra) and an Indic Parler-TTS engine (own environment). Every model is unverified."
 readme = "README.md"
 license = "MIT"
@@ -35,6 +35,7 @@ ragleap-voice = "ragleap_voice.cli:main"
 Homepage = "https://github.com/ragleap/ragleap-core"
 Repository = "https://github.com/ragleap/ragleap-core"
 Issues = "https://github.com/ragleap/ragleap-core/issues"
+Documentation = "https://github.com/ragleap/ragleap-core/tree/main/packages/ragleap-voice/docs"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/ragleap_voice"]

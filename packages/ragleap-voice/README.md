@@ -35,6 +35,8 @@ Pre-alpha: names and signatures can still change. The core has no runtime depend
 
 Help with testing is wanted: https://github.com/ragleap/ragleap-core/issues/960 (Whisper), https://github.com/ragleap/ragleap-core/issues/990 (Parler) and the roadmap at https://github.com/ragleap/ragleap-core/issues/970.
 
+Install check (one maintainer run, not a guarantee): `ragleap-voice[whisper]` installed from PyPI on a fresh Colab T4 runtime and transcribed one clip each in seven more declared languages (see issue 960). One clip per language is not an accuracy measurement.
+
 ## Measurements
 
 Reproducible benchmarks with their limits are published at https://github.com/ragleap/ragleap-core/tree/main/benchmarks/voice. They use small samples of read speech on one GPU. The WER/CER helper can optionally normalize English (`numbers=True`) or Turkish (`numbers="tr"`) cardinal-number words; it is off by default and has not been applied to the published tables. Other language strings raise ValueError rather than falling back to English. In those tests an open Indian-language recogniser (IndicConformer) had clearly lower word error than Whisper large-v3 on Hindi, Tamil, Telugu, Malayalam and Kannada. Naturalness, emotion quality and comparisons with commercial services have not been measured, and this project makes no claim about them.

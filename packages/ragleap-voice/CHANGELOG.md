@@ -5,6 +5,10 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-26
+### Changed
+- Added a `Documentation` project URL. The README and this file record that `ragleap-voice[whisper]` installed from PyPI on a fresh Colab T4 runtime and transcribed one clip each in fr, pt, ru, tr, id, vi and ja (issue #960). One clip per language: not an accuracy claim. No code change.
+
 ## [0.1.0] - 2026-10-26
 ### Status
 - First release with speech engines. Pre-alpha: every model is `unverified`, none is a default, and calls need `allow_unverified=True`. The core still has no runtime dependencies.
