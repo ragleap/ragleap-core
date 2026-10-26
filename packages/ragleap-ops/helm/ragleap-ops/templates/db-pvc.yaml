@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: ragleap-db-data
+  name: ragleap-db-data-broken
 spec:
   accessModes: ["ReadWriteOnce"]
   resources:

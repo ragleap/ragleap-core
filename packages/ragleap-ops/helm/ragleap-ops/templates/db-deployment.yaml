@@ -69,7 +69,7 @@ spec:
       volumes:
         - name: db-data
           persistentVolumeClaim:
-            claimName: ragleap-db-data
+            claimName: ragleap-db-data-broken
         - name: db-schema
           configMap:
             name: ragleap-db-schema
