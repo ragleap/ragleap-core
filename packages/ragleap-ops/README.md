@@ -30,6 +30,15 @@ same services as `k8s/`, plus:
   `k8s/` manifests, Helm refuses with an ownership conflict. Install with
   `--set serviceAccount.create=false` (token mounting is still disabled), or
   delete the existing ServiceAccounts first.
+- **Upgrading between published chart versions:** in CI on kind, a
+  `helm upgrade` from the published `0.5.2` to the `0.6.2` chart left the
+  database pods, volumes and data untouched. That is one version pair;
+  other pairs and upgrades that change values were not tested. A plain
+  `helm upgrade` with no `--set` kept the replica counts set at install: a
+  release installed with `--set app.replicaCount=0 --set voice.replicaCount=0`
+  still had `app` and `voice` at zero after the upgrade, so pass the counts
+  again (`--set app.replicaCount=1 --set voice.replicaCount=1`) when you want
+  them running. Checked by the `chart-upgrade-test` workflow (run 40221366116).
 - **Read-only root filesystem** for `db`, `app` and `voice`. It is
   deliberately not enabled for `neo4j`: live testing showed it shadows the
   image's default config (see the comment in `neo4j-deployment.yaml`).
