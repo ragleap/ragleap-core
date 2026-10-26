@@ -73,13 +73,13 @@ jobs:
           python -m build
       - name: Publish to TestPyPI
         if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
         with:
           packages-dir: packages/ragleap-rag/dist/
           repository-url: https://test.pypi.org/legacy/
       - name: Publish to PyPI
         if: github.event_name != 'workflow_dispatch' || inputs.target == 'pypi'
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
         with:
           packages-dir: packages/ragleap-rag/dist/
           skip-existing: true
@@ -109,13 +109,13 @@ jobs:
           python -m build
       - name: Publish to TestPyPI
         if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
         with:
           packages-dir: packages/ragleap-tools/dist/
           repository-url: https://test.pypi.org/legacy/
       - name: Publish to PyPI
         if: github.event_name != 'workflow_dispatch' || inputs.target == 'pypi'
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
         with:
           packages-dir: packages/ragleap-tools/dist/
           skip-existing: true
@@ -145,13 +145,13 @@ jobs:
           python -m build
       - name: Publish to TestPyPI
         if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
         with:
           packages-dir: packages/ragleap-integrations/dist/
           repository-url: https://test.pypi.org/legacy/
       - name: Publish to PyPI
         if: github.event_name != 'workflow_dispatch' || inputs.target == 'pypi'
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
         with:
           packages-dir: packages/ragleap-integrations/dist/
           skip-existing: true
@@ -181,13 +181,13 @@ jobs:
           python -m build
       - name: Publish to TestPyPI
         if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
         with:
           packages-dir: packages/ragleap-agents/dist/
           repository-url: https://test.pypi.org/legacy/
       - name: Publish to PyPI
         if: github.event_name != 'workflow_dispatch' || inputs.target == 'pypi'
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
         with:
           packages-dir: packages/ragleap-agents/dist/
           skip-existing: true
@@ -217,13 +217,13 @@ jobs:
           python -m build
       - name: Publish to TestPyPI
         if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
         with:
           packages-dir: packages/ragleap-security/dist/
           repository-url: https://test.pypi.org/legacy/
       - name: Publish to PyPI
         if: github.event_name != 'workflow_dispatch' || inputs.target == 'pypi'
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
         with:
           packages-dir: packages/ragleap-security/dist/
           skip-existing: true
@@ -253,13 +253,13 @@ jobs:
           python -m build
       - name: Publish to TestPyPI
         if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
         with:
           packages-dir: packages/ragleap-memory/dist/
           repository-url: https://test.pypi.org/legacy/
       - name: Publish to PyPI
         if: github.event_name != 'workflow_dispatch' || inputs.target == 'pypi'
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
         with:
           packages-dir: packages/ragleap-memory/dist/
           skip-existing: true
@@ -289,13 +289,13 @@ jobs:
           python -m build
       - name: Publish to TestPyPI
         if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
         with:
           packages-dir: packages/ragleap-graph/dist/
           repository-url: https://test.pypi.org/legacy/
       - name: Publish to PyPI
         if: github.event_name != 'workflow_dispatch' || inputs.target == 'pypi'
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
         with:
           packages-dir: packages/ragleap-graph/dist/
           skip-existing: true
@@ -325,13 +325,13 @@ jobs:
           python -m build
       - name: Publish to TestPyPI
         if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
         with:
           packages-dir: packages/ragleap-vectorstores/dist/
           repository-url: https://test.pypi.org/legacy/
       - name: Publish to PyPI
         if: github.event_name != 'workflow_dispatch' || inputs.target == 'pypi'
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
         with:
           packages-dir: packages/ragleap-vectorstores/dist/
           skip-existing: true
@@ -360,13 +360,13 @@ jobs:
           python -m build
       - name: Publish to TestPyPI
         if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
         with:
           packages-dir: packages/ragleap-ops/dist/
           repository-url: https://test.pypi.org/legacy/
       - name: Publish to PyPI
         if: github.event_name != 'workflow_dispatch' || inputs.target == 'pypi'
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
         with:
           packages-dir: packages/ragleap-ops/dist/
           skip-existing: true
@@ -396,13 +396,13 @@ jobs:
           python -m build
       - name: Publish to TestPyPI
         if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
         with:
           packages-dir: packages/ragleap-app-chart/dist/
           repository-url: https://test.pypi.org/legacy/
       - name: Publish to PyPI
         if: github.event_name != 'workflow_dispatch' || inputs.target == 'pypi'
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
         with:
           packages-dir: packages/ragleap-app-chart/dist/
           skip-existing: true
@@ -432,13 +432,13 @@ jobs:
           python -m build
       - name: Publish to TestPyPI
         if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
         with:
           packages-dir: packages/ragleap-observability/dist/
           repository-url: https://test.pypi.org/legacy/
       - name: Publish to PyPI
         if: github.event_name != 'workflow_dispatch' || inputs.target == 'pypi'
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
         with:
           packages-dir: packages/ragleap-observability/dist/
           skip-existing: true
@@ -468,13 +468,13 @@ jobs:
           python -m build
       - name: Publish to TestPyPI
         if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
         with:
           packages-dir: packages/ragleap-terraform/dist/
           repository-url: https://test.pypi.org/legacy/
       - name: Publish to PyPI
         if: github.event_name != 'workflow_dispatch' || inputs.target == 'pypi'
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
         with:
           packages-dir: packages/ragleap-terraform/dist/
           skip-existing: true
@@ -504,13 +504,13 @@ jobs:
           python -m build
       - name: Publish to TestPyPI
         if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
         with:
           packages-dir: packages/ragleap-ansible/dist/
           repository-url: https://test.pypi.org/legacy/
       - name: Publish to PyPI
         if: github.event_name != 'workflow_dispatch' || inputs.target == 'pypi'
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
         with:
           packages-dir: packages/ragleap-ansible/dist/
           skip-existing: true
@@ -569,12 +569,12 @@ jobs:
           /tmp/rv-venv/bin/ragleap-voice models check
       - name: Publish to TestPyPI
         if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
         with:
           packages-dir: packages/ragleap-voice/dist/
           repository-url: https://test.pypi.org/legacy/
       - name: Publish to PyPI (tag pushes only)
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/ragleap-voice-v')
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
         with:
           packages-dir: packages/ragleap-voice/dist/
