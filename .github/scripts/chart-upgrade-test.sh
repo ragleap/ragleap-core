@@ -64,7 +64,21 @@ OLDCHART=$OLD/ragleap_ops/helm/ragleap-ops
 echo "upgrading from chart $(sed -n 's/^version: //p' "$OLDCHART/Chart.yaml") (published) to chart $(sed -n 's/^version: //p' "$NEW/Chart.yaml") (this checkout)"
 
 echo "== creating kind cluster $CL"
-kind create cluster --name "$CL" --wait 180s
+KIND_ARGS=()
+if [ -n "${KIND_NODE_IMAGE:-}" ]; then
+  case "$KIND_NODE_IMAGE" in
+    kindest/node:v1.*@sha256:*) ;;
+    *) stop "KIND_NODE_IMAGE must look like kindest/node:v1.xx.y@sha256:... (got '$KIND_NODE_IMAGE')" ;;
+  esac
+  KIND_ARGS=(--image "$KIND_NODE_IMAGE")
+fi
+kind create cluster --name "$CL" --wait 180s ${KIND_ARGS[@]+"${KIND_ARGS[@]}"}
+SERVER_V=$(kubectl version -o json | python3 -c 'import sys,json; print(json.load(sys.stdin)["serverVersion"]["gitVersion"])')
+record "OBSERVED  kubernetes server version: $SERVER_V"
+if [ -n "${KIND_NODE_IMAGE:-}" ]; then
+  WANT_V=${KIND_NODE_IMAGE#kindest/node:}; WANT_V=${WANT_V%%@*}
+  if [ "${SERVER_V%%+*}" = "$WANT_V" ]; then record "PASS  the cluster runs the requested Kubernetes version $WANT_V"; else fail "requested Kubernetes $WANT_V but the cluster reports $SERVER_V"; fi
+fi
 kubectl create namespace "$NS"
 
 pod_uid() { # name prefix
