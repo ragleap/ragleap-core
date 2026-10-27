@@ -157,9 +157,17 @@ def list_users() -> list:
                     "FROM users u LEFT JOIN user_keys k ON k.user_id = u.id "
                     "GROUP BY u.id ORDER BY u.created_at, u.name")
         rows = cur.fetchall()
+        cur.execute("SELECT id, user_id, key_prefix, label, created_at, last_used_at FROM user_keys "
+                    "WHERE revoked_at IS NULL ORDER BY created_at")
+        keys = {}
+        for r in cur.fetchall():
+            keys.setdefault(str(r[1]), []).append({
+                "id": str(r[0]), "prefix": r[2], "label": r[3],
+                "created_at": r[4].isoformat() if r[4] else None, "last_used_at": r[5].isoformat() if r[5] else None})
     finally:
         conn.close()
-    return [dict(_user_dict(r), active_keys=int(r[5]), last_used_at=r[6].isoformat() if r[6] else None)
+    return [dict(_user_dict(r), active_keys=int(r[5]), last_used_at=r[6].isoformat() if r[6] else None,
+                 keys=keys.get(str(r[0]), []))
             for r in rows]
 
 

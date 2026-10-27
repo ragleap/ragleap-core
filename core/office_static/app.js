@@ -18,9 +18,21 @@
   let armed = false;
   let view = null;
   let stamp = null;
+  let me = null;
+  let newKey = null;
+  let userFormEl = null;
+  let userListEl = null;
+  let userBannerEl = null;
+  let userMsgEl = null;
   const tabButtons = {};
   const expanded = new Set();
-  const TABS = [["setup", "Setup"], ["overview", "Overview"], ["approvals", "Approvals"], ["employees", "Employees"], ["tasks", "Tasks"], ["documents", "Documents"], ["files", "Files"], ["proactive", "Proactive"], ["sources", "Connectors"], ["runs", "Agent runs"], ["log", "Activity"], ["settings", "Settings"]];
+  const TABS = [["setup", "Setup"], ["overview", "Overview"], ["approvals", "Approvals"], ["employees", "Employees"], ["tasks", "Tasks"], ["documents", "Documents"], ["files", "Files"], ["proactive", "Proactive"], ["sources", "Connectors"], ["runs", "Agent runs"], ["log", "Activity"], ["settings", "Settings"], ["audit", "Audit"], ["users", "Users"]];
+  // The lowest role that can use each tab (the server enforces the same rules in core/permissions.py).
+  const RANK = { viewer: 0, operator: 1, admin: 2, owner: 3 };
+  const TAB_ROLE = { setup: "admin", overview: "viewer", approvals: "operator", employees: "viewer", tasks: "operator", documents: "viewer",
+    files: "viewer", proactive: "viewer", sources: "operator", runs: "operator", log: "operator", settings: "admin", audit: "admin", users: "owner" };
+  // An older server without /me shows the tabs it always had, and no Audit or Users tab.
+  const canSee = (id) => (me ? RANK[me.role] >= RANK[TAB_ROLE[id]] : id !== "audit" && id !== "users");
 
   // All dynamic text goes in as text nodes; nothing here ever builds HTML from data.
   const add = (el, kid) => {
@@ -73,6 +85,11 @@
     srcFormEl = null;
     srcListEl = null;
     settingsEl = null;
+    me = null;
+    newKey = null;
+    userFormEl = null;
+    userListEl = null;
+    userBannerEl = null;
     sessionStorage.removeItem("ragleap_key");
     if (timer) { clearInterval(timer); timer = null; }
     showLogin(msg);
@@ -180,6 +197,7 @@
         h("span", { class: "tag " + (r.approved ? "ok" : "bad") }, r.approved ? "approved" : "rejected"),
         h("span", { class: "sub" }, when(r.created_at))),
       h("div", { class: "sub" }, clip(r.result, isOpen ? 4000 : 140)),
+      r.decided_by ? h("div", { class: "sub" }, (r.approved ? "approved" : "rejected") + " by " + clip(r.decided_by, 80) + (r.decided_by_role ? " (" + r.decided_by_role + ")" : "")) : null,
       isOpen ? h("pre", null, r.content) : null);
   };
   const renderLog = (rows) => (rows.length ? h("div", { class: "list" }, rows.map(logCard)) : h("p", { class: "empty" }, "No actions logged yet."));
@@ -711,12 +729,107 @@
       it.action ? h("div", { class: "sub" }, "What to do: " + it.action) : null,
       it.fix === "settings" ? h("div", { class: "row" }, h("button", { type: "button", on: { click: () => { tab = "settings"; armed = false; refresh(); } } }, "Open Settings")) : null)));
 
+  // ---- Audit (admin): who did what ----
+  const renderAudit = (events) => (events.length ? h("div", { class: "list" }, events.map((e) => h("article", { class: "item" },
+    h("div", { class: "row" }, h("strong", null, clip(e.actor, 60)), h("span", { class: "tag" }, e.role),
+      h("span", { class: "tag " + (e.status < 400 ? "ok" : "bad") }, e.status === 403 ? "refused" : String(e.status)),
+      h("span", { class: "sub" }, when(e.at))),
+    h("div", { class: "sub" }, e.method + " " + clip(e.path, 160)))))
+    : h("p", { class: "empty" }, "Nothing recorded yet. State-changing requests by signed-in people appear here."));
+
+  // ---- People (owner): add a person, change a role, disable, make and revoke personal keys ----
+  const ROLE_LIST = ["viewer", "operator", "admin", "owner"];
+  const ROLE_HELP = "viewer: overview pages. operator: also decides on actions and uploads. admin: also changes settings. owner: everything, including people.";
+  const roleSelect = (value, onChange, disabled) => {
+    const s = h("select", { disabled: !!disabled }, ...ROLE_LIST.map((r) => h("option", { value: r }, r)));
+    s.value = value;
+    if (onChange) s.addEventListener("change", () => onChange(s.value));
+    return s;
+  };
+  const userSay = (t) => { if (userMsgEl) userMsgEl.textContent = t; };
+  const userDo = async (fn, done) => {
+    try { await fn(); if (done) userSay(done); } catch (e) { if (String(e.message) !== "unauthorized") userSay("Could not do that: " + clip(e.message, 160)); }
+    await refreshUsers();
+  };
+  const confirmButton = (label, kind, action) => {
+    const b = h("button", { type: "button", class: kind }, label);
+    let timeout = null;
+    b.addEventListener("click", async () => {
+      if (!b.dataset.armed) {
+        b.dataset.armed = "1";
+        armed = true;
+        b.textContent = "Click again to confirm";
+        timeout = setTimeout(() => { delete b.dataset.armed; b.textContent = label; armed = false; }, 6000);
+        return;
+      }
+      clearTimeout(timeout);
+      armed = false;
+      b.disabled = true;
+      await action();
+    });
+    return b;
+  };
+  const keyRow = (u, k) => h("div", { class: "row" }, h("span", { class: "sub" }, k.prefix + "...  " + (k.label || "no label") + "  made " + ago(k.created_at) + ", last used " + (k.last_used_at ? ago(k.last_used_at) : "never")),
+    confirmButton("Revoke", "ghost", () => userDo(() => api("DELETE", "/users/" + u.id + "/keys/" + k.id), "Key revoked.")));
+  const userCard = (u) => {
+    const mine = !!(me && me.user_id && me.user_id === u.id);   // you cannot lock yourself out from here
+    return h("article", { class: "item" },
+      h("div", { class: "row" }, h("strong", null, clip(u.name, 80)), mine ? h("span", { class: "tag" }, "you") : null,
+        roleSelect(u.role, (v) => userDo(() => api("PATCH", "/users/" + u.id, { role: v }), "Role changed."), mine),
+        h("span", { class: "tag " + (u.status === "active" ? "ok" : "bad") }, u.status),
+        h("span", { class: "sub" }, num(u.active_keys) + " key(s), last used " + (u.last_used_at ? ago(u.last_used_at) : "never"))),
+      h("div", { class: "row" },
+        u.status === "active" ? h("button", { type: "button", on: { click: () => userDo(async () => {
+          const r = await api("POST", "/users/" + u.id + "/keys", { label: "made in the dashboard" });
+          newKey = { name: u.name, key: r.key };
+          renderKeyBanner();
+        }) } }, "Make a key") : null,
+        mine ? null : h("button", { type: "button", class: "ghost", on: { click: () => userDo(() => api("PATCH", "/users/" + u.id, { status: u.status === "active" ? "disabled" : "active" }),
+          u.status === "active" ? "Person disabled." : "Person enabled.") } }, u.status === "active" ? "Disable" : "Enable")),
+      (u.keys || []).map((k) => keyRow(u, k)));
+  };
+  const renderKeyBanner = () => {
+    if (!userBannerEl) return;
+    if (!newKey) { userBannerEl.replaceChildren(); return; }
+    userBannerEl.replaceChildren(h("section", { class: "card" }, h("h2", null, "New key for " + clip(newKey.name, 60)),
+      h("p", { class: "sub" }, "Copy it now and give it to that person. It is shown only once and cannot be shown again."),
+      h("pre", null, newKey.key),
+      h("div", { class: "row" },
+        h("button", { type: "button", on: { click: async (ev) => {
+          try { await navigator.clipboard.writeText(newKey.key); ev.target.textContent = "Copied"; } catch (e) { ev.target.textContent = "Select the key and copy it yourself"; }
+        } } }, "Copy"),
+        h("button", { type: "button", class: "ghost", on: { click: () => { newKey = null; renderKeyBanner(); } } }, "I have copied it"))));
+  };
+  const buildUserForm = () => {
+    const name = h("input", { type: "text", placeholder: "Name", maxlength: 80 });
+    const role = roleSelect("operator");
+    userMsgEl = h("span", { class: "sub" }, "");
+    const btn = h("button", { type: "button", on: { click: async () => {
+      if (!name.value.trim()) { userSay("Type a name first."); return; }
+      btn.disabled = true;
+      try { await api("POST", "/users", { name: name.value.trim(), role: role.value }); name.value = ""; userSay("Person added. Now make a key for them."); }
+      catch (e) { if (String(e.message) !== "unauthorized") userSay("Could not add: " + clip(e.message, 160)); }
+      btn.disabled = false;
+      await refreshUsers();
+    } } }, "Add person");
+    return h("section", { class: "card" }, h("h2", null, "People"),
+      h("p", { class: "sub" }, "Each person signs in with their own key. The shared key keeps working and counts as the owner. " + ROLE_HELP),
+      h("div", { class: "row" }, name, role, btn, userMsgEl));
+  };
+  const refreshUsers = async () => {
+    if (!userFormEl) { userFormEl = buildUserForm(); userListEl = h("div", null); userBannerEl = h("div", null); renderKeyBanner(); }
+    if (view.firstChild !== userBannerEl) view.replaceChildren(userBannerEl, userFormEl, userListEl);
+    const d = await api("GET", "/users");
+    userListEl.replaceChildren(d.users.length ? h("div", { class: "list" }, d.users.map(userCard))
+      : h("p", { class: "empty" }, "No named people yet. The shared key still works as the owner. Add a person, then make a key for them."));
+  };
+
   const refresh = async () => {
     if (armed || !view) return;
     try {
       const ov = await api("GET", "/overview");
       const n = ov.pending_approvals || 0;
-      tabButtons.approvals.textContent = n ? "Approvals (" + n + ")" : "Approvals";
+      if (tabButtons.approvals) tabButtons.approvals.textContent = n ? "Approvals (" + n + ")" : "Approvals";
       Object.keys(tabButtons).forEach((id) => tabButtons[id].classList.toggle("on", id === tab));
       let content;
       if (tab === "overview") content = renderOverview(ov);
@@ -729,6 +842,8 @@
       else if (tab === "proactive") { await refreshProactive(); content = null; }
       else if (tab === "sources") { await refreshSources(); content = null; }
       else if (tab === "settings") { await refreshSettings(); content = null; }
+      else if (tab === "audit") content = renderAudit((await api("GET", "/audit?limit=200")).events);
+      else if (tab === "users") { await refreshUsers(); content = null; }
       else if (tab === "setup") content = renderSetup(await api("GET", "/setup/status"));
       else content = renderLog((await api("GET", "/autonomy/log?limit=60")).log);
       if (content) view.replaceChildren(content);
@@ -742,13 +857,14 @@
     root.replaceChildren();
     stamp = h("span", { class: "stamp" }, "");
     const nav = h("nav", null);
-    TABS.forEach(([id, label]) => {
+    TABS.filter(([id]) => canSee(id)).forEach(([id, label]) => {
       const b = h("button", { type: "button", class: "tab", on: { click: () => { tab = id; armed = false; refresh(); } } }, label);
       tabButtons[id] = b;
       nav.appendChild(b);
     });
     view = h("main", null);
     add(root, h("header", null, h("strong", null, "RagLeap AI Office"), nav, stamp,
+      me ? h("span", { class: "sub" }, "Signed in as " + clip(me.name, 40) + " (" + me.role + ")") : null,
       h("button", { type: "button", class: "ghost", on: { click: () => lock("") } }, "Lock")));
     add(root, view);
   };
@@ -759,8 +875,12 @@
       if (String(e.message) !== "unauthorized") showLogin("Could not reach the server: " + clip(e.message, 100));
       return;
     }
+    try { me = await api("GET", "/me"); } catch (e) { if (String(e.message) === "unauthorized") return; me = null; }
+    if (!canSee(tab)) tab = "overview";
     buildShell();
-    try { const s = await api("GET", "/setup/status"); if (!s.ready) tab = "setup"; } catch (e) { /* the checklist is optional */ }
+    if (canSee("setup")) {
+      try { const s = await api("GET", "/setup/status"); if (!s.ready) tab = "setup"; } catch (e) { /* the checklist is optional */ }
+    }
     await refresh();
     if (timer) clearInterval(timer);
     timer = setInterval(refresh, 10000);

@@ -175,6 +175,8 @@ def test_the_owner_makes_people_and_keys_through_the_api(client):
     listing = client.get("/users", headers=BOOT).json()
     mine = [x for x in listing["users"] if x["id"] == uid][0]
     assert mine["active_keys"] == 1 and k["key"] not in str(listing) and listing["roles"] == list(users.ROLES)
+    assert [(x["id"], x["prefix"], x["label"]) for x in mine["keys"]] == [(k["key_id"], k["key_prefix"], "laptop")]
+    assert set(mine["keys"][0]) == {"id", "prefix", "label", "created_at", "last_used_at"}      # never the key or its hash
     assert client.patch("/users/%s" % uid, json={"role": "viewer"}, headers=BOOT).json()["role"] == "viewer"
     assert client.get("/me", headers={"x-api-key": k["key"]}).json()["role"] == "viewer"
     assert client.delete("/users/%s/keys/%s" % (uid, k["key_id"]), headers=BOOT).status_code == 200
