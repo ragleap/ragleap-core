@@ -5,6 +5,10 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.9.1]
+### Changed
+- Metadata and docs only, no behavior change. Project links on PyPI now point to `ragleap/ragleap-core` after the organization move; tests and docs use placeholder-style dummy credentials. `__version__` is now kept in step with the package version.
+
 ## [0.9.0]
 ### Added
 - Ontology cross-validation (#152). `ExtractionConfig.relation_ontology` (default `None`) lets callers define which `relation_type` values are semantically valid between which `entity_type` pairs, e.g. `{"FOUNDED_BY": (["ORGANIZATION"], ["PERSON"])}`. Requires `entity_types=` to also be set (raises `ValueError` at config time otherwise, matching the fail-fast style already used elsewhere in `ExtractionConfig.__post_init__`) - an ontology is meaningless without typed entities to check it against.

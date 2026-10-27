@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ragleap-graph"
-version = "0.9.0"
+version = "0.9.1"
 description = "Knowledge-graph-augmented retrieval for RAG systems: Neo4j-backed entity extraction (regex or LLM-based), co-occurrence graphs, entity deduplication, and GraphRetriever for hybrid vector+graph retrieval via the optional ragleap-rag integration. Framework-agnostic, optional multi-tenant namespacing, no hardcoded models or vocabulary."
 readme = "README.md"
 license = "MIT"
