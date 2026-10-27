@@ -6,8 +6,8 @@ Ansible roles that prepare a fresh Ubuntu 22.04 server for the RagLeap Helm char
 
 | Part | Status |
 |---|---|
-| `ragleap_base`: packages, deploy user with key-only login, passwordless sudo, unattended-upgrades | Tested in a throwaway Ubuntu 22.04 container, run twice, second run changes nothing |
-| sshd hardening (opt-in `ragleap_base_harden_ssh`) | Effective settings checked with `sshd -T`, idempotent, bad config rolled back, all in a container. A real key login against a running sshd was not tested |
+| `ragleap_base`: packages, deploy user with key-only login, passwordless sudo, unattended-upgrades | Tested in a throwaway Ubuntu 22.04 container, run twice, second run changes nothing. Also run twice on GitHub-hosted Ubuntu 22.04 and 24.04 runners (real systemd, privilege escalation through sudo): second run changed nothing (CI run 40378770112) |
+| sshd hardening (opt-in `ragleap_base_harden_ssh`) | Effective settings checked with `sshd -T`, idempotent, bad config rolled back, all in a container. On GitHub-hosted Ubuntu 22.04 and 24.04 runners the running sshd offered `publickey,password` before hardening and only `publickey` after, and a key login as the deploy user still worked (CI run 40378770112). Weakening the role made that check fail: a drop-in that sorts after the cloud image's `50-cloud-init.conf` left password login on (run 40465088911), and skipping the sshd reload left the running daemon unchanged (run 40465114601) |
 | firewall (opt-in `ragleap_base_enable_firewall`) | Rules and defaults checked in a container, idempotent, sshd port always opened. `ufw enable` and real enforcement were not tested |
 | Helm, k3s, installing the charts | Not implemented yet |
 
@@ -49,5 +49,5 @@ bash tests/container_test.sh   # needs Docker; changes nothing on the host
 
 ## Known limitations
 
-- Only Ubuntu 22.04 on x86_64 has been considered.
+- Ubuntu 22.04 is the target; the real-host runs also covered 24.04. Both were GitHub-hosted runners, which are disposable VMs; the CPU architecture was not recorded. No other host has been tried.
 - A container cannot run systemd, sshd or a firewall, so those parts cannot be proven that way.

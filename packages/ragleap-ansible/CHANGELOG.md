@@ -5,6 +5,10 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Documentation
+
+- README: the base role and the opt-in SSH hardening were run on real hosts, GitHub-hosted Ubuntu 22.04 and 24.04 runners, in CI (`ansible-vm-test`, run 40378770112): both ran twice with the second run changing nothing, the running sshd offered `publickey,password` before hardening and only `publickey` after, and a key login as the deploy user still worked. Two deliberate breaks made the check fail (runs 40465088911 and 40465114601). Not tested: the firewall on a real host, reboot persistence, unattended upgrades actually running, a drop-in order other than the cloud image's, and any host that is not a GitHub-hosted runner.
+
 ## [0.1.1] - 2026-10-19
 
 ### Changed
