@@ -10,7 +10,7 @@ pip install ragleap-integrations
 
 ## What this is (and isn't)
 
-v0.2.0 is an MCP client over **Streamable HTTP only**. The *owner* configures
+v0.3.0 is an MCP client over **Streamable HTTP only**. The *owner* configures
 servers and an exact `server.tool` allowlist; the model only supplies a tool's
 JSON arguments, never a URL, a token or a tool outside the allowlist. It does
 not own a tool-calling loop (that is `ragleap-agents`' job).
@@ -95,6 +95,45 @@ one small dict per discovery and per call (server, tool, ok, error, approval,
 duration); arguments and results never appear in it. See
 `docs/design/mcp-governance.md`.
 
+## Multi-tenant use: McpHub
+
+One owner-level `McpConfig`, one `Connection` per tenant. The tenant is a
+`Scope`: with `pip install "ragleap-integrations[security]"` it is
+`ragleap-security`'s `Scope`; without it a small built-in `Scope` with the same
+fields and key format. The model never sees or sets the scope.
+
+```python
+from ragleap_integrations import McpConfig, McpHub, McpServerConfig, RateLimit, Scope
+
+hub = McpHub(
+    McpConfig(servers=[McpServerConfig("crm", "https://mcp.example.com/mcp")],
+              allowed_tools=["crm.get_order", "crm.update_order"]),
+    token_provider=lambda scope, server: vault.token_for(scope.tenant, server),
+    allow_for=lambda scope: ["crm.get_order"] if scope.tenant == "trial" else None,
+    limit=RateLimit(60, 60),   # 60 calls a minute per tenant
+    audit=audit_log,           # anything with append(event, data, scope)
+)
+conn = hub.connect(Scope(tenant="acme", subject="u1"))
+conn.toolkit.call(name_from_model, arguments_from_model)  # same Connection as connect()
+```
+
+- Each scope has its own client, tool snapshot and token; nothing mutable is
+  shared between scopes.
+- `token_provider(scope, server)` is called for every request and nothing is
+  cached by this package. `None` sends no token (the static token is not used
+  then); a failing provider gives the constant text "MCP token is unavailable".
+- `allow_for(scope)` can only narrow the owner's allowlist. `policy_for(scope)`
+  picks a per-tenant `McpPolicy`; its `approve_scoped(scope, server, tool,
+  arguments)` wins over `approve`, and without a scope it denies.
+- `RateLimit` is per tenant (all of a tenant's scopes share it) and is checked
+  before approval and before any network call.
+- Events carry `tenant` and `scope`; arguments and results are never in them.
+  `audit` receives every event with the scope.
+- `hub.connect()` needs an exact `Scope` (a string, a dict, `None` or a
+  subclass raises `ScopeError`). This package does not decide who the caller is.
+
+Design and limits: `docs/design/multi-tenant.md`.
+
 ## Trust model
 
 - Everything a server says is untrusted text: tool descriptions, input
@@ -138,6 +177,10 @@ handshake with protocol version 2025-06-18 only (an explicit allowlist, not
 
 ## Known limitations
 
+- This package does not decide who the caller is: tenant isolation is only as
+  strong as the `Scope` you pass and the token your `token_provider` returns.
+- Rate windows are kept per tenant until `hub.forget(tenant=...)`, the limit is
+  per process, and `allow_for` and `policy_for` are read once per scope.
 - On a legacy server every tool call performs a full `initialize` handshake
   (three POSTs) and never closes the session.
 - A `HeaderMismatch` error is reported, not retried after re-reading the
@@ -157,6 +200,20 @@ handshake with protocol version 2025-06-18 only (an explicit allowlist, not
 
 ## Verification status
 
+- 331 tests (the 275 earlier ones unchanged plus 56 new in 0.3.0: scope and
+  token isolation, allowlists, policies, limits, events, audit, threads; 327
+  passed and 4 skipped without `ragleap-security`); 40 of 40 deliberate breaks
+  of the new code caught.
+- **Live-checked on 2026-10-26** with the repository source of the 0.3.0 branch on
+  Python 3.10.12 against a third party's public mock MCP auth server, using
+  `scripts/tenant_live.py` (repository only, not in the wheel): two real tokens
+  were minted; each tenant's requests carried only its own token (compared by
+  hash); a made-up token got HTTP 401 and the real tenants kept working; after
+  one tenant's token was changed only that tenant was refused (the token is
+  resolved per request); `RateLimit(2, 60)` denied the third call locally and
+  only two `tools/call` requests reached the server; no event carried a token.
+  The mock server cannot tell tenants apart, so separation is shown from the
+  requests that were sent.
 - 275 tests (67 of them new in 0.2.0: governance, events and `connect()`;
   53 of 53 deliberate breaks of the new code caught), including a real local
   TLS server with a throwaway certificate
@@ -238,6 +295,11 @@ handshake with protocol version 2025-06-18 only (an explicit allowlist, not
   and the per-call audit events against a real server (they need a real
   `tools/call`, and the Pub/Sub server requires credentials), and
   `connect(token=...)` against a real authorization server.
+- **Not live-verified (new in 0.3.0):** `approve_scoped`, `allow_for` and
+  `policy_for` against a real server, a real `ragleap-security` `AuditLog` fed
+  by a live run, concurrent tenants against a real server, a server that really
+  separates tenants' data, and the published wheel (the live check ran on the
+  branch source and is repeated with the wheel after release).
 
 ## License
 

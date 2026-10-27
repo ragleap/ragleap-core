@@ -66,10 +66,10 @@ class Connection:
 
 
 def connect_config(config: McpConfig, *, specs: Optional[List[McpToolSpec]] = None,
-                   transport: Optional[Transport] = None) -> Connection:
+                   transport: Optional[Transport] = None, client: Optional[McpClient] = None) -> Connection:
     """Discover (or use the owner-supplied specs) and build the tools for any
     McpConfig. Raises McpConfigError or McpDiscoveryError: setup problems."""
-    client = McpClient(config, transport=transport)
+    client = client or McpClient(config, transport=transport)
     if specs is None:
         discovery = client.discover()
         specs, skipped = discovery.tools, list(discovery.skipped)

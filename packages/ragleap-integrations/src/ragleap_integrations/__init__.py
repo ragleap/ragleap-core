@@ -12,12 +12,17 @@ Toolkit in one call; McpPolicy and McpServerConfig.trust_annotations decide whic
 are flagged requires_approval (server hints are untrusted and can only tighten policy);
 McpPolicy.approve enforces the flag; on_event receives small audit events. See
 docs/design/mcp-governance.md.
+
+v0.3.0: multi-tenant. McpHub gives each Scope (ragleap-security's, or a built-in one) its own
+connection with per-request tokens, a narrowed allowlist, its own policy, a per-tenant RateLimit
+and scoped audit events. See docs/design/multi-tenant.md.
 """
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 from ragleap_integrations.connect import Connection, connect, connect_config
 from ragleap_integrations.governance import McpPolicy
+from ragleap_integrations.tenancy import HAS_SECURITY, McpHub, RateLimit, Scope, ScopeError, require_scope
 from ragleap_integrations.mcp import (
     Discovery,
     McpClient,
@@ -43,4 +48,10 @@ __all__ = [
     "connect",
     "connect_config",
     "make_mcp_tools",
+    "McpHub",
+    "RateLimit",
+    "Scope",
+    "ScopeError",
+    "require_scope",
+    "HAS_SECURITY",
 ]

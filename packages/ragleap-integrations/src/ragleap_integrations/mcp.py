@@ -105,6 +105,8 @@ _FAILURES = {
     "legacy_transport": "MCP server does not use a transport this client supports",
     "input_required": "MCP server asked for client input, which is not supported",
     "not_approved": "MCP call was not approved",
+    "token_unavailable": "MCP token is unavailable",
+    "rate_limited": "MCP call limit reached",
 }
 
 
@@ -444,8 +446,17 @@ class McpClient:
     inject a fake. Not safe to share between threads while a call is running
     (the protocol era per server is cached on first success)."""
 
-    def __init__(self, config: McpConfig, transport: Optional[Transport] = None):
+    def __init__(self, config: McpConfig, transport: Optional[Transport] = None, *,
+                 token_for: Optional[Callable[[str], Any]] = None, scope: Any = None,
+                 guard: Optional[Callable[[], bool]] = None, lock: Any = None):
+        # token_for, scope, guard and lock are set by ragleap_integrations.tenancy.McpHub:
+        # a per-request token, the scope events carry, a rate-limit check and a lock that
+        # serializes this scope's requests. Without them nothing changes.
         self.config = config
+        self._token_for = token_for
+        self._scope = scope
+        self._guard = guard
+        self._lock = lock
         self._servers = {s.name: s for s in config.servers}
         self._allowed = set(config.allowed_tools)
         self._ids = itertools.count(1)
@@ -465,12 +476,30 @@ class McpClient:
     def _post(self, server: str, headers: Dict[str, str], obj: Dict[str, Any], rpc_id: Optional[int] = None):
         cfg = self._servers[server]
         sent = dict(headers)
-        if cfg.token:
-            sent["Authorization"] = "Bearer " + cfg.token
+        token = self._resolve_token(server) if self._token_for is not None else cfg.token
+        if token:
+            sent["Authorization"] = "Bearer " + token
         stop = None
         if rpc_id is not None:
             stop = lambda buf: _sse_find(buf, rpc_id, False) is not None  # noqa: E731
         return self._transport(cfg.url, sent, json.dumps(obj).encode("utf-8"), stop)
+
+    def _resolve_token(self, server: str) -> Optional[str]:
+        """The per-request token from the owner's provider. None means no token (the
+        static token is NOT used then). Any failure, or an unusable value, gives a
+        constant message; the exception text and the token are never kept."""
+        try:
+            value = self._token_for(server)
+            if value is not None and not isinstance(value, str) and callable(getattr(value, "reveal", None)):
+                value = value.reveal()
+        except Exception as exc:
+            logger.error("token provider failed for server %s (%s)", server, type(exc).__name__)
+            raise _Failure("token_unavailable")
+        if value is None:
+            return None
+        if not isinstance(value, str) or not value or _has_control_chars(value):
+            raise _Failure("token_unavailable")
+        return value
 
     # -- modern (2026-07-28) -------------------------------------------------
 
@@ -556,6 +585,12 @@ class McpClient:
     # -- one request, either era -------------------------------------------
 
     def _request(self, server, method, params, name=None, param_headers=None) -> Dict[str, Any]:
+        if self._lock is None:
+            return self._request_unlocked(server, method, params, name, param_headers)
+        with self._lock:
+            return self._request_unlocked(server, method, params, name, param_headers)
+
+    def _request_unlocked(self, server, method, params, name=None, param_headers=None) -> Dict[str, Any]:
         first_code: Optional[int] = None
         if self._eras.get(server) != "legacy":
             try:
@@ -588,8 +623,12 @@ class McpClient:
         hook = self.config.on_event
         if hook is None:
             return
+        event = dict(event)
+        if self._scope is not None:
+            event["tenant"] = self._scope.tenant
+            event["scope"] = self._scope.key
         try:
-            hook(dict(event))
+            hook(event)
         except Exception:
             logger.exception("on_event hook failed")
 
@@ -689,11 +728,16 @@ class McpClient:
             info["approval"] = "not_required"
             return
         policy = self.config.policy
-        if policy is None or policy.approve is None:
+        scoped = getattr(policy, "approve_scoped", None) if policy is not None else None
+        if policy is None or (policy.approve is None and scoped is None):
             info["approval"] = "not_enforced"
             return
         try:
-            answer = policy.approve(server, tool, json.loads(json.dumps(arguments)))
+            safe_args = json.loads(json.dumps(arguments))
+            if scoped is not None:
+                answer = scoped(self._scope, server, tool, safe_args) if self._scope is not None else False
+            else:
+                answer = policy.approve(server, tool, safe_args)
         except Exception:
             logger.exception("approve hook failed for %s.%s", server, tool)
             answer = False
@@ -723,6 +767,14 @@ class McpClient:
                 except _BadSchema:
                     raise _Failure("bad_arguments")
             param_headers = _header_values(header_params, arguments)
+            if self._guard is not None:
+                try:
+                    allowed_now = self._guard()
+                except Exception:
+                    logger.exception("rate-limit check failed")
+                    allowed_now = False
+                if not allowed_now:
+                    raise _Failure("rate_limited")
             self._check_approval(server, tool, arguments, requires_approval, info)
             result = self._request(server, "tools/call", {"name": tool, "arguments": arguments},
                                    name=tool, param_headers=param_headers)

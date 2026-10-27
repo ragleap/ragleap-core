@@ -5,6 +5,86 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-27
+
+### Added
+
+- `McpHub` (`ragleap_integrations.tenancy`): multi-tenant use. One owner-level
+  `McpConfig`, one `Connection` per `Scope` (`hub.connect(scope)`), cached
+  (`max_scopes`, least recently used dropped; `scopes`, `forget(scope)` and
+  `forget(tenant=...)`). Each scope has its own client, protocol-era cache,
+  tool snapshot and lock; the scope is closed over by the tool handlers and is
+  never a tool argument.
+- `token_provider(scope, server)`: called for every request, never cached; a
+  `str`, a wrapper with `.reveal()` (such as `ragleap_security.SecretStr`) or
+  `None` (no token; the static token is not used then). A failing or unusable
+  provider gives the constant text "MCP token is unavailable".
+- `allow_for(scope)` (can only narrow the owner's allowlist), `policy_for(scope)`
+  (a per-tenant `McpPolicy`), `McpPolicy.approve_scoped(scope, server, tool,
+  arguments)` (wins over `approve`; without a scope it denies), `RateLimit(calls,
+  per_seconds)` (per tenant, checked before approval and the network; denial text
+  "MCP call limit reached") and `audit` (anything with `append(event, data,
+  scope)`, such as `ragleap_security.AuditLog`).
+- Events from scoped clients carry `tenant` and `scope` (the scope key);
+  arguments and results are still never in an event.
+- `Scope`, `ScopeError`, `require_scope`, `HAS_SECURITY`. When `ragleap-security`
+  is installed (`pip install "ragleap-integrations[security]"`) its `Scope` is
+  used and only that exact class is accepted; otherwise a built-in `Scope` with
+  the same fields, validation and key format.
+- `McpClient` keyword-only `token_for`, `scope`, `guard` and `lock`;
+  `connect_config(..., client=...)`.
+- `scripts/tenant_live.py`, the two-tenant live check (repository only, not in
+  the wheel). Design doc `docs/design/multi-tenant.md`.
+
+### Changed
+
+- Code that does not use `McpHub` behaves as in 0.2.0: the 275 earlier tests
+  pass unchanged and a static `McpServerConfig.token` still works.
+- The `test` extra now includes `ragleap-security`.
+
+### Verified (0.3.0)
+
+- 331 tests (the 275 earlier ones plus 56 new: scopes, token isolation,
+  allowlists, policies, limits, events, audit, threads) on Python 3.10 and 3.12;
+  327 passed and 4 skipped without `ragleap-security`. 40 of 40 deliberate
+  breaks of the new code caught (one equivalent mutant is not counted:
+  removing the empty-allowlist check still raises the same error type from
+  `McpConfig`).
+- Live-checked on 2026-10-26 with the repository source of the 0.3.0 branch on Python
+  3.10.12 against a third party's public mock MCP auth server
+  (mcpplaygroundonline.com; its own description is not independently
+  verified), using `scripts/tenant_live.py`, read-only: two tokens were minted
+  and differ; two tenants each discovered and called `get_user` with their own
+  token, and all four recorded requests carried only that tenant's token
+  (compared by hash; the tokens were not printed); a made-up token was refused
+  with HTTP 401 while the real tenants kept working; after one tenant's token
+  was changed that tenant got HTTP 401 and the other was unaffected (so the token
+  is resolved per request); `RateLimit(2, 60)` allowed two calls and denied the
+  third locally, and exactly two `tools/call` requests reached the server; nine
+  events all carried a tenant and none a token. **The limit of this check:** the
+  mock server cannot tell tenants apart (both tokens map to the same demo user),
+  so separation is shown from the requests that were sent, not from the server
+  separating data.
+
+### Not verified (0.3.0)
+
+- `approve_scoped`, `allow_for` and `policy_for` against a real server; a real
+  `ragleap_security.AuditLog` fed by a live run; concurrent tenants against a
+  real server; a server that really separates tenants' data.
+- The published wheel (the live check above ran on the branch source; it is
+  repeated with the wheel after release, as for 0.2.0).
+
+### Known limitations
+
+- This package does not decide who the caller is: isolation is only as strong as
+  the `Scope` the caller passes and the token the provider returns for it.
+- A rate window is kept for every tenant seen until `forget(tenant=...)`; the
+  scope cache is bounded, the windows are not. The limit is per process.
+- `allow_for` and `policy_for` are called once per scope, when it is connected.
+- One `tools/list` request per scope. A scope's requests are serialized by a
+  lock held across the network request (up to the total timeout).
+- `approve_scoped` may block; the deadlines do not cover it.
+
 ### Verified (after 0.2.0)
 
 - Live-checked on 2026-10-25 with the published 0.2.0 wheel on Python 3.10.12
@@ -24,7 +104,7 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   hints, and each `connect()` produced one `discover` event (11 ready, 4
   skipped, 95 to 111 ms) and no `call` event.
 
-### Not verified
+### Not verified (after 0.2.0)
 
 - The `approve` hook, its denial text and the per-call audit events against a
   real server: they need a real `tools/call`, and this server requires

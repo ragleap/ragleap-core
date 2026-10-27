@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ragleap-integrations"
-version = "0.2.0"
+version = "0.3.0"
 description = "MCP client that turns allowlisted tools on remote MCP servers into ragleap-tools Tool objects. Streamable HTTP only, standard library plus ragleap-tools, owner-configured allowlist, pinned and bounded network access. BYOK, no vendor lock-in."
 readme = "README.md"
 license = "MIT"
@@ -27,7 +27,8 @@ classifiers = [
 dependencies = ["ragleap-tools>=0.5.1"]
 
 [project.optional-dependencies]
-test = ["pytest>=8.0.0"]
+security = ["ragleap-security>=0.1.0"]
+test = ["pytest>=8.0.0", "ragleap-security>=0.1.0"]
 
 [project.urls]
 Homepage = "https://github.com/ragleap/ragleap-core"

@@ -19,6 +19,8 @@ policy STRICTER, never looser, unless the owner explicitly says otherwise:
   This package enforces it only when the owner supplies McpPolicy.approve: a
   call to a flagged tool then runs only if approve(server, tool, arguments)
   returns exactly True (an exception or any other value denies it).
+  approve_scoped(scope, server, tool, arguments) is the same with the caller's scope (see
+  tenancy.McpHub): when it is set it is used instead of approve, and without a scope it denies.
 """
 
 from __future__ import annotations
@@ -38,10 +40,13 @@ class McpPolicy:
 
     approve: Optional[Callable[[str, str, Dict[str, Any]], bool]] = None
     pre_approved: List[str] = field(default_factory=list)
+    approve_scoped: Optional[Callable[..., bool]] = None
 
     def __post_init__(self) -> None:
         if self.approve is not None and not callable(self.approve):
             raise ValueError("approve must be callable")
+        if self.approve_scoped is not None and not callable(self.approve_scoped):
+            raise ValueError("approve_scoped must be callable")
         if not isinstance(self.pre_approved, (list, tuple)):
             raise ValueError("pre_approved must be a list of 'server.tool' entries")
         cleaned: List[str] = []
