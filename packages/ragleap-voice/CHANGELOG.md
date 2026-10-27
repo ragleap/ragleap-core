@@ -4,7 +4,9 @@ All notable changes to `ragleap-voice` are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
+
 ### Added
+- Audio helpers without `audioop` (`ragleap_voice.audio`, standard library only, not exported yet): mu-law decode and encode, 20 ms framing, RMS and peak in dBFS, gain and level normalisation, 2:1 resamplers. The mu-law encoder is not verified against the G.711 standard (it differs from audioop and from ffmpeg by one code on 0.6% and 1.3% of inputs); A-law is not implemented; the resamplers' effect on recognition accuracy is not measured.
 - `ragleap_voice.bench`: opt-in Turkish ordinal normalization for standalone and composed number words, plus standard digit-plus-ordinal-suffix spellings. Supports both `katrilyoncu` and `katrilyonuncu`. The Turkish normalizer version is now `1+numbers-tr.2`; defaults and the English path are unchanged. TDK's [number spelling guidance](https://tdk.gov.tr/icerik/yazim-kurallari/sayilarin-yazilisi/) covers ordinal writing conventions and digit suffixes; lexical examples are authored for the tests and cross-checked against Turkish references.
 
 ## [0.1.1] - 2026-10-26
