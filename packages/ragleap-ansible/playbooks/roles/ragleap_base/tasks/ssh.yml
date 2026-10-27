@@ -35,7 +35,7 @@
   block:
     - name: Write the sshd drop-in
       ansible.builtin.copy:
-        dest: /etc/ssh/sshd_config.d/10-ragleap.conf
+        dest: /etc/ssh/sshd_config.d/99-ragleap.conf
         content: |
           # Managed by ragleap-ansible
           PasswordAuthentication no
@@ -53,7 +53,7 @@
   rescue:
     - name: Remove the drop-in again
       ansible.builtin.file:
-        path: /etc/ssh/sshd_config.d/10-ragleap.conf
+        path: /etc/ssh/sshd_config.d/99-ragleap.conf
         state: absent
 
     - name: Stop, because the sshd check failed
