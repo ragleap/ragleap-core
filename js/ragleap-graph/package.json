@@ -1,0 +1,15 @@
+{
+  "name": "@ragleap/graph",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TypeScript port of ragleap-graph (work in progress, not published)",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ragleap/ragleap-core.git",
+    "directory": "js/ragleap-graph"
+  },
+  "scripts": {
+    "test": "node --test test/parity.test.ts"
+  }
+}
