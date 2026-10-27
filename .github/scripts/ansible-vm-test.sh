@@ -40,7 +40,7 @@ rm -f /tmp/av-key /tmp/av-key.pub
 ssh-keygen -q -t ed25519 -N '' -C ci-test -f /tmp/av-key
 PUB=$(cat /tmp/av-key.pub)
 printf '{"ragleap_base_deploy_ssh_public_key": "%s"}\n' "$PUB" > /tmp/av-base.json
-printf '{"ragleap_base_deploy_ssh_public_key": "%s", "ragleap_base_harden_ssh": true}\n' "$PUB" > /tmp/av-ssh.json
+printf '{"ragleap_base_deploy_ssh_public_key": "%s", "ragleap_base_harden_ssh": true, "ragleap_base_manage_services": false}\n' "$PUB" > /tmp/av-ssh.json
 printf '[ragleap_servers]\nlocalhost ansible_connection=local ansible_python_interpreter=/usr/bin/python3\n' > /tmp/av-inv.ini
 
 play() { ( cd "$PKG" && ansible-playbook -i /tmp/av-inv.ini playbooks/bootstrap.yml -e "@$1" ) > "$2" 2>&1; }
