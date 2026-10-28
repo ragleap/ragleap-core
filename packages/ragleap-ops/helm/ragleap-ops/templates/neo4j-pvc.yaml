@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: ragleap-neo4j-data
+  name: ragleap-neo4j-data-broken
 spec:
   accessModes: ["ReadWriteOnce"]
   resources:

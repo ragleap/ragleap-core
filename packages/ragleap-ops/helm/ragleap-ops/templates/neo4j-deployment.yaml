@@ -94,7 +94,7 @@ spec:
       volumes:
         - name: neo4j-data
           persistentVolumeClaim:
-            claimName: ragleap-neo4j-data
+            claimName: ragleap-neo4j-data-broken
         - name: neo4j-logs
           emptyDir: {}
         - name: neo4j-run
