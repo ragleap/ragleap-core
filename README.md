@@ -68,7 +68,7 @@ Honest limits: the Windows installer has been run on one Windows machine so far,
 
 ---
 
-> **Open source, self-hosted.** `ragleap-core` (this repo) is MIT-licensed, completely free, and never requires a license key. A managed cloud version of RagLeap is planned; for now, RagLeap is open source only.
+> **Open source, self-hosted.** `ragleap-core` (this repo) is MIT-licensed, completely free, and never requires a license key. RagLeap is built for self-hosting; no managed cloud service is currently offered.
 
 ## Install
 
