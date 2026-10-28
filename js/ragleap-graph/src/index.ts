@@ -13,3 +13,5 @@ export { QueryApiRunner } from "./queryApiRunner.ts";
 export type { CypherRunner, Row } from "./queryApiRunner.ts";
 export { CONSTRAINTS, GraphIndex } from "./graphIndex.ts";
 export type { GraphIndexOptions, GraphLogger } from "./graphIndex.ts";
+export { DEFAULT_MAX_ENTITIES, DEFAULT_MAX_PAIRS, MAX_ATTEMPTS, NOT_AVAILABLE } from "./upsert.ts";
+export type { UpsertChunk, UpsertLogger, UpsertOptions, UpsertSummary, UpsertTiming } from "./upsert.ts";

@@ -75,3 +75,22 @@ export function pyStripChars(s: string, chars: string): string {
   while (end > start && chars.includes(s[end - 1])) end--;
   return s.slice(start, end);
 }
+
+const WS_EDGE = new RegExp(`^${PY_WS}+|${PY_WS}+$`, "gu");
+
+/** Python str.strip() with no arguments: removes Unicode whitespace at both ends. */
+export function pyStrip(s: string): string {
+  return s.replace(WS_EDGE, "");
+}
+
+/** Compares strings by code point like Python does (JavaScript's < compares UTF-16 units). Returns -1, 0 or 1. */
+export function cpCompare(a: string, b: string): number {
+  const x = Array.from(a);
+  const y = Array.from(b);
+  const n = Math.min(x.length, y.length);
+  for (let i = 0; i < n; i++) {
+    const d = (x[i].codePointAt(0) as number) - (y[i].codePointAt(0) as number);
+    if (d !== 0) return d < 0 ? -1 : 1;
+  }
+  return x.length === y.length ? 0 : x.length < y.length ? -1 : 1;
+}

@@ -2,6 +2,8 @@ import { GraphConfig } from "./config.ts";
 import { extractQueryEntities as extractQueryEntitiesFn } from "./entities.ts";
 import { QueryApiRunner } from "./queryApiRunner.ts";
 import type { CypherRunner } from "./queryApiRunner.ts";
+import { upsertDocumentWithRetry } from "./upsert.ts";
+import type { UpsertChunk, UpsertOptions, UpsertSummary, UpsertTiming } from "./upsert.ts";
 
 /** The composite_key constraints created on connect (idempotent: IF NOT EXISTS). */
 export const CONSTRAINTS: readonly string[] = Object.freeze([
@@ -16,11 +18,16 @@ export const CONSTRAINTS: readonly string[] = Object.freeze([
 export interface GraphLogger {
   info(message: string): void;
   warn(message: string): void;
+  error?(message: string): void;
 }
 
 export interface GraphIndexOptions {
   /** Where warnings go. Default: warnings to console.warn, info messages dropped. */
   logger?: GraphLogger;
+  /** Waits between upsert retries (seconds). Default: a real timer. */
+  sleep?: (seconds: number) => Promise<void>;
+  /** Jitter source for the retry backoff, 0 to 1. Default: Math.random. */
+  random?: () => number;
 }
 
 const DEFAULT_LOGGER: GraphLogger = {
@@ -28,6 +35,14 @@ const DEFAULT_LOGGER: GraphLogger = {
   warn(message: string) {
     console.warn(message);
   },
+  error(message: string) {
+    console.error(message);
+  },
+};
+
+const DEFAULT_TIMING: UpsertTiming = {
+  sleep: (seconds: number) => new Promise<void>((resolve) => setTimeout(resolve, seconds * 1000)),
+  random: () => Math.random(),
 };
 
 function messageOf(e: unknown): string {
@@ -74,11 +89,13 @@ async function connectRunner(candidate: CypherRunner, logger: GraphLogger): Prom
 export class GraphIndex {
   #runner: CypherRunner | null;
   #logger: GraphLogger;
+  #timing: UpsertTiming;
 
   /** Internal: use GraphIndex.connect(). */
-  constructor(runner: CypherRunner | null, logger: GraphLogger) {
+  constructor(runner: CypherRunner | null, logger: GraphLogger, timing: UpsertTiming = DEFAULT_TIMING) {
     this.#runner = runner;
     this.#logger = logger;
+    this.#timing = timing;
   }
 
   /**
@@ -90,7 +107,10 @@ export class GraphIndex {
     const resolved = source === undefined ? new GraphConfig() : source;
     const candidate = resolved instanceof GraphConfig ? openRunner(resolved, logger) : resolved;
     const runner = candidate === null ? null : await connectRunner(candidate, logger);
-    return new GraphIndex(runner, logger);
+    return new GraphIndex(runner, logger, {
+      sleep: options.sleep ?? DEFAULT_TIMING.sleep,
+      random: options.random ?? DEFAULT_TIMING.random,
+    });
   }
 
   isAvailable(): boolean {
@@ -124,5 +144,19 @@ export class GraphIndex {
     domainTerms: readonly string[] | null = null,
   ): string[] {
     return extractQueryEntitiesFn(query, maxEntities, domainTerms);
+  }
+
+  /**
+   * Indexes one document (regex entity extraction): the document, its entities, per-document pair weights and the
+   * summed CO_OCCURS_WITH edges. Idempotent: re-running replaces this document's earlier contribution.
+   * Retries up to 3 times on transient Neo4j errors. Never throws for Neo4j failures: see summary.error.
+   */
+  async upsertDocument(
+    documentId: string,
+    title: string | null | undefined,
+    chunks: readonly UpsertChunk[] | null | undefined,
+    options: UpsertOptions = {},
+  ): Promise<UpsertSummary> {
+    return upsertDocumentWithRetry(this.#runner, this.#logger, this.#timing, documentId, title, chunks, options);
   }
 }

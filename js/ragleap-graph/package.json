@@ -10,6 +10,6 @@
     "directory": "js/ragleap-graph"
   },
   "scripts": {
-    "test": "node --test test/parity.test.ts test/runner.test.ts test/graphIndex.test.ts test/live.test.ts test/liveIndex.test.ts"
+    "test": "node --test test/parity.test.ts test/runner.test.ts test/graphIndex.test.ts test/upsert.test.ts test/live.test.ts test/liveIndex.test.ts test/liveUpsert.test.ts"
   }
 }
