@@ -68,7 +68,7 @@ Wenn Port 8000 oder 5433 bereits auf Ihrem Computer belegt ist (zum Beispiel dur
 
 ---
 
-> **Open Source und selbst gehostet.** `ragleap-core` (dieses Repository) steht unter der MIT-Lizenz, ist vollständig kostenlos und benötigt nie einen Lizenzschlüssel. Eine verwaltete Cloud-Version von RagLeap ist geplant; derzeit ist RagLeap ausschließlich Open Source.
+> **Open Source und selbst gehostet.** `ragleap-core` (dieses Repository) steht unter der MIT-Lizenz, ist vollständig kostenlos und benötigt nie einen Lizenzschlüssel. RagLeap ist für den Self-Hosting-Betrieb ausgelegt; derzeit wird kein verwalteter Cloud-Dienst angeboten.
 
 ## Installation
 
