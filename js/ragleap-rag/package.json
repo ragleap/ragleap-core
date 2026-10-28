@@ -1,0 +1,34 @@
+{
+  "name": "@ragleap/rag",
+  "version": "0.2.0",
+  "description": "TypeScript RAG utilities for RAGLeap",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test tests/*.test.mjs"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.23.1",
+    "typescript": "^5.9.0"
+  },
+  "dependencies": {
+    "pg": "^8.23.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ragleap/ragleap-core.git",
+    "directory": "js/ragleap-rag"
+  }
+}
