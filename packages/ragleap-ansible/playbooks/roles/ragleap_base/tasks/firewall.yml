@@ -18,6 +18,15 @@
     path: /usr/sbin/sshd
   register: ragleap_base_sshd_bin
 
+- name: Make sure the privilege separation directory exists, because sshd -T needs it
+  ansible.builtin.file:
+    path: /run/sshd
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: ragleap_base_sshd_bin.stat.exists
+
 - name: Read the effective sshd configuration
   ansible.builtin.command: /usr/sbin/sshd -T
   register: ragleap_base_sshd_effective
