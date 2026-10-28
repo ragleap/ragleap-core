@@ -2,6 +2,8 @@ import { GraphConfig } from "./config.ts";
 import { extractQueryEntities as extractQueryEntitiesFn } from "./entities.ts";
 import { QueryApiRunner } from "./queryApiRunner.ts";
 import type { CypherRunner } from "./queryApiRunner.ts";
+import * as queries from "./queries.ts";
+import type { DocumentHit, EntityRef, LimitOptions, LineageEntry, LineageOptions, RelatedEntity, RelatedOptions, RelationHit, RelationsOptions, ScopeOptions, TypedEntity } from "./queries.ts";
 import { upsertDocumentWithRetry } from "./upsert.ts";
 import type { UpsertChunk, UpsertOptions, UpsertSummary, UpsertTiming } from "./upsert.ts";
 
@@ -158,5 +160,35 @@ export class GraphIndex {
     options: UpsertOptions = {},
   ): Promise<UpsertSummary> {
     return upsertDocumentWithRetry(this.#runner, this.#logger, this.#timing, documentId, title, chunks, options);
+  }
+
+  /** Documents connected to the given entity names, ranked by matched-entity count and summed edge weight. */
+  async findDocumentsByEntities(entityNames: readonly string[], options: LimitOptions = {}): Promise<DocumentHit[]> {
+    return queries.findDocumentsByEntities(this.#runner, this.#logger, entityNames, options);
+  }
+
+  /** Entities related to the given names by graph traversal, up to maxDepth hops (1 to 10, default 2). */
+  async searchRelatedEntities(entityNames: readonly string[], options: RelatedOptions = {}): Promise<RelatedEntity[]> {
+    return queries.searchRelatedEntities(this.#runner, this.#logger, entityNames, options);
+  }
+
+  /** Typed relations involving the entity; direction is outgoing (default), incoming or both. */
+  async findRelations(entityName: string, options: RelationsOptions = {}): Promise<RelationHit[]> {
+    return queries.findRelations(this.#runner, this.#logger, entityName, options);
+  }
+
+  /** Per-document contributions to the edges between two entities (either order). */
+  async findLineage(entityA: string, entityB: string, options: LineageOptions = {}): Promise<LineageEntry[]> {
+    return queries.findLineage(this.#runner, this.#logger, entityA, entityB, options);
+  }
+
+  /** Entities of a given type, matched case-insensitively. */
+  async findEntitiesByType(entityType: string, options: LimitOptions = {}): Promise<TypedEntity[]> {
+    return queries.findEntitiesByType(this.#runner, this.#logger, entityType, options);
+  }
+
+  /** All entities linked to one document (at most 50). */
+  async documentEntities(documentId: string | number, options: ScopeOptions = {}): Promise<EntityRef[]> {
+    return queries.documentEntities(this.#runner, this.#logger, documentId, options);
   }
 }

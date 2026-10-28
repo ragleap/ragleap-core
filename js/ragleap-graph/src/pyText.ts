@@ -94,3 +94,22 @@ export function cpCompare(a: string, b: string): number {
   }
   return x.length === y.length ? 0 : x.length < y.length ? -1 : 1;
 }
+
+/** Python repr() of a str, for the common cases (quote choice, backslash, \n \r \t, other control characters). */
+export function pyRepr(s: string): string {
+  const hasSingle = s.includes("'");
+  const hasDouble = s.includes('"');
+  const quote = hasSingle && !hasDouble ? '"' : "'";
+  let out = "";
+  for (const ch of s) {
+    const cp = ch.codePointAt(0) as number;
+    if (ch === "\\") out += "\\\\";
+    else if (ch === quote) out += "\\" + ch;
+    else if (ch === "\n") out += "\\n";
+    else if (ch === "\r") out += "\\r";
+    else if (ch === "\t") out += "\\t";
+    else if (cp < 0x20 || cp === 0x7f) out += "\\x" + cp.toString(16).padStart(2, "0");
+    else out += ch;
+  }
+  return quote + out + quote;
+}
