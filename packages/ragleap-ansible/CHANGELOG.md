@@ -5,9 +5,15 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-10-28
+
+### Fixed
+
+- The firewall role failed on Ubuntu 24.04 when `/run/sshd` did not exist yet, which is the case on a host where SSH hardening had not run: `sshd -T` stopped with an error that begins 'Missing privilege separation' and `ufw` was never enabled (CI run 40466686432). The role now creates `/run/sshd` before it reads the effective sshd configuration. Verified on GitHub-hosted Ubuntu 22.04 and 24.04 runners (`ansible-vm-firewall-test`, run 40630611316): the role ran twice and the second run changed nothing, `ufw` was active with deny-incoming and allow-outgoing and ports 22 and 8082 open, a port that was not opened was blocked from a container on the Docker bridge, and the job survived. Not tested: reboot persistence, IPv6 rules, Docker published ports, SSH hardening together with the firewall, any host that is not a GitHub-hosted runner.
+
 ### Documentation
 
-- README: the base role and the opt-in SSH hardening were run on real hosts, GitHub-hosted Ubuntu 22.04 and 24.04 runners, in CI (`ansible-vm-test`, run 40378770112): both ran twice with the second run changing nothing, the running sshd offered `publickey,password` before hardening and only `publickey` after, and a key login as the deploy user still worked. Two deliberate breaks made the check fail (runs 40465088911 and 40465114601). Not tested: the firewall on a real host, reboot persistence, unattended upgrades actually running, a drop-in order other than the cloud image's, and any host that is not a GitHub-hosted runner.
+- README: the base role and the opt-in SSH hardening were run on real hosts, GitHub-hosted Ubuntu 22.04 and 24.04 runners, in CI (`ansible-vm-test`, run 40378770112): both ran twice with the second run changing nothing, the running sshd offered `publickey,password` before hardening and only `publickey` after, and a key login as the deploy user still worked. Two deliberate breaks made the check fail (runs 40465088911 and 40465114601). Not tested: reboot persistence, unattended upgrades actually running, a drop-in order other than the cloud image's, and any host that is not a GitHub-hosted runner.
 
 ## [0.1.1] - 2026-10-19
 

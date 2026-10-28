@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ragleap-ansible"
-version = "0.1.1"
+version = "0.1.2"
 description = "Ansible roles that prepare and harden a fresh Ubuntu server: user, sudo, updates, SSH and firewall"
 readme = "README.md"
 keywords = ["ansible", "devops", "automation", "ubuntu", "k3s", "kubernetes", "helm", "infrastructure-as-code", "rag"]
