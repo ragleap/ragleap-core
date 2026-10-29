@@ -6,23 +6,45 @@
 
 **Open-source AI employees that ask before they act.**
 
+**Core engine**
+
 [![license MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE) [![Core Release](https://img.shields.io/github/v/release/ragleap/ragleap-core?filter=v*&label=ragleap-core&color=blue)](https://github.com/ragleap/ragleap-core/releases) [![46 AI Employees](https://img.shields.io/badge/46-AI%20Employees-brightgreen)](https://github.com/ragleap/ragleap-core) [![Autonomous](https://img.shields.io/badge/Autonomous-brightgreen)](https://github.com/ragleap/ragleap-core) [![Self--Hosted](https://img.shields.io/badge/Self--Hosted-brightgreen)](https://github.com/ragleap/ragleap-core)
+
+**RAG and retrieval (Python, Java, npm)**
+
 [![PyPI ragleap-rag](https://img.shields.io/pypi/v/ragleap-rag?label=ragleap-rag)](https://pypi.org/project/ragleap-rag/) [![Downloads](https://img.shields.io/pepy/dt/ragleap-rag?label=downloads)](https://pypi.org/project/ragleap-rag/)
+[![Maven Central ragleap-rag (Java)](https://img.shields.io/maven-central/v/io.github.antonyrag/ragleap-rag?label=ragleap-rag%20(Java))](https://central.sonatype.com/artifact/io.github.antonyrag/ragleap-rag)
+[![npm @ragleap/rag](https://img.shields.io/npm/v/@ragleap/rag?label=@ragleap/rag%20(npm))](https://www.npmjs.com/package/@ragleap/rag)
 [![PyPI ragleap-graph](https://img.shields.io/pypi/v/ragleap-graph?label=ragleap-graph)](https://pypi.org/project/ragleap-graph/) [![Downloads](https://img.shields.io/pepy/dt/ragleap-graph?label=downloads)](https://pypi.org/project/ragleap-graph/)
+[![Maven Central ragleap-graph (Java)](https://img.shields.io/maven-central/v/io.github.antonyrag/ragleap-graph?label=ragleap-graph%20(Java))](https://central.sonatype.com/artifact/io.github.antonyrag/ragleap-graph)
 [![PyPI ragleap-vectorstores](https://img.shields.io/pypi/v/ragleap-vectorstores?label=ragleap-vectorstores)](https://pypi.org/project/ragleap-vectorstores/) [![Downloads](https://img.shields.io/pepy/dt/ragleap-vectorstores?label=downloads)](https://pypi.org/project/ragleap-vectorstores/)
+[![Maven Central ragleap-vectorstores (Java)](https://img.shields.io/maven-central/v/io.github.antonyrag/ragleap-vectorstores?label=ragleap-vectorstores%20(Java))](https://central.sonatype.com/artifact/io.github.antonyrag/ragleap-vectorstores)
+
+**Agents and tools (Python)**
+
 [![PyPI ragleap-tools](https://img.shields.io/pypi/v/ragleap-tools?label=ragleap-tools)](https://pypi.org/project/ragleap-tools/) [![Downloads](https://img.shields.io/pepy/dt/ragleap-tools?label=downloads)](https://pypi.org/project/ragleap-tools/)
 [![PyPI ragleap-integrations](https://img.shields.io/pypi/v/ragleap-integrations?label=ragleap-integrations)](https://pypi.org/project/ragleap-integrations/) [![Downloads](https://img.shields.io/pepy/dt/ragleap-integrations?label=downloads)](https://pypi.org/project/ragleap-integrations/)
 [![PyPI ragleap-agents](https://img.shields.io/pypi/v/ragleap-agents?label=ragleap-agents)](https://pypi.org/project/ragleap-agents/) [![Downloads](https://img.shields.io/pepy/dt/ragleap-agents?label=downloads)](https://pypi.org/project/ragleap-agents/)
+
+**Speech (Python)**
+
+[![PyPI ragleap-voice](https://img.shields.io/pypi/v/ragleap-voice?label=ragleap-voice)](https://pypi.org/project/ragleap-voice/) [![Downloads](https://img.shields.io/pepy/dt/ragleap-voice?label=downloads)](https://pypi.org/project/ragleap-voice/)
+
+**Memory and security (Python)**
+
+[![PyPI ragleap-memory](https://img.shields.io/pypi/v/ragleap-memory?label=ragleap-memory)](https://pypi.org/project/ragleap-memory/) [![Downloads](https://img.shields.io/pepy/dt/ragleap-memory?label=downloads)](https://pypi.org/project/ragleap-memory/)
+[![PyPI ragleap-security](https://img.shields.io/pypi/v/ragleap-security?label=ragleap-security)](https://pypi.org/project/ragleap-security/) [![Downloads](https://img.shields.io/pepy/dt/ragleap-security?label=downloads)](https://pypi.org/project/ragleap-security/)
+
+**DevOps libraries (Python)**
+
 [![PyPI ragleap-ops](https://img.shields.io/pypi/v/ragleap-ops?label=ragleap-ops)](https://pypi.org/project/ragleap-ops/) [![Downloads](https://img.shields.io/pepy/dt/ragleap-ops?label=downloads)](https://pypi.org/project/ragleap-ops/)
 [![PyPI ragleap-app-chart](https://img.shields.io/pypi/v/ragleap-app-chart?label=ragleap-app-chart)](https://pypi.org/project/ragleap-app-chart/) [![Downloads](https://img.shields.io/pepy/dt/ragleap-app-chart?label=downloads)](https://pypi.org/project/ragleap-app-chart/)
 [![PyPI ragleap-observability](https://img.shields.io/pypi/v/ragleap-observability?label=ragleap-observability)](https://pypi.org/project/ragleap-observability/) [![Downloads](https://img.shields.io/pepy/dt/ragleap-observability?label=downloads)](https://pypi.org/project/ragleap-observability/)
 [![PyPI ragleap-terraform](https://img.shields.io/pypi/v/ragleap-terraform?label=ragleap-terraform)](https://pypi.org/project/ragleap-terraform/) [![Downloads](https://img.shields.io/pepy/dt/ragleap-terraform?label=downloads)](https://pypi.org/project/ragleap-terraform/)
 [![PyPI ragleap-ansible](https://img.shields.io/pypi/v/ragleap-ansible?label=ragleap-ansible)](https://pypi.org/project/ragleap-ansible/) [![Downloads](https://img.shields.io/pepy/dt/ragleap-ansible?label=downloads)](https://pypi.org/project/ragleap-ansible/)
-[![PyPI ragleap-voice](https://img.shields.io/pypi/v/ragleap-voice?label=ragleap-voice)](https://pypi.org/project/ragleap-voice/) [![Downloads](https://img.shields.io/pepy/dt/ragleap-voice?label=downloads)](https://pypi.org/project/ragleap-voice/)
-[![PyPI ragleap-memory](https://img.shields.io/pypi/v/ragleap-memory?label=ragleap-memory)](https://pypi.org/project/ragleap-memory/) [![Downloads](https://img.shields.io/pepy/dt/ragleap-memory?label=downloads)](https://pypi.org/project/ragleap-memory/)
-[![PyPI ragleap-security](https://img.shields.io/pypi/v/ragleap-security?label=ragleap-security)](https://pypi.org/project/ragleap-security/) [![Downloads](https://img.shields.io/pepy/dt/ragleap-security?label=downloads)](https://pypi.org/project/ragleap-security/)
-[![Maven Central ragleap-rag (Java)](https://img.shields.io/maven-central/v/io.github.antonyrag/ragleap-rag?label=ragleap-rag%20(Java))](https://central.sonatype.com/artifact/io.github.antonyrag/ragleap-rag)
-[![Maven Central ragleap-graph (Java)](https://img.shields.io/maven-central/v/io.github.antonyrag/ragleap-graph?label=ragleap-graph%20(Java))](https://central.sonatype.com/artifact/io.github.antonyrag/ragleap-graph) [![Maven Central ragleap-vectorstores (Java)](https://img.shields.io/maven-central/v/io.github.antonyrag/ragleap-vectorstores?label=ragleap-vectorstores%20(Java))](https://central.sonatype.com/artifact/io.github.antonyrag/ragleap-vectorstores)
+
+**Community**
+
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://github.com/ragleap/ragleap-core) [![Discord](https://img.shields.io/badge/Discord-Join%20us-5865F2?logo=discord&logoColor=white)](https://discord.gg/mQwJuQDVrA) [![Repo clones](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/ragleap/ragleap-core/main/.github/badges/clone-count.json)](https://github.com/ragleap/ragleap-core/pulse)
 
 English · [Afrikaans](readmes/README.af.md) · [العربية](readmes/README.ar.md) · [Български](readmes/README.bg.md) · [বাংলা](readmes/README.bn.md) · [Català](readmes/README.ca.md) · [Čeština](readmes/README.cs.md) · [Cymraeg](readmes/README.cy.md) · [Dansk](readmes/README.da.md) · [Deutsch](readmes/README.de.md) · [Ελληνικά](readmes/README.el.md) · [Español](readmes/README.es.md) · [Eesti](readmes/README.et.md) · [فارسی](readmes/README.fa.md) · [Suomi](readmes/README.fi.md) · [Français](readmes/README.fr.md) · [ગુજરાતી](readmes/README.gu.md) · [עברית](readmes/README.he.md) · [हिन्दी](readmes/README.hi.md) · [Hrvatski](readmes/README.hr.md) · [Magyar](readmes/README.hu.md) · [Bahasa Indonesia](readmes/README.id.md) · [Italiano](readmes/README.it.md) · [日本語](readmes/README.ja.md) · [ಕನ್ನಡ](readmes/README.kn.md) · [한국어](readmes/README.ko.md) · [Lietuvių](readmes/README.lt.md) · [Latviešu](readmes/README.lv.md) · [Македонски](readmes/README.mk.md) · [മലയാളം](readmes/README.ml.md) · [मराठी](readmes/README.mr.md) · [नेपाली](readmes/README.ne.md) · [Nederlands](readmes/README.nl.md) · [Norsk](readmes/README.no.md) · [ਪੰਜਾਬੀ](readmes/README.pa.md) · [Polski](readmes/README.pl.md) · [Português](readmes/README.pt.md) · [Română](readmes/README.ro.md) · [Русский](readmes/README.ru.md) · [Slovenčina](readmes/README.sk.md) · [Slovenščina](readmes/README.sl.md) · [Soomaali](readmes/README.so.md) · [Shqip](readmes/README.sq.md) · [Svenska](readmes/README.sv.md) · [Kiswahili](readmes/README.sw.md) · [தமிழ்](readmes/README.ta.md) · [తెలుగు](readmes/README.te.md) · [ไทย](readmes/README.th.md) · [Tagalog](readmes/README.tl.md) · [Türkçe](readmes/README.tr.md) · [Українська](readmes/README.uk.md) · [اردو](readmes/README.ur.md) · [Tiếng Việt](readmes/README.vi.md) · [简体中文](readmes/README.zh-cn.md) · [繁體中文](readmes/README.zh-tw.md)
