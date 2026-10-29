@@ -24,6 +24,7 @@ KEY_PREFIX = "rlk_"
 CACHE_SECONDS = 30
 LAST_USED_EVERY_MINUTES = 5
 _cache = {}
+_owner_cache = [0.0, False]     # [valid until, an active owner has a live personal key]
 _warned = set()
 
 
@@ -50,6 +51,7 @@ def new_key() -> str:
 
 def _clear_cache() -> None:
     _cache.clear()
+    _owner_cache[0] = 0.0
 
 
 def _uuid(value) -> str:
@@ -123,6 +125,30 @@ def resolve(key):
             _cache.clear()
         _cache[key_hash] = (time.monotonic() + CACHE_SECONDS, actor)
     return dict(actor) if actor else None
+
+
+def has_live_owner() -> bool:
+    """True when an active owner has a live personal key. Cached for 30 seconds. Never raises: any problem means
+    False, so the shared key keeps working (used by SHARED_KEY_DISABLED, so nobody is locked out by an error)."""
+    now = time.monotonic()
+    if _owner_cache[0] > now:
+        return _owner_cache[1]
+    try:
+        conn = _connect()
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT 1 FROM user_keys k JOIN users u ON u.id = k.user_id WHERE u.role = 'owner' "
+                        "AND u.status = 'active' AND k.revoked_at IS NULL LIMIT 1")
+            found = cur.fetchone() is not None
+        finally:
+            conn.close()
+    except Exception as e:
+        if "owner" not in _warned:
+            _warned.add("owner")
+            logger.warning("owner check failed (%s); treating it as no owner", type(e).__name__)
+        found = False
+    _owner_cache[0], _owner_cache[1] = now + CACHE_SECONDS, found
+    return found
 
 
 # ---------------- managing people (owner only; see permissions.RULES) ----------------
@@ -216,6 +242,7 @@ def create_key(user_id, label="") -> dict:
         conn.commit()
     finally:
         conn.close()
+    _owner_cache[0] = 0.0
     logger.info("personal key created for user %s (%s...)", user_id, key[:8])
     return {"key_id": str(key_id), "key": key, "key_prefix": key[:8], "label": label.strip(),
             "created_at": created.isoformat(), "note": "Copy this key now. It is shown only once."}

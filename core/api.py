@@ -135,6 +135,9 @@ app = FastAPI(
 # to opt in -- that "forget one route" failure mode is exactly the kind of gap
 # that led to this middleware existing in the first place.
 RAGLEAP_API_KEY = os.environ.get("RAGLEAP_API_KEY", "").strip()
+# Optional: refuse the shared key once an active owner has a personal key (core/users.has_live_owner).
+SHARED_KEY_DISABLED = os.environ.get("SHARED_KEY_DISABLED", "").strip().lower() in ("1", "true", "yes", "on")
+_shared_key_warned = []
 # The AI Office page is three fixed static files with no data in them; every data route keeps the key.
 API_KEY_EXEMPT_PATHS = {"/health", "/office", "/office/app.js", "/office/app.css"}
 API_KEY_EXEMPT_PREFIXES = ("/webhook/",)  # these verify platform signatures themselves
@@ -174,6 +177,14 @@ async def require_api_key(request: Request, call_next):
     if not supplied:
         return JSONResponse(status_code=401, content={"detail": "Missing or invalid API key."})
     if hmac.compare_digest(supplied.encode("utf-8"), RAGLEAP_API_KEY.encode("utf-8")):
+        if SHARED_KEY_DISABLED:
+            if await asyncio.to_thread(core_users.has_live_owner):
+                return JSONResponse(status_code=401, content={
+                    "detail": "The shared API key is switched off. Use a personal key."})
+            if not _shared_key_warned:
+                _shared_key_warned.append(True)
+                logger.warning("SHARED_KEY_DISABLED is set, but no active owner has a personal key, "
+                               "so the shared key still works.")
         actor = permissions.BOOTSTRAP_ACTOR            # the shared key counts as the owner
     else:
         actor = await asyncio.to_thread(core_users.resolve, supplied)    # a personal key, or None
