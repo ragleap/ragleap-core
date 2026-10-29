@@ -1,0 +1,32 @@
+name: Java Observability Resource Parity
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/scripts/java-observability-parity.sh'
+      - '.github/workflows/java-observability-test.yml'
+      - 'java/ragleap-observability/**'
+      - 'packages/ragleap-observability/**'
+
+permissions:
+  contents: read
+
+jobs:
+  parity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Java 21
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Verify Java JAR and Python wheel parity
+        run: bash .github/scripts/java-observability-parity.sh

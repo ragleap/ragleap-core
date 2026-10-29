@@ -38,3 +38,6 @@ backups/
 # Folder grants are the owner's private choices
 grants/*
 !grants/README.txt
+
+# Maven build output
+java/ragleap-observability/target/
