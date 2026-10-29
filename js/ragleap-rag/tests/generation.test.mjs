@@ -21,7 +21,7 @@ function openAIResponse(content, usage = { prompt_tokens: 10, completion_tokens:
 
 test("provider configuration normalizes names and requires explicit models", () => {
   const config = new ProviderConfig({
-    provider: "OPENAI", api_key: "test-key", model: "test-model",
+    provider: "OPENAI", api_key: "example-test-key", model: "test-model",
   });
   assert.equal(config.provider, "openai");
   assert.equal(config.base_url, PROVIDER_BASE_URLS.openai);
@@ -144,7 +144,7 @@ async function collectStream(provider, chunks) {
   const service = new GenerationService({
     primary: new ProviderConfig({
       provider,
-      api_key: "test-key",
+      api_key: "example-test-key",
       model: "test-model",
     }),
     fetch_impl: async () => new Response(stream, { status: 200 }),

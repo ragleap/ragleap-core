@@ -10,7 +10,7 @@ import {
 function config(provider, overrides = {}) {
   const base = {
     provider,
-    api_key: provider === "ollama" ? undefined : "test-key",
+    api_key: provider === "ollama" ? undefined : "example-test-key",
     model: "test-model",
     dimensions: 4,
     ...overrides,
@@ -73,7 +73,7 @@ test("rejects inherited object property names as providers", () => {
     assert.throws(
       () => new EmbeddingConfig({
         provider,
-        api_key: "test-key",
+        api_key: "example-test-key",
         model: "test-model",
         dimensions: 4,
       }),
@@ -172,7 +172,7 @@ test("Voyage honors custom base_url", async () => {
 test("Gemini single and batch requests parse vectors", async () => {
   const restore = mockFetch(async (url, options) => {
     const body = JSON.parse(options.body);
-    assert.match(url, /key=test-key/);
+    assert.match(url, /key=example-test-key/);
 
     if (url.includes(":batchEmbedContents")) {
       assert.equal(body.requests.length, 2);
