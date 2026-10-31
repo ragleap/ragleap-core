@@ -1312,7 +1312,7 @@ def auth_logout(request: Request):
     actor = getattr(request.state, "actor", None) or {}
     if actor.get("via") != "sso":
         raise HTTPException(status_code=400, detail="Only a single sign-on session can sign out here. The owner revokes a personal key.")
-    return {"signed_out": core_sso.logout(request.headers.get("x-api-key", ""))}
+    return {"signed_out": core_sso.logout(actor.get("session_id"))}
 
 
 @app.get("/folder-ingest")

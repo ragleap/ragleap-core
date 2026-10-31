@@ -272,7 +272,7 @@ def resolve_session(token):
                 return None
             cur.execute("UPDATE user_sessions SET last_used_at = now() WHERE id = %s AND last_used_at < now() - interval '1 minute'", (row[0],))
             conn.commit()
-            return {"kind": "user", "user_id": str(row[1]), "name": row[2], "role": row[3], "key_id": None, "via": "sso"}
+            return {"kind": "user", "user_id": str(row[1]), "name": row[2], "role": row[3], "key_id": None, "via": "sso", "session_id": str(row[0])}
         finally:
             conn.close()
     except Exception as e:
@@ -282,13 +282,16 @@ def resolve_session(token):
         return None
 
 
-def logout(token) -> bool:
-    if not isinstance(token, str) or not token.startswith(SESSION_PREFIX):
+def logout(session_id) -> bool:
+    """Ends one session by its id, so the route never has to read the token again."""
+    try:
+        session_id = _uuid(session_id)
+    except UserError:
         return False
     conn = _connect()
     try:
         cur = conn.cursor()
-        cur.execute("UPDATE user_sessions SET revoked_at = now() WHERE token_hash = %s AND revoked_at IS NULL RETURNING id", (_hash(token),))
+        cur.execute("UPDATE user_sessions SET revoked_at = now() WHERE id = %s AND revoked_at IS NULL RETURNING id", (session_id,))
         row = cur.fetchone()
         conn.commit()
     finally:
