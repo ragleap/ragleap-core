@@ -107,6 +107,9 @@ def _lookup(key_hash: str):
 
 def resolve(key):
     """The person behind a personal key as {"kind", "user_id", "name", "role", "key_id"}, or None. Never raises."""
+    if isinstance(key, str) and key.startswith("rls_") and len(key) <= 128:       # a single sign-on session (core/sso.py)
+        from core import sso
+        return sso.resolve_session(key)
     if not isinstance(key, str) or not key.startswith(KEY_PREFIX) or len(key) > 128:
         return None
     key_hash = hash_key(key)

@@ -438,3 +438,32 @@ CREATE TABLE IF NOT EXISTS user_channels (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE UNIQUE INDEX IF NOT EXISTS user_channels_sender_idx ON user_channels (channel, sender);
+
+-- Single sign-on (core/sso.py). Who may sign in with OpenID Connect, their sessions, and one-time pending sign-ins.
+CREATE TABLE IF NOT EXISTS user_identities (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    issuer TEXT NOT NULL,
+    subject TEXT,
+    email TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_login_at TIMESTAMPTZ
+);
+CREATE UNIQUE INDEX IF NOT EXISTS user_identities_email_idx ON user_identities (issuer, email);
+CREATE UNIQUE INDEX IF NOT EXISTS user_identities_subject_idx ON user_identities (issuer, subject) WHERE subject IS NOT NULL;
+CREATE TABLE IF NOT EXISTS user_sessions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_used_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    expires_at TIMESTAMPTZ NOT NULL,
+    revoked_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS user_sessions_user_idx ON user_sessions (user_id);
+CREATE TABLE IF NOT EXISTS sso_logins (
+    state_hash TEXT PRIMARY KEY,
+    nonce TEXT NOT NULL,
+    verifier TEXT NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL
+);

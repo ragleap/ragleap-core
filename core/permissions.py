@@ -95,6 +95,11 @@ RULES = (
     ("GET", "/users/{user_id}/channels", "owner"),
     ("POST", "/users/{user_id}/channels", "owner"),
     ("DELETE", "/users/{user_id}/channels/{link_id}", "owner"),
+    ("GET", "/users/{user_id}/identities", "owner"),
+    ("POST", "/users/{user_id}/identities", "owner"),
+    ("DELETE", "/users/{user_id}/identities/{identity_id}", "owner"),
+    ("DELETE", "/users/{user_id}/sessions", "owner"),
+    ("POST", "/auth/logout", "viewer"),
 )
 
 for _method, _template, _role in RULES:

@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import hmac
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request, Response, BackgroundTasks
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.responses import StreamingResponse, JSONResponse, RedirectResponse
 from starlette.routing import Match
 from pydantic import BaseModel
 
@@ -45,7 +45,10 @@ from core import folder_ingest
 from core import audit
 from core import permissions
 from core import users as core_users
+from core import sso as core_sso
+from core import oidc as core_oidc
 from core import metrics as core_metrics
+from urllib.parse import quote as _urlquote
 from core import queue
 from core.employees.sensitivity import is_sensitive_role
 
@@ -141,7 +144,8 @@ RAGLEAP_API_KEY = os.environ.get("RAGLEAP_API_KEY", "").strip()
 SHARED_KEY_DISABLED = os.environ.get("SHARED_KEY_DISABLED", "").strip().lower() in ("1", "true", "yes", "on")
 _shared_key_warned = []
 # The AI Office page is three fixed static files with no data in them; every data route keeps the key.
-API_KEY_EXEMPT_PATHS = {"/health", "/office", "/office/app.js", "/office/app.css"}
+API_KEY_EXEMPT_PATHS = {"/health", "/office", "/office/app.js", "/office/app.css",
+                        "/auth/config", "/auth/login", "/auth/callback"}      # single sign-on: the person has no key yet
 API_KEY_EXEMPT_PREFIXES = ("/webhook/",)  # these verify platform signatures themselves
 
 if not RAGLEAP_API_KEY:
@@ -1232,6 +1236,83 @@ def users_channel_link(user_id: str, req: UserChannelRequest):
 @app.delete("/users/{user_id}/channels/{link_id}")
 def users_channel_unlink(user_id: str, link_id: str):
     return _users_call(core_users.unlink_channel, user_id, link_id)
+
+
+class IdentityRequest(BaseModel):
+    email: str
+
+
+@app.get("/users/{user_id}/identities")
+def users_identities_list(user_id: str):
+    return {"identities": _users_call(core_sso.list_identities, user_id)}
+
+
+@app.post("/users/{user_id}/identities")
+def users_identity_register(user_id: str, req: IdentityRequest):
+    """Register the email a person signs in with at the single sign-on provider. Owner only."""
+    return _users_call(core_sso.register_identity, user_id, req.email)
+
+
+@app.delete("/users/{user_id}/identities/{identity_id}")
+def users_identity_remove(user_id: str, identity_id: str):
+    return _users_call(core_sso.remove_identity, user_id, identity_id)
+
+
+@app.delete("/users/{user_id}/sessions")
+def users_sessions_revoke(user_id: str):
+    """End every single sign-on session of a person at once. Owner only."""
+    return _users_call(core_sso.revoke_sessions, user_id)
+
+
+def _sso_redirect(location: str):
+    response = RedirectResponse(location, status_code=302)
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@app.get("/auth/config")
+def auth_config():
+    on = core_sso.enabled()
+    return {"sso": on, "login_url": "/auth/login" if on else None}
+
+
+@app.get("/auth/login")
+def auth_login():
+    if not core_sso.enabled():
+        raise HTTPException(status_code=404, detail="Single sign-on is not set up.")
+    try:
+        return _sso_redirect(core_sso.start_login())
+    except core_oidc.OidcError as e:
+        logger.warning("single sign-on could not start: %s", e.detail or e.public)
+        raise HTTPException(status_code=502, detail=e.public)
+    except Exception as e:
+        logger.warning("single sign-on could not start (%s)", type(e).__name__)
+        raise HTTPException(status_code=503, detail="Single sign-on is not ready: apply db/schema.sql and check the OIDC settings.")
+
+
+@app.get("/auth/callback")
+def auth_callback(code: str = "", state: str = "", error: str = ""):
+    """The provider sends the person back here. The session token goes to the dashboard in the URL fragment, which
+    browsers do not send to servers, so it stays out of access logs."""
+    try:
+        result = core_sso.finish_login(state, code, error)
+    except core_oidc.OidcError as e:
+        logger.warning("single sign-on refused: %s", e.detail or e.public)
+        core_sso.audit_failure(e)
+        return _sso_redirect("/office#sso_error=" + _urlquote(e.public, safe=""))
+    except Exception as e:
+        logger.warning("single sign-on failed (%s)", type(e).__name__)
+        return _sso_redirect("/office#sso_error=" + _urlquote("Sign-in failed. Ask the owner to check the server log.", safe=""))
+    core_sso.audit_success(result)
+    return _sso_redirect("/office#session=" + result["token"])
+
+
+@app.post("/auth/logout")
+def auth_logout(request: Request):
+    actor = getattr(request.state, "actor", None) or {}
+    if actor.get("via") != "sso":
+        raise HTTPException(status_code=400, detail="Only a single sign-on session can sign out here. The owner revokes a personal key.")
+    return {"signed_out": core_sso.logout(actor.get("session_id"))}
 
 
 @app.get("/folder-ingest")
