@@ -153,9 +153,11 @@ def test_app_js_is_valid_javascript():
 
 # ---- key behaviour ----
 
-def test_exempt_paths_are_exactly_the_page_files():
+def test_exempt_paths_are_exactly_the_page_files_and_the_sign_in_routes():
+    # Changed on purpose with single sign-on: the person has no key yet when they reach these three routes.
     from core import api
-    assert api.API_KEY_EXEMPT_PATHS == {"/health", "/office", "/office/app.js", "/office/app.css"}
+    assert api.API_KEY_EXEMPT_PATHS == {"/health", "/office", "/office/app.js", "/office/app.css",
+                                        "/auth/config", "/auth/login", "/auth/callback"}
 
 
 def test_page_is_public_but_data_needs_the_key(monkeypatch):
