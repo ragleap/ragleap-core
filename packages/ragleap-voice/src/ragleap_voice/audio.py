@@ -7,6 +7,7 @@ Status: pre-alpha, not exported from the package yet.
   inputs. The noise pilot's telephone path used ffmpeg. Do not rely on bit-exactness with any implementation.
 - The resamplers are 2:1 only: a 31-tap Hamming-windowed sinc, cutoff 0.225 cycles per input sample, unity DC gain, zero
   history at the clip edges. Their effect on recognition accuracy has not been measured.
+- Down2Stream and Up2Stream are stateful versions of down2 and up2 (chunked output equals one-shot output exactly).
 - A-law is not implemented.
 """
 import array
@@ -140,3 +141,61 @@ def up2(samples):
     u[::2] = samples
     xp = [0] * pad + u + [0] * pad
     return array.array("h", [_clip(sum(map(mul, _TAPS2, xp[i:i + _L]))) for i in range(len(u))])
+
+
+class _Resample2Stream:
+    """Stateful 2:1 resampler. Concatenating every process() result and the finish() result equals the one-shot
+    function's output exactly. Keeps less than one filter length of history. Not thread-safe."""
+
+    _taps = None
+    _step = 1
+
+    def __init__(self):
+        self._buf = [0] * (_L // 2)
+        self._done = False
+
+    def _prepare(self, samples):
+        return list(samples)
+
+    def _emit(self):
+        buf, taps, out, pos = self._buf, self._taps, [], 0
+        while pos + _L <= len(buf):
+            out.append(_clip(sum(map(mul, taps, buf[pos:pos + _L]))))
+            pos += self._step
+        del buf[:pos]
+        return array.array("h", out)
+
+    def process(self, samples):
+        """Accept a chunk (any length, may be empty); return the output samples that are now complete."""
+        if self._done:
+            raise ValueError("process() called after finish()")
+        self._buf.extend(self._prepare(samples))
+        return self._emit()
+
+    def finish(self):
+        """Flush the tail with the same zero padding as the one-shot function. Later calls return an empty array."""
+        if self._done:
+            return array.array("h")
+        self._done = True
+        self._buf.extend([0] * (_L // 2))
+        return self._emit()
+
+
+class Down2Stream(_Resample2Stream):
+    """Streaming version of down2()."""
+
+    _taps = _TAPS
+    _step = 2
+
+
+class Up2Stream(_Resample2Stream):
+    """Streaming version of up2()."""
+
+    _taps = _TAPS2
+    _step = 1
+
+    def _prepare(self, samples):
+        samples = list(samples)
+        u = [0] * (2 * len(samples))
+        u[::2] = samples
+        return u

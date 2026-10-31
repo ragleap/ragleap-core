@@ -6,6 +6,9 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 ### Changed
 - Hindi number normalization is now version `1+numbers-hi.2`. The parser recognizes the source-attested cardinal spelling `पांच` alongside CLDR's `पाँच`, and protects mixed cardinal/ordinal phrases (including irregular gender/case forms and regular ordinal suffix forms) from partial conversion. Hindi grouping accepts a terminal sentence comma or period only when the complete number is valid; malformed grouping remains uncombined. Unicode NFKC already maps decomposed nukta spellings such as `करोड़` to the lookup spelling `करोड़`. References: [CLDR Hindi RBNF](https://raw.githubusercontent.com/unicode-org/cldr/main/common/rbnf/hi.xml), [Hindi ordinal numerals grammar](https://tplsites.s3.amazonaws.com/resources/HINin-ENGus/grammar/Ordinal_Numerals.htm), and [Omniglot Hindi number table](https://www.omniglot.com/language/numbers/hindi.htm).
+### Added
+- `ragleap_voice.audio`: stateful `Down2Stream` and `Up2Stream` resamplers (`process()` and `finish()`), so audio can be resampled chunk by chunk without the boundary errors of calling `down2()`/`up2()` on each chunk. Tests check that chunked output equals one-shot output exactly. Still not exported, and the effect on recognition accuracy is not measured.
+
 
 ## [0.2.0] - 2026-10-30
 ### Status
