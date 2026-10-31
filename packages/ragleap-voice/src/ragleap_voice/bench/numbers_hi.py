@@ -21,6 +21,7 @@ _CARDINALS = {
     "तीन": 3,
     "चार": 4,
     "पाँच": 5,
+    "पांच": 5,
     "छह": 6,
     "छः": 6,
     "छै": 6,
@@ -156,6 +157,23 @@ _UNSUPPORTED_MARKERS = {
     # Larger Indian scales are intentionally outside the supported range.
     "नील", "पद्म", "शंख",
 }
+# Hindi ordinals have irregular gender/case forms and regular suffix forms. Keep
+# a full adjacent cardinal/ordinal phrase intact instead of
+# converting its cardinal prefix. CLDR Hindi RBNF and the Hindi grammar source
+# document these forms and suffixes.
+_ORDINAL_MARKERS = {
+    "पहला", "पहले", "पहली",
+    "दूसरा", "दूसरे", "दूसरी",
+    "तीसरा", "तीसरे", "तीसरी",
+    "चौथा", "चौथे", "चौथी",
+    "छटा", "छठा", "छठे", "छठी",
+    "शून्यवाँ", "शून्यवें", "शून्यवी",
+} | {
+    word + suffix
+    for word in (set(_CARDINALS) | _SCALE_WORDS)
+    for suffix in ("वाँ", "वें", "वी", "वीं")
+}
+_UNSUPPORTED_MARKERS.update(_ORDINAL_MARKERS)
 _NUMBER_WORDS = set(_CARDINALS) | _SCALE_WORDS | _UNSUPPORTED_MARKERS
 _MAX_VALUE = 99 * 10**11 + 99 * 10**9 + 99 * 10**7 + 99 * 10**5 + 99 * 10**3 + 999
 

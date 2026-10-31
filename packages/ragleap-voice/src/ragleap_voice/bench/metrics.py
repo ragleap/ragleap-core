@@ -15,7 +15,7 @@ normalization (version "1+numbers-de.1"), or numbers="it" for Italian cardinal
 normalization (version "1+numbers-it.2"), or numbers="id" for Indonesian
 cardinal normalization (version "1+numbers-id.1"); `numbers="pt-BR"` selects Brazilian
 Portuguese cardinals (version "1+numbers-pt-BR.1"), and `numbers="hi"` selects Hindi
-cardinals (version "1+numbers-hi.1"). Record normalizer_version(numbers)
+cardinals (version "1+numbers-hi.2"). Record normalizer_version(numbers)
 next to every result measured with any option. Decimal digits of any script
 become ASCII digits with all number options. Other language strings raise ValueError;
 values other than booleans or strings raise TypeError.
@@ -85,7 +85,7 @@ NUMBERS_DE_VERSION = "numbers-de.1"
 NUMBERS_IT_VERSION = "numbers-it.2"
 NUMBERS_ID_VERSION = "numbers-id.1"
 NUMBERS_PT_BR_VERSION = "numbers-pt-BR.1"
-NUMBERS_HI_VERSION = "numbers-hi.1"
+NUMBERS_HI_VERSION = "numbers-hi.2"
 NUMBERS_MS_VERSION = "numbers-ms.1"
 
 _APOSTROPHES = {"'", "\u2019", "\u02bc"}
@@ -109,7 +109,7 @@ _INDONESIAN_GROUPED_NUMBER = re.compile(
 _PT_BR_NUMBER_SEQUENCE = re.compile(r"(?<![\d.,])\d+(?:[.,]\d+)*(?!\d|[.,]\d)")
 _PT_BR_GROUPED_NUMBER = re.compile(r"\d{1,3}(?:\.\d{3})+(?:,\d+)?")
 _HI_NUMBER_SEQUENCE = re.compile(
-    r"(?<![\d.,])\d+(?:[,.]\d+)*(?:\.(?![\d.,]))?(?![\d.,])"
+    r"(?<![\d.,])\d+(?:[,.]\d+)*(?:[.,](?![\d.,]))?(?![\d.,])"
 )
 _HI_GROUPED_NUMBER = re.compile(r"\d{1,2}(?:,\d{2})*,\d{3}(?:\.\d+)?")
 _MALAY_NUMBER_SEQUENCE = re.compile(
@@ -191,10 +191,10 @@ def normalize(text, numbers=False):
     elif mode == "hi":
         def normalize_hindi_group(match):
             value = match.group()
-            sentence_period = value.endswith(".")
-            number = value[:-1] if sentence_period else value
+            sentence_punctuation = value[-1] if value[-1] in ".," else ""
+            number = value[:-1] if sentence_punctuation else value
             if _HI_GROUPED_NUMBER.fullmatch(number):
-                return number.replace(",", "") + ("." if sentence_period else "")
+                return number.replace(",", "") + sentence_punctuation
             return value
 
         text = _HI_NUMBER_SEQUENCE.sub(normalize_hindi_group, text)

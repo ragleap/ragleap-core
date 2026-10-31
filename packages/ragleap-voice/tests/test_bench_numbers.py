@@ -2,6 +2,7 @@
 import json
 import pathlib
 import sys
+import unicodedata
 import wave
 
 import pytest
@@ -672,11 +673,13 @@ def test_hindi_cardinal_number_words_and_metrics():
     # https://raw.githubusercontent.com/unicode-org/cldr/main/common/rbnf/hi.xml
     # https://www.bis.gov.in/wp-content/uploads/2025/03/ISH16500_2012.pdf
     # https://tplsites.s3.amazonaws.com/resources/HINin-ENGus/grammar/Cardinal_Numerals.htm
+    # https://tplsites.s3.amazonaws.com/resources/HINin-ENGus/grammar/Ordinal_Numerals.htm
     # https://tplsites.s3.amazonaws.com/resources/HINin-ENGus/grammar/Fractional_Numerals.htm
     # https://chti.rajbhasha.gov.in/pdf/Prabodh_Paathmaala.pdf
     lexical_examples = [
         ("शून्य", "0"), ("एक", "1"), ("दो", "2"), ("तीन", "3"),
-        ("चार", "4"), ("पाँच", "5"), ("छह", "6"), ("छै", "6"),
+        ("चार", "4"), ("पाँच", "5"), ("पांच", "5"),
+        ("छह", "6"), ("छै", "6"),
         ("सात", "7"),
         ("आठ", "8"), ("नौ", "9"), ("दस", "10"), ("ग्यारह", "11"),
         ("बारह", "12"), ("तेरह", "13"), ("चौदह", "14"),
@@ -744,14 +747,16 @@ def test_hindi_cardinal_number_words_and_metrics():
     for unsupported in (
         "तीन चौथाई", "एक तिहाई", "तीन बटा पाँच", "चार बटे नौ", "एक पाव",
         "आधा दो", "एक आध दिन", "आधी किताब", "आधे घंटे", "सवा तीन", "डेढ़",
-        "ढाई", "पौने चार", "पहला", "दूसरी",
+        "ढाई", "पौने चार", "पहला", "दूसरी", "एक पहला", "दो दूसरी",
+        "तीन चौथे", "चार पाँचवीं", "एक सौवाँ", "एक सौवीं",
+        "एक सातवाँ", "दो तेईसवीं",
         "दोनों", "हज़ारों", "करोड़ों", "एक सैकड़ा", "एक दर्जन",
         "एक दशमलव पाँच", "ऋण तीन", "तीन और पाँच", "तीन सौ और पाँच",
         "तीन प्रतिशत",
     ):
         assert normalize(unsupported, numbers="hi") == unsupported
 
-    assert normalizer_version(numbers="hi") == "1+numbers-hi.1"
+    assert normalizer_version(numbers="hi") == "1+numbers-hi.2"
     assert normalize("तेईस", numbers=False) == "तेईस"
     assert normalize("तेईस") == "तेईस"
     assert normalize("एक किताब", numbers="hi") == "1 किताब"  # context-free limitation
@@ -774,12 +779,19 @@ def test_hindi_numeric_grouping_is_locale_aware_and_complete():
     assert normalize("1,234.", numbers="hi") == "1234"
     assert normalize("1,23,456.", numbers="hi") == "123456"
     assert normalize("1,23,456.78.", numbers="hi") == "123456.78"
+    assert normalize("1,234,", numbers="hi") == "1234"
+    assert normalize("1,23,456,", numbers="hi") == "123456"
+    assert normalize("1,23,456.78,", numbers="hi") == "123456.78"
     assert normalize("१२,३४,५६७.८९", numbers="hi") == "1234567.89"
     assert normalize("1.234", numbers="hi") == "1.234"
     assert normalize("1,234,567", numbers="hi") == "1 234 567"
     assert normalize("1,234,567.", numbers="hi") == "1 234 567"
+    assert normalize("1,234,567,", numbers="hi") == "1 234 567"
     assert normalize("12,34,56,789", numbers="hi") == "123456789"
     assert normalize("1,23,45,678", numbers="hi") == "12345678"
+    decomposed_crore = "एक करोड\u093c"
+    assert unicodedata.normalize("NFKC", decomposed_crore) == "एक करोड़"
+    assert normalize(decomposed_crore, numbers="hi") == "10000000"
     assert normalize("1,234,56", numbers="hi") == "1 234 56"
     # Every existing mode keeps its own opt-in behavior and version.
     assert normalize("1,234", numbers="en") == "1234"
@@ -1030,7 +1042,7 @@ def test_run_stt_applies_hindi_and_records_version(tmp_path):
     assert summarize(rows)["hi"]["cer"] == 0
     _, json_path = write_results(tmp_path / "out", "fake", rows, environment_info())
     saved = json.loads(pathlib.Path(json_path).read_text(encoding="utf-8"))
-    assert saved["meta"]["normalizer_version"] == "1+numbers-hi.1"
+    assert saved["meta"]["normalizer_version"] == "1+numbers-hi.2"
 
 
 def test_run_stt_does_not_infer_number_normalizer_from_manifest_language(tmp_path):
@@ -1219,7 +1231,7 @@ def test_malay_numbers_are_opt_in_versioned_and_wer_cer_equivalent():
     assert normalizer_version(numbers="it") == "1+numbers-it.2"
     assert normalizer_version(numbers="id") == "1+numbers-id.1"
     assert normalizer_version(numbers="pt-BR") == "1+numbers-pt-BR.1"
-    assert normalizer_version(numbers="hi") == "1+numbers-hi.1"
+    assert normalizer_version(numbers="hi") == "1+numbers-hi.2"
     assert normalize(words, numbers="ms") == normalize(numeric, numbers="ms")
     assert wer(words, numeric, numbers="ms") == 0
     assert cer(words, numeric, numbers="ms") == 0
