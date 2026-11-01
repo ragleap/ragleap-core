@@ -4,8 +4,12 @@ specification. The standard does NOT fix how 16-bit PCM maps onto that scale or 
 every convention below and reports each one; it picks none. Positive input between decision values n and n+1 -> code
 255-n; negative -> 127-n (Table 2a/2b notes). Decoder value y_n = (x_n + x_(n+1))/2. Standard library plus ragleap_voice.
 Not a conformance claim."""
-import audioop, struct
+import struct
 from array import array
+try:
+    import audioop
+except ImportError:
+    audioop = None
 from bisect import bisect_left, bisect_right
 from ragleap_voice.audio import ulaw_decode, ulaw_encode
 
@@ -22,9 +26,13 @@ assert Y[1] == 2 and Y[127] == 8031 and (X[127] + X[128]) % 2 == 0
 def table_dec(c):
     return 4 * (Y[255 - c] if c >= 128 else -Y[127 - c])
 r_dec = [int(ulaw_decode(bytes([c]))[0]) for c in range(256)]
-a_dec = [struct.unpack("<h", audioop.ulaw2lin(bytes([c]), 2))[0] for c in range(256)]
-print("decoder vs table (x4): ragleap mismatches", sum(r_dec[c] != table_dec(c) for c in range(256)),
-      "| audioop mismatches", sum(a_dec[c] != table_dec(c) for c in range(256)))
+if audioop is None:
+    print("audioop comparison skipped: module not available (removed in Python 3.13)")
+    print("decoder vs table (x4): ragleap mismatches", sum(r_dec[c] != table_dec(c) for c in range(256)))
+else:
+    a_dec = [struct.unpack("=h", audioop.ulaw2lin(bytes([c]), 2))[0] for c in range(256)]
+    print("decoder vs table (x4): ragleap mismatches", sum(r_dec[c] != table_dec(c) for c in range(256)),
+          "| audioop mismatches", sum(a_dec[c] != table_dec(c) for c in range(256)))
 
 SCALES = {
     "floor>>2": (lambda s: abs(s >> 2), 1),
@@ -41,19 +49,25 @@ def expected(s, scale, tie):
 
 inputs = range(-32768, 32768)
 r_enc = [ulaw_encode(array("h", [s]))[0] for s in inputs]
-a_enc = [audioop.lin2ulaw(struct.pack("<h", s), 2)[0] for s in inputs]
+a_enc = [audioop.lin2ulaw(struct.pack("=h", s), 2)[0] for s in inputs] if audioop is not None else None
 best = {"ragleap": None, "audioop": None}
 print("\nconvention                      ragleap_mismatch  audioop_mismatch")
 for scale in SCALES:
     for tie in ("tie-up", "tie-down"):
         exp = [expected(s, scale, tie) for s in inputs]
         rm = [(s, e, a) for s, e, a in zip(inputs, exp, r_enc) if e != a]
-        am = [(s, e, a) for s, e, a in zip(inputs, exp, a_enc) if e != a]
-        print("%-31s %16d %17d" % (scale + " / " + tie, len(rm), len(am)))
+        am = [(s, e, a) for s, e, a in zip(inputs, exp, a_enc) if e != a] if a_enc is not None else None
+        print("%-31s %16d %17s" % (scale + " / " + tie, len(rm), len(am) if am is not None else "skipped"))
         for name, mm in (("ragleap", rm), ("audioop", am)):
+            if mm is None:
+                continue
             if best[name] is None or len(mm) < len(best[name][1]):
                 best[name] = (scale + " / " + tie, mm)
-for name, (conv, mm) in best.items():
+for name, found in best.items():
+    if found is None:
+        print("\n%s: comparison skipped" % name)
+        continue
+    conv, mm = found
     print("\n%s: fewest mismatches under [%s]: %d. First 10 (input, expected byte, actual byte):" % (name, conv, len(mm)))
     for s, e, a in mm[:10]:
         print("   %6d expected=0x%02x actual=0x%02x" % (s, e, a))

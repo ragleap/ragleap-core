@@ -1,7 +1,12 @@
 """A-law check against ITU-T G.711 (1988) Tables 1a/1b (printed pages 3 and 4). Tests every convention below, picks none.
 Table values hard-coded from the PDF page images; no G.191 code. Not a conformance claim."""
-import array, audioop, struct, sys
+import array, sys
+try:
+    import audioop
+except ImportError:
+    audioop = None
 from bisect import bisect_left, bisect_right
+from ragleap_voice.audio import alaw_decode, alaw_encode
 X = [0]
 for w in [2]*32 + [4]*16 + [8]*16 + [16]*16 + [32]*16 + [64]*16 + [128]*16:
     X.append(X[-1] + w)
@@ -24,19 +29,27 @@ def enc(s, conv, tie):
     i = max(0, min(127, i))
     return (i if s < 0 else 128 + i) ^ 0x55
 S = range(-32768, 32768)
-a_enc = audioop.lin2alaw(array.array("h", S).tobytes(), 2)
-print("audioop:", audioop.__file__ if hasattr(audioop, "__file__") else "built-in")
-a_dec = array.array("h"); a_dec.frombytes(audioop.alaw2lin(bytes(range(256)), 2))
-print("decoder vs table (x8): audioop mismatches", sum(a_dec[c] != dec(c) for c in range(256)))
+if audioop is None:
+    a_enc = None
+    print("audioop comparison skipped: module not available (removed in Python 3.13)")
+else:
+    a_enc = audioop.lin2alaw(array.array("h", S).tobytes(), 2)
+    print("audioop:", audioop.__file__ if hasattr(audioop, "__file__") else "built-in")
+    a_dec = array.array("h"); a_dec.frombytes(audioop.alaw2lin(bytes(range(256)), 2))
+    print("decoder vs table (x8): audioop mismatches", sum(a_dec[c] != dec(c) for c in range(256)))
 tabs = {}
 print("\nconvention              audioop_mismatch")
 for conv in CONV:
     for tie in ("up", "down"):
         t = [enc(s, conv, tie) for s in S]; tabs[(conv, tie)] = t
-        print("%-22s %9d" % (conv + "/" + tie, sum(x != y for x, y in zip(t, a_enc))))
+        print("%-22s %9s" % (conv + "/" + tie, sum(x != y for x, y in zip(t, a_enc)) if a_enc is not None else "skipped"))
 d1, d2 = tabs[("sym_trunc", "up")], tabs[("ones_compl", "up")]
 diff = [s for s, x, y in zip(S, d1, d2) if x != y]
 want = [-8 * X[n] for n in range(1, 128)]
 print("\nsym_trunc/up vs ones_compl/up differ on", len(diff), "inputs; all negative decision values 8*x_n:", sorted(diff) == sorted(want))
 print("sym_trunc/up == exact/up:", tabs[("sym_trunc", "up")] == tabs[("exact", "up")])
 print("round trip enc(dec(c))==c for all 256 codes (sym_trunc/up):", all(enc(dec(c), "sym_trunc", "up") == c for c in range(256)))
+shipped = alaw_encode(S)
+print("shipped alaw_encode vs exact/up table: mismatches", sum(x != y for x, y in zip(shipped, tabs[("exact", "up")])))
+shipped_dec = alaw_decode(bytes(range(256)))
+print("shipped alaw_decode vs table (x8): mismatches", sum(shipped_dec[c] != dec(c) for c in range(256)))
