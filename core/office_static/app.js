@@ -8,8 +8,17 @@
     if (!m) return "";
     try { return decodeURIComponent(m[1]); } catch (e) { return ""; }
   })();
-  if (linkKey) {
-    sessionStorage.setItem("ragleap_key", linkKey);
+  // Single sign-on: the server sends the person back as /office#session=rls_... or /office#sso_error=... A session works like
+  // a key (same header): it is kept for this tab only and removed from the address bar. The error is shown as plain text.
+  const ssoSession = (() => { const m = location.hash.match(/^#session=(rls_[A-Za-z0-9_-]{20,120})$/); return m ? m[1] : ""; })();
+  const ssoError = (() => {
+    const m = location.hash.match(/^#sso_error=([A-Za-z0-9._~%-]{1,600})$/);
+    if (!m) return "";
+    try { return decodeURIComponent(m[1]).slice(0, 200); } catch (e) { return "Sign-in failed."; }
+  })();
+  if (linkKey || ssoSession || ssoError) {
+    if (linkKey) sessionStorage.setItem("ragleap_key", linkKey);
+    if (ssoSession) sessionStorage.setItem("ragleap_key", ssoSession);
     history.replaceState(null, "", location.pathname + location.search);
   }
   let key = sessionStorage.getItem("ragleap_key") || "";
@@ -24,6 +33,9 @@
   let userListEl = null;
   let userBannerEl = null;
   let userMsgEl = null;
+  let ssoEnabled = null;
+  let ssoLoginUrl = "";
+  let ssoErrorLeft = !!ssoError;
   const tabButtons = {};
   const expanded = new Set();
   const TABS = [["setup", "Setup"], ["overview", "Overview"], ["approvals", "Approvals"], ["employees", "Employees"], ["tasks", "Tasks"], ["documents", "Documents"], ["files", "Files"], ["proactive", "Proactive"], ["sources", "Connectors"], ["runs", "Agent runs"], ["log", "Activity"], ["settings", "Settings"], ["audit", "Audit"], ["users", "Users"]];
@@ -77,6 +89,7 @@
   };
 
   const lock = (msg) => {
+    if (msg === "That key was not accepted." && key.startsWith("rls_")) msg = "Your sign-in session ended. Please sign in again.";
     key = "";
     taskFormEl = null;
     boardEl = null;
@@ -95,18 +108,43 @@
     showLogin(msg);
   };
 
+  // Is single sign-on set up on this server? The answer is public (the person has no key yet) and asked once.
+  const loadSso = async () => {
+    if (ssoEnabled !== null) return ssoEnabled;
+    ssoEnabled = false;
+    try {
+      const res = await fetch("/auth/config", { cache: "no-store" });
+      const d = res.ok ? await res.json() : null;
+      if (d && d.sso === true && typeof d.login_url === "string" && d.login_url.startsWith("/auth/")) { ssoEnabled = true; ssoLoginUrl = d.login_url; }
+    } catch (e) { ssoEnabled = false; }
+    return ssoEnabled;
+  };
+  const signOut = async () => {
+    try { await fetch("/auth/logout", { method: "POST", cache: "no-store", headers: { "x-api-key": key } }); } catch (e) { /* the session also ends by itself */ }
+    lock("You are signed out.");
+  };
+
   const showLogin = (msg) => {
     root.replaceChildren();
     const input = h("input", { type: "password", placeholder: "API key", autocomplete: "off" });
     const go = () => { key = input.value.trim(); if (!key) return; sessionStorage.setItem("ragleap_key", key); start(); };
     input.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+    const ssoBox = h("div", null);
+    const note = msg || (ssoErrorLeft ? ssoError : "");
+    ssoErrorLeft = false;
+    const noteEl = note ? h("p", { class: "err" }) : null;
+    if (noteEl) noteEl.textContent = note;          // the message may come from the address bar: set as text, never as markup
     add(root, h("section", { class: "login" },
       h("h1", null, "RagLeap AI Office"),
       h("p", null, "Enter the API key for this server. It stays in this browser tab only."),
       input,
       h("button", { type: "button", on: { click: go } }, "Open"),
-      msg ? h("p", { class: "err" }, msg) : null));
+      ssoBox,
+      noteEl));
     input.focus();
+    loadSso().then((on) => {
+      if (on && ssoBox.isConnected) ssoBox.replaceChildren(h("button", { type: "button", on: { click: () => location.assign(ssoLoginUrl) } }, "Sign in with SSO"));
+    });
   };
 
   const stat = (label, value, sub, warn) => h("div", { class: "card" + (warn ? " warn" : "") },
@@ -771,6 +809,25 @@
   };
   const keyRow = (u, k) => h("div", { class: "row" }, h("span", { class: "sub" }, k.prefix + "...  " + (k.label || "no label") + "  made " + ago(k.created_at) + ", last used " + (k.last_used_at ? ago(k.last_used_at) : "never")),
     confirmButton("Revoke", "ghost", () => userDo(() => api("DELETE", "/users/" + u.id + "/keys/" + k.id), "Key revoked.")));
+  // Single sign-on for one person (shown only when the server has it set up): registered emails, and ending their sessions.
+  const ssoSection = (u) => {
+    const ids = u.identities || [];
+    const email = h("input", { type: "text", placeholder: "email at the sign-in provider", maxlength: 254 });
+    return h("div", { class: "step" },
+      h("div", { class: "row" }, h("strong", null, "Single sign-on"), ids.length ? null : h("span", { class: "sub" }, "no email registered yet")),
+      ids.map((i) => h("div", { class: "row" },
+        h("span", { class: "tag " + (i.bound ? "ok" : "warn") }, i.bound ? "has signed in" : "waiting for the first sign-in"),
+        h("span", null, clip(i.email, 80)),
+        h("span", { class: "sub" }, i.last_login_at ? "last sign-in " + ago(i.last_login_at) : ""),
+        confirmButton("Remove", "ghost", () => userDo(() => api("DELETE", "/users/" + u.id + "/identities/" + i.id), "Email removed.")))),
+      u.status === "active" ? h("div", { class: "row" }, email,
+        h("button", { type: "button", on: { click: () => {
+          const v = email.value.trim();
+          if (!v) { userSay("Type the email first."); return; }
+          userDo(() => api("POST", "/users/" + u.id + "/identities", { email: v }), "Email registered. The person can now sign in with SSO.");
+        } } }, "Register email"),
+        confirmButton("End sessions", "ghost", () => userDo(() => api("DELETE", "/users/" + u.id + "/sessions"), "All sessions of that person ended."))) : null);
+  };
   const userCard = (u) => {
     const mine = !!(me && me.user_id && me.user_id === u.id);   // you cannot lock yourself out from here
     return h("article", { class: "item" },
@@ -786,7 +843,8 @@
         }) } }, "Make a key") : null,
         mine ? null : h("button", { type: "button", class: "ghost", on: { click: () => userDo(() => api("PATCH", "/users/" + u.id, { status: u.status === "active" ? "disabled" : "active" }),
           u.status === "active" ? "Person disabled." : "Person enabled.") } }, u.status === "active" ? "Disable" : "Enable")),
-      (u.keys || []).map((k) => keyRow(u, k)));
+      (u.keys || []).map((k) => keyRow(u, k)),
+      ssoEnabled ? ssoSection(u) : null);
   };
   const renderKeyBanner = () => {
     if (!userBannerEl) return;
@@ -820,6 +878,12 @@
     if (!userFormEl) { userFormEl = buildUserForm(); userListEl = h("div", null); userBannerEl = h("div", null); renderKeyBanner(); }
     if (view.firstChild !== userBannerEl) view.replaceChildren(userBannerEl, userFormEl, userListEl);
     const d = await api("GET", "/users");
+    if (await loadSso()) {
+      await Promise.all(d.users.map(async (u) => {
+        try { u.identities = (await api("GET", "/users/" + u.id + "/identities")).identities || []; }
+        catch (e) { if (String(e.message) === "unauthorized") throw e; u.identities = []; }
+      }));
+    }
     userListEl.replaceChildren(d.users.length ? h("div", { class: "list" }, d.users.map(userCard))
       : h("p", { class: "empty" }, "No named people yet. The shared key still works as the owner. Add a person, then make a key for them."));
   };
@@ -865,6 +929,7 @@
     view = h("main", null);
     add(root, h("header", null, h("strong", null, "RagLeap AI Office"), nav, stamp,
       me ? h("span", { class: "sub" }, "Signed in as " + clip(me.name, 40) + " (" + me.role + ")") : null,
+      key.startsWith("rls_") ? h("button", { type: "button", class: "ghost", on: { click: signOut } }, "Sign out") : null,
       h("button", { type: "button", class: "ghost", on: { click: () => lock("") } }, "Lock")));
     add(root, view);
   };
