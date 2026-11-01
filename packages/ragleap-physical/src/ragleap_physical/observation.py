@@ -11,7 +11,7 @@ from .errors import ValidationError
 SCHEMA = "ragleap.physical.observation/0"
 ID_RE = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
 ACTOR_RE = re.compile(r"^[A-Za-z0-9_.@:-]{1,64}$")  # like ID_RE plus @ and :, for people and roles
-UNITS = frozenset({"rad", "rad/s", "m", "m/s", "N", "N*m", "s", "kg", "1"})
+UNITS = frozenset({"rad", "rad/s", "m", "m/s", "N", "N*m", "s", "kg", "1", "um"})
 MAX_ENTITIES = 256
 MAX_SENSORS = 256
 SOURCE_KEYS = ("adapter", "adapter_version", "engine_version", "model_id", "model_sha256")

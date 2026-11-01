@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any, Mapping, Optional
 
 
 @dataclass(frozen=True)
@@ -14,6 +14,9 @@ class DryRun:
     max_abs_vel: float
     max_abs_force: float
     reached_time: bool
+    per_joint: Optional[Mapping[str, tuple]] = None  # name -> (max |velocity|, max |force|) for every actuated joint
+    site_min: Optional[tuple] = None  # lowest x, y, z reached by any tracked point, start included
+    site_max: Optional[tuple] = None  # highest x, y, z reached by any tracked point, start included
 
 
 class Adapter(ABC):
@@ -23,6 +26,10 @@ class Adapter(ABC):
     @abstractmethod
     def simulated(self) -> bool:
         """True for simulators. This version refuses anything else."""
+
+    def targets(self) -> Optional[list]:
+        """Names of every joint this adapter can move, or None if it cannot say. The bridge needs them all in the envelope."""
+        return None
 
     @abstractmethod
     def observe_raw(self) -> Mapping[str, Any]:

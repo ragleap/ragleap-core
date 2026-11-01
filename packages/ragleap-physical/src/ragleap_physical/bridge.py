@@ -68,6 +68,11 @@ class Bridge:
             raise CapabilityError("max_capability must be a Capability")
         if min(max_pending, max_records, max_audit) < 1 or not chunk_s > 0:
             raise ConfigError("max_pending, max_records, max_audit and chunk_s must be positive")
+        names = adapter.targets()
+        if names is not None:
+            missing = sorted(set(names) - set(envelope.as_dict()["targets"]))
+            if missing:
+                raise ConfigError("the envelope must list every joint the adapter can move; missing: " + ", ".join(missing))
         self._adapter, self._env, self.org_id = adapter, envelope, org_id
         self._max, self._clock, self._ttl, self._sink = max_capability, clock, float(ttl_s), audit_sink
         self._max_pending, self._max_records, self._max_audit, self._chunk_s = max_pending, max_records, max_audit, chunk_s
@@ -160,7 +165,7 @@ class Bridge:
         p = Proposal(f"prop_{self._n_prop:06d}", self.org_id, requested_by, target, command, value, unit,
                      expected_outcome, obs.observation_id, reason, now, now + self._ttl)
         self._env.check_state(obs)
-        self._env.check_static(p)
+        self._env.check_static(p, obs)
         self._ledger[p.proposal_id] = {"proposal": p, "digest": p.digest(), "state": "validated", "approval": None}
         self._evict()
         self._log("validated", proposal_id=p.proposal_id, digest=p.digest())
@@ -220,14 +225,14 @@ class Bridge:
         try:
             obs = self.observe()
             self._env.check_state(obs)
-            self._env.check_static(proposal)
+            self._env.check_static(proposal, obs)
             self._check_rate()
             o = proposal.expected_outcome
             if o.by_sim_time_s <= obs.sim_time_s:
                 raise EnvelopeViolation("outcome_time", "expected outcome time is already past")
             pred = self._adapter.dry_run(proposal.target, proposal.command, proposal.value, o.by_sim_time_s,
                                          self._env.max_steps)
-            self._env.check_prediction(proposal.target, pred.max_abs_vel, pred.max_abs_force)
+            self._env.check_dry_run(proposal.target, pred)
             rec["state"] = "dry_run_ok"
             self._applied_at.append(self._clock())
             self._adapter.apply(proposal.target, proposal.command, proposal.value)
@@ -262,6 +267,7 @@ class Bridge:
             if self._stop_flag.is_set():
                 raise _StopRequested()
             now = self.observe()
+            self._env.check_workspace(now)  # runtime monitor: the real motion must stay inside, not only the prediction
             if now.sim_time_s >= target_t - 1e-12:
                 return
             remaining = budget - (now.step - start_step)
