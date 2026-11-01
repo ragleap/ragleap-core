@@ -20,3 +20,17 @@ All notable changes are listed here. Format: Keep a Changelog.
   hard scenarios and paired statistics. It makes no claim about real machines.
 - Simulated machine tool (`FakeMachineToolAdapter`) and the `set_tool_offset` command (range, step and minimum-gap limits
   re-checked at apply time). Tool change is not a command.
+
+### Changed (hardening, found by independent review)
+- Identifiers and actor ids no longer accept a trailing newline (`fullmatch`); a huge integer is a `ValidationError`, not an `OverflowError`.
+- Observations examine at most 1024 raw items, valid or not; items whose id appears twice are all dropped.
+- `reason` must be printable single-line text (no control, bidi or invisible characters).
+- The MCP server answers 400 to deeply nested JSON instead of failing silently.
+- Dry-run predictions: speed and force must be finite, non-negative numbers (per joint and in the aggregate); an empty
+  `per_joint` no longer skips the aggregate check; predicted positions must be finite.
+- Dry-run predictions must also be consistent: inverted position bounds are refused, and an aggregate smaller than a per-joint value is refused.
+- Workspace check: an incomplete tracked x/y/z point is refused instead of ignored.
+- `Bridge` refuses a TTL or chunk size that is not a finite number above zero, and caps that are not positive whole numbers.
+- The requester can no longer approve its own proposal (refused and audited).
+- Units `W` and `kWh` accepted. `Envelope.observe_only()` and `Bridge(adapter, None, ...)` for observe and analyse only.
+- Found by two independent adversarial review rounds and by the lead's own review. AI-assisted.

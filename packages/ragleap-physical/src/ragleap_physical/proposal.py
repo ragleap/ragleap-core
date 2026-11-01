@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import unicodedata
 from dataclasses import dataclass
 from typing import Any
 
@@ -12,6 +13,13 @@ from .observation import actor, finite, ident, unit
 SCHEMA = "ragleap.physical.proposal/0"
 MAX_REASON = 500
 QUANTITIES = ("pos", "vel")
+_ALLOWED_FORMAT = {"\u200c", "\u200d"}  # joiners that Indic scripts need
+
+
+def _printable(text: str) -> bool:
+    """Letters, marks, numbers, punctuation, symbols and the plain space only. No controls, no bidi or invisible
+    characters, no line breaks: the text is shown to the person who approves."""
+    return all(ch == " " or ch in _ALLOWED_FORMAT or unicodedata.category(ch)[0] in "LMNPS" for ch in text)
 
 
 @dataclass(frozen=True)
@@ -62,8 +70,8 @@ class Proposal:
         actor(self.requested_by, "requested_by")
         finite(self.value, "value")
         unit(self.value_unit)
-        if not isinstance(self.reason, str) or len(self.reason) > MAX_REASON:
-            raise ValidationError("reason must be text of at most 500 characters")
+        if not isinstance(self.reason, str) or len(self.reason) > MAX_REASON or not _printable(self.reason):
+            raise ValidationError("reason must be printable single-line text of at most 500 characters")
         if finite(self.expires_at, "expires_at") <= finite(self.created_at, "created_at"):
             raise ValidationError("expires_at must be after created_at")
         if self.capability != "control":
