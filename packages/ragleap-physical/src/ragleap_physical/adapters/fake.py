@@ -167,3 +167,66 @@ class FakeArmAdapter(Adapter):
 
     def clear_stop(self) -> None:
         self.stopped = False
+
+class FakeArm3Adapter(FakeArmAdapter):
+    """Three-hinge planar stand-in; deterministic PD, not a physics engine.
+
+    Workspace coordinates describe the end-effector only. Limits belong to Envelope.
+    """
+
+    LENGTHS = (0.4, 0.3, 0.2)
+    NAMES = ("joint_1", "joint_2", "joint_3")
+
+    def __init__(self, *, seed: int = 0, pos=(0.0, 0.0, 0.0), **kwargs) -> None:
+        if len(pos) != 3:
+            raise ValueError("three joint positions required")
+        super().__init__(seed=seed, pos=pos, **kwargs)
+        self.vel = [0.0, 0.0, 0.0]
+
+    def _site(self, pos):
+        import math
+        angle = 0.0
+        x, z = 0.0, self.BASE_Z
+        for length, joint in zip(self.LENGTHS, pos):
+            angle += joint
+            x += length * math.cos(angle)
+            z -= length * math.sin(angle)
+        return (x, 0.0, z)
+
+    def _tick(self, pos, vel, target):
+        accs = []
+        for i in range(3):
+            acc = _clamp(self.kp * (target[i] - pos[i]) - self.kd * vel[i], self.amax)
+            vel[i] += acc * self.dt
+            pos[i] += vel[i] * self.dt
+            accs.append(acc)
+        return accs
+
+    def dry_run(self, target: str, command: str, value: float, until_sim_time_s: float, max_steps: int) -> DryRun:
+        if target not in self.NAMES or command != "set_position_target":
+            raise ValueError("unsupported target or command")
+        idx = self.NAMES.index(target)
+        pos, vel, goal, step = list(self.pos), list(self.vel), list(self.target), self.step
+        goal[idx] = float(value)
+        lo = list(self._site(pos))
+        hi = list(lo)
+        max_v, max_f = [0.0] * 3, [0.0] * 3
+        n = 0
+        while step * self.dt < until_sim_time_s - 1e-9 and n < max_steps:
+            accs = self._tick(pos, vel, goal)
+            step += 1
+            n += 1
+            site = self._site(pos)
+            for k in range(3):
+                lo[k], hi[k] = min(lo[k], site[k]), max(hi[k], site[k])
+            for i in range(3):
+                max_v[i] = max(max_v[i], abs(vel[i]))
+                max_f[i] = max(max_f[i], abs(accs[i] * self.inertia))
+        return DryRun(pos[idx], max(max_v), max(max_f), step * self.dt >= until_sim_time_s - 1e-9,
+                      per_joint={name: (max_v[i], max_f[i]) for i, name in enumerate(self.NAMES)},
+                      site_min=tuple(lo), site_max=tuple(hi))
+
+    def observe_raw(self) -> Mapping[str, Any]:
+        raw = dict(super().observe_raw())
+        raw["source"] = {**raw["source"], "model_id": "arm3_pd"}
+        return raw
