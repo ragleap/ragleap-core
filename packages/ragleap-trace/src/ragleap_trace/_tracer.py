@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextvars
 import functools
 import inspect
+import math
 import secrets
 import threading
 from typing import Any, Callable, Iterable
@@ -38,6 +39,34 @@ class Tracer:
             except Exception:  # never propagate into the traced code
                 with self._lock:
                     self.dropped += 1
+
+    def record(self, name: str, duration_ms: float | None = None, **attributes: Any) -> Span:
+        """Emit an already-finished span, for events reported after the fact.
+
+        duration_ms is kept only if it is a finite, non-negative number (not a bool).
+        """
+        parent = _current.get()
+        span = Span(
+            name,
+            parent.trace_id if parent else secrets.token_hex(16),
+            secrets.token_hex(8),
+            parent.span_id if parent else None,
+        )
+        for key, value in attributes.items():
+            span.set_attribute(key, value)
+        if (
+            isinstance(duration_ms, (int, float))
+            and not isinstance(duration_ms, bool)
+            and math.isfinite(duration_ms)
+            and duration_ms >= 0
+        ):
+            span.duration_ms = round(float(duration_ms), 3)
+        self._emit(span)
+        return span
+
+    def _drop(self) -> None:
+        with self._lock:
+            self.dropped += 1
 
 
 class _SpanContext:
