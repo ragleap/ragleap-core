@@ -17,6 +17,7 @@ on:
       - 'ragleap-voice-v*'
       - 'ragleap-security-v*'
       - 'ragleap-memory-v*'
+      - 'ragleap-physical-v*'
   workflow_dispatch:
     inputs:
       package:
@@ -38,6 +39,7 @@ on:
           - ragleap-voice
           - ragleap-security
           - ragleap-memory
+          - ragleap-physical
       target:
         description: 'Publish target'
         required: true
@@ -578,3 +580,39 @@ jobs:
         uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
         with:
           packages-dir: packages/ragleap-voice/dist/
+
+  publish-ragleap-physical:
+    if: |
+      startsWith(github.ref, 'refs/tags/ragleap-physical-v') ||
+      (github.event_name == 'workflow_dispatch' && inputs.package == 'ragleap-physical')
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.event_name == 'workflow_dispatch' && inputs.target || 'pypi' }}
+    permissions:
+      id-token: write
+    defaults:
+      run:
+        working-directory: packages/ragleap-physical
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.11'
+      - name: Install build tooling
+        run: pip install build
+      - name: Build
+        run: |
+          rm -rf dist/
+          python -m build
+      - name: Publish to TestPyPI
+        if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
+        with:
+          packages-dir: packages/ragleap-physical/dist/
+          repository-url: https://test.pypi.org/legacy/
+      - name: Publish to PyPI
+        if: github.event_name != 'workflow_dispatch' || inputs.target == 'pypi'
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
+        with:
+          packages-dir: packages/ragleap-physical/dist/
+          skip-existing: true
