@@ -1,6 +1,6 @@
 """transcribe_stream(): a synchronous stream over the batch transcribe() (docs/design/streaming.md). Standard library only.
 
-Status: pre-alpha, not exported. This is a batch adapter, NOT incremental recognition: audio is buffered, StreamGate decides
+Status: pre-alpha; transcribe_stream is exported from the package. This is a batch adapter, NOT incremental recognition: audio is buffered, StreamGate decides
 whether any speech qualified, and the existing engine runs once at finish() on all the audio. No partial hypotheses, no
 low-latency claim. Cancellation stops event delivery; it does not interrupt a model call already running.
 """
