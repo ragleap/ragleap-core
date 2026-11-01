@@ -9,6 +9,7 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 - `ragleap_voice.audio`: stateful `Down2Stream` and `Up2Stream` resamplers (`process()` and `finish()`), so audio can be resampled chunk by chunk without the boundary errors of calling `down2()`/`up2()` on each chunk. Tests check that chunked output equals one-shot output exactly. Still not exported, and the effect on recognition accuracy is not measured.
 - `ragleap_voice.gate`: `StreamGate`, a frame-by-frame energy gate for streams (speech start after consecutive speech-like frames, end after a hangover or a hard cap, explicit no-speech outcome at the end of a silent stream). Standard library only, not exported. Hangover, hard cap and the consecutive-frame rule are unmeasured starting points, and like the batch gate it cannot tell loud constant noise from speech.
+- `ragleap_voice.stream`: `transcribe_stream()` and `TranscriptStream` (`feed`, `finish`, `cancel`, event iteration with `stream.started`, `transcript.segment`, `transcript.final`, `stream.no_speech`, `stream.cancelled`, `stream.error`). A batch adapter, not incremental recognition: audio is buffered, `StreamGate` decides whether speech qualified, and the engine runs once at `finish()`. Bounded input, not exported, no latency measured, no partial transcripts.
 
 
 ## [0.2.0] - 2026-10-30
