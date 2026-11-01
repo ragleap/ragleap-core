@@ -21,7 +21,7 @@ RagLeap answers phone calls today through Twilio. The project promises independe
 
 - `channels/voice/` [verified]: `router.py` handles Twilio Media Streams over a WebSocket (mu-law 8 kHz audio in and out), `audio.py` converts audio, `server.py` runs a separate server because Twilio streams audio in real time. Twilio's TwiML points at that server's address. About 325 lines in total.
 - Speech in that channel uses OpenAI's hosted speech-to-text and text-to-speech only [verified]. So a call currently depends on Twilio and on OpenAI. Real independence also needs local speech, which is `ragleap-voice`'s job.
-- `ragleap-voice` [verified]: a pre-alpha package for managing open, local speech models (licence-checked manifests, downloads, benchmarks). Engines are not built yet.
+- `ragleap-voice` [verified]: a pre-alpha package for managing open, local speech models (licence-checked manifests, downloads, benchmarks). Since 0.1.0 it has `transcribe()`, `synthesize()`, a Whisper engine and an Indic Parler-TTS engine; every model is still unverified. Streaming building blocks (stateful resamplers, a stream gate, a batch-adapter `transcribe_stream`) are on main and not yet released.
 - The voice server is its own compose service (`voice`). Nothing in the app changes unless voice is switched on.
 
 Related issues: #814 (the public RFC for this work), #762 (speech engines API proposal), #763 (consent store and voice-profile design, aware of India's data protection law: relevant to call recording), #801 (number words for every language, used when scoring speech).
@@ -39,7 +39,7 @@ Telephony law differs by country, and some countries restrict connecting interne
 ## 5. Open-source projects to study
 
 Verified in public documentation:
-- **jambonz**: MIT licence, self-hosted, connects to any SIP trunk or PBX, can run air-gapped. Built on drachtio, rtpengine (GPL v3) and FreeSWITCH (MPL). A community Python SDK exists.
+- **jambonz**: MIT licence, self-hosted, connects to any SIP trunk or PBX, is documented as able to run air-gapped, but it needs a licence key tied to a domain and whether it works offline is unverified (see the Phase 0 design). Built on drachtio, rtpengine (GPL v3) and FreeSWITCH (MPL). A community Python SDK exists.
 - **LiveKit**: Apache 2.0, SIP integration for agents that place and receive calls, self-hostable. How complete its self-hosted SIP is has not been verified.
 
 From memory, not rechecked: Asterisk, FreeSWITCH, Kamailio, OpenSIPS, Pipecat, PJSIP and baresip.
