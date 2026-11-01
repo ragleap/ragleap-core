@@ -12,7 +12,7 @@ from .synth import synthesize
 from .whisper_engine import WhisperEngine
 from .parler_engine import make_parler_engine
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 register_engine(WhisperEngine())
 register_engine(make_parler_engine())
