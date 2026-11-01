@@ -2,7 +2,7 @@
 
 Open-source (MIT), local-first speech tooling, with Indian languages as a priority.
 
-**Status: pre-alpha. Versions 0.1.0 to 0.3.0 add `transcribe()` and `synthesize()` with a Whisper large-v3 engine and an Indic Parler-TTS engine (see "What 0.1.0 adds" below). Every model is unverified and none is a default. Each engine has been run on only a few clips on one maintainer's machine. This is a first release for testing, not a finished product.**
+**Status: pre-alpha. Versions 0.1.0 to 0.3.1 add `transcribe()` and `synthesize()` with a Whisper large-v3 engine and an Indic Parler-TTS engine (see "What 0.1.0 adds" below). Every model is unverified and none is a default. Each engine has been run on only a few clips on one maintainer's machine. This is a first release for testing, not a finished product.**
 
 ## What works today
 
@@ -23,7 +23,9 @@ A command line and a small standard-library-only Python core (no runtime depende
 
 Nothing in the package uses the network unless you run `models pull` or `models lock`.
 
-## What 0.1.0 to 0.3.0 add
+## What 0.1.0 to 0.3.1 add
+
+**0.3.1** exports `transcribe_stream` (a batch adapter: it buffers the audio and runs `transcribe()` once, with no partial transcripts) and `synthesize_stream` (chunked playback of a finished waveform) from the package, and adds A-law encode/decode helpers (`ragleap_voice.audio`, not exported) checked against G.711 Tables 1a/1b under a stated tie convention, with no conformance claim. Not measured: real phone audio, Python 3.13. Details: `docs/design/streaming.md` and `docs/design/audio-helpers.md`.
 
 **0.3.0** adds stream building blocks, not exported yet: stateful 2:1 resamplers (`Down2Stream`, `Up2Stream`), a frame-by-frame energy gate (`StreamGate`), `transcribe_stream` (a batch adapter: it buffers the audio and runs `transcribe()` once, with no partial transcripts), `synthesize_stream` (chunked playback of a finished waveform, not incremental generation), and a Hindi number-normalizer update (`hi.2`, from an outside contributor, not reviewed by a fluent speaker). Design and limits: `docs/design/streaming.md`. Nothing here has been measured on real phone audio.
 

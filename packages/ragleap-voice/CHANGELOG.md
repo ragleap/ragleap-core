@@ -4,6 +4,10 @@ All notable changes to `ragleap-voice` are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
+
+## [0.3.1] - 2026-11-01
+### Status
+- Still pre-alpha. Every model is `unverified` and none is a default. `transcribe_stream` is a batch adapter (it buffers the audio and runs `transcribe()` once at the end, so there are no partial transcripts) and `synthesize_stream` is chunked playback of a finished waveform; neither has been measured on real phone audio. A-law is implemented but not exported. The G.711 checks show the encoders follow the standard's tables under a stated convention (exact decision values go to the upper interval); this is not a conformance claim. Python 3.13 has not been measured for this version.
 ### Added
 - `ragleap_voice.audio`: `alaw_encode()` and `alaw_decode()` (ITU-T G.711 Tables 1a/1b), not exported. The decoder matches Table 1 on all 256 codes; the encoder assigns an input exactly on a decision value to the upper interval, which differs from `audioop.lin2alaw` on the 127 negative decision values (one code each). G.711 section 3.6 leaves that choice to the equipment specification. No conformance claim. Table checks for mu-law and A-law are in `benchmarks/voice/`.
 ### Changed
