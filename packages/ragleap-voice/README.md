@@ -2,7 +2,7 @@
 
 Open-source (MIT), local-first speech tooling, with Indian languages as a priority.
 
-**Status: pre-alpha. Versions 0.1.0 and 0.2.0 add `transcribe()` and `synthesize()` with a Whisper large-v3 engine and an Indic Parler-TTS engine (see "What 0.1.0 adds" below). Every model is unverified and none is a default. Each engine has been run on only a few clips on one maintainer's machine. This is a first release for testing, not a finished product.**
+**Status: pre-alpha. Versions 0.1.0 to 0.3.0 add `transcribe()` and `synthesize()` with a Whisper large-v3 engine and an Indic Parler-TTS engine (see "What 0.1.0 adds" below). Every model is unverified and none is a default. Each engine has been run on only a few clips on one maintainer's machine. This is a first release for testing, not a finished product.**
 
 ## What works today
 
@@ -23,7 +23,9 @@ A command line and a small standard-library-only Python core (no runtime depende
 
 Nothing in the package uses the network unless you run `models pull` or `models lock`.
 
-## What 0.1.0 and 0.2.0 add
+## What 0.1.0 to 0.3.0 add
+
+**0.3.0** adds stream building blocks, not exported yet: stateful 2:1 resamplers (`Down2Stream`, `Up2Stream`), a frame-by-frame energy gate (`StreamGate`), `transcribe_stream` (a batch adapter: it buffers the audio and runs `transcribe()` once, with no partial transcripts), `synthesize_stream` (chunked playback of a finished waveform, not incremental generation), and a Hindi number-normalizer update (`hi.2`, from an outside contributor, not reviewed by a fluent speaker). Design and limits: `docs/design/streaming.md`. Nothing here has been measured on real phone audio.
 
 **0.2.0** adds opt-in number-word normalizers for the benchmark (Turkish with ordinals, Spanish, German, Italian, Indonesian, Brazilian Portuguese, Hindi, Malay; contributed by an outside volunteer, not reviewed by fluent speakers), standard-library audio helpers (not exported), an optional energy gate for `transcribe()` (off by default; measured to drop quiet real speech at its default floor), and a note on filler-phrase or empty output. Details and limits are in the changelog and `benchmarks/voice/README.md`.
 
