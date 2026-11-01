@@ -103,3 +103,105 @@ def describe(d):
     return ("%s; %d of %d frames at or above %.1f dBFS; clip RMS %.1f dBFS, peak %.1f dBFS. "
             "The thresholds are unmeasured starting points, and a level gate cannot tell loud noise from speech."
             % (head, d.speech_frames, d.total_frames, d.threshold_dbfs, d.rms_dbfs, d.peak_dbfs))
+
+
+STREAM_EXTRA_DEFAULTS = {"hangover_frames": 20, "hard_cap_frames": 1500}
+
+
+@dataclass(frozen=True)
+class StreamGateEvent:
+    kind: str  # "speech_start", "speech_end" or "no_speech"
+    frame: int  # absolute frame index; for speech_end the first frame after the speech
+    time_s: float
+    reason: str
+
+
+class StreamGate:
+    """Frame-by-frame energy gate for streams (docs/design/vad-gate.md, use B). Standard library only, not thread-safe.
+
+    Status: pre-alpha, not exported. Every threshold is an unmeasured starting point. Differences from the batch gate:
+    the level reference is the loudest frame of the current utterance (reset when it ends), and an utterance starts only
+    after min_speech_frames consecutive speech-like frames. It ends after hangover_frames non-speech frames, or at
+    hard_cap_frames. Like the batch gate it cannot tell loud constant noise from speech. feed() accepts chunks of any
+    size; the caller keeps the audio, and speech_start.frame is the first frame of the qualifying run (pre-roll).
+    """
+
+    def __init__(self, rate, options=None):
+        if isinstance(rate, bool) or not isinstance(rate, int) or rate < 1:
+            raise UnsupportedFeatureError("StreamGate rate must be a positive integer.")
+        opts = dict(options or {})
+        extra = dict(STREAM_EXTRA_DEFAULTS)
+        for key in STREAM_EXTRA_DEFAULTS:
+            if key in opts:
+                extra[key] = _int(opts.pop(key), key)
+        opt = validate("energy", opts)
+        if extra["hard_cap_frames"] <= opt["min_speech_frames"]:
+            raise UnsupportedFeatureError("hard_cap_frames must be larger than min_speech_frames.")
+        self._floor = float(opt["floor_dbfs"])
+        self._rel = float(opt["relative_db"])
+        self._min = opt["min_speech_frames"]
+        self._frame_ms = opt["frame_ms"]
+        self._hang = extra["hangover_frames"]
+        self._cap = extra["hard_cap_frames"]
+        self._size = max(1, rate * self._frame_ms // 1000)
+        self._buf = array.array("h")
+        self._index = 0
+        self._max = -math.inf
+        self._in_speech = False
+        self._run = 0
+        self._silence = 0
+        self._last_speech = 0
+        self._start = 0
+        self._started = False
+        self._done = False
+
+    def _event(self, kind, frame, reason):
+        return StreamGateEvent(kind, frame, frame * self._frame_ms / 1000.0, reason)
+
+    def _step(self, level):
+        i = self._index
+        self._index += 1
+        self._max = max(self._max, level)
+        speech = level >= max(self._floor, self._max - self._rel)
+        events = []
+        if not self._in_speech:
+            self._run = self._run + 1 if speech else 0
+            if self._run >= self._min:
+                self._in_speech, self._started = True, True
+                self._start, self._last_speech, self._silence = i - self._run + 1, i, 0
+                events.append(self._event("speech_start", self._start, "%d consecutive speech-like frames" % self._run))
+            return events
+        if speech:
+            self._last_speech, self._silence = i, 0
+        else:
+            self._silence += 1
+        if self._silence >= self._hang:
+            events.append(self._event("speech_end", self._last_speech + 1, "silence"))
+        elif i - self._start + 1 >= self._cap:
+            events.append(self._event("speech_end", i + 1, "hard_cap"))
+        if events:
+            self._in_speech, self._run, self._max = False, 0, -math.inf
+        return events
+
+    def feed(self, samples):
+        """Accept a chunk of 16-bit samples (array('h') or ints); return the events it completed."""
+        if self._done:
+            raise ValueError("feed() called after finish()")
+        self._buf.extend(samples)
+        events, pos = [], 0
+        while len(self._buf) - pos >= self._size:
+            events.extend(self._step(rms_dbfs(self._buf[pos:pos + self._size])))
+            pos += self._size
+        del self._buf[:pos]
+        return events
+
+    def finish(self):
+        """End the stream. Closes an open utterance, or reports no_speech if none ever started. Later calls return []."""
+        if self._done:
+            return []
+        self._done = True
+        if self._in_speech:
+            return [self._event("speech_end", self._index, "stream_end")]
+        if not self._started:
+            return [self._event("no_speech", self._index, "no utterance reached %d consecutive speech-like frames" % self._min)]
+        return []
