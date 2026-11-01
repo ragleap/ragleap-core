@@ -548,3 +548,26 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e . pytest
           python -m pytest tests/ -v
+
+  ragleap-physical-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10', '3.11', '3.12']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install ragleap-physical with test deps
+        working-directory: packages/ragleap-physical
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[test,mujoco,interop]"
+      - name: Run ragleap-physical test suite
+        working-directory: packages/ragleap-physical
+        env:
+          CI: "true"
+        run: |
+          python -m pytest -v
