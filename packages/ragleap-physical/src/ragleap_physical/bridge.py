@@ -11,6 +11,7 @@ Memory: pending proposals, kept records and the in-memory audit list are all cap
 from __future__ import annotations
 
 import functools
+import math
 import threading
 import time
 from collections import deque
@@ -19,6 +20,7 @@ from typing import Any, Callable, Optional
 
 from .adapters.base import Adapter
 from .capability import Capability
+from .envelope import _is_pos_int
 from .envelope import Envelope
 from .errors import ApprovalError, CapabilityError, ConfigError, EnvelopeViolation, SafetyStop, ValidationError
 from .observation import Observation, actor, ident
@@ -57,7 +59,7 @@ def _locked(fn):
 class Bridge:
     """Holds one adapter, one envelope and the approval ledger for one organization."""
 
-    def __init__(self, adapter: Adapter, envelope: Envelope, *, org_id: str, max_capability: Capability,
+    def __init__(self, adapter: Adapter, envelope: Optional[Envelope], *, org_id: str, max_capability: Capability,
                  clock: Callable[[], float] = time.time, ttl_s: float = 300.0,
                  audit_sink: Optional[Callable[[dict], None]] = None, max_pending: int = 50,
                  max_records: int = 1000, max_audit: int = 10000, chunk_s: float = 0.25) -> None:
@@ -66,8 +68,17 @@ class Bridge:
             raise CapabilityError("real hardware is not supported in this version")
         if not isinstance(max_capability, Capability):
             raise CapabilityError("max_capability must be a Capability")
-        if min(max_pending, max_records, max_audit) < 1 or not chunk_s > 0:
-            raise ConfigError("max_pending, max_records, max_audit and chunk_s must be positive")
+        if not all(_is_pos_int(v) for v in (max_pending, max_records, max_audit)):
+            raise ConfigError("max_pending, max_records and max_audit must be positive whole numbers")
+        for what, v in (("ttl_s", ttl_s), ("chunk_s", chunk_s)):
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or not v > 0:
+                raise ConfigError(what + " must be a finite number above zero")
+        if envelope is None:  # a bridge that only reads needs no limits
+            if max_capability > Capability.ANALYSE:
+                raise ConfigError("an envelope is required for recommend and control")
+            envelope = Envelope.observe_only()
+        elif envelope.is_observe_only and max_capability > Capability.ANALYSE:
+            raise ConfigError("an observe-only envelope cannot be used with recommend or control")
         names = adapter.targets()
         if names is not None:
             missing = sorted(set(names) - set(envelope.as_dict()["targets"]))
@@ -191,6 +202,9 @@ class Bridge:
             raise ApprovalError("approver must be a named person id") from None
         if proposal.digest() != rec["digest"]:
             raise ApprovalError("proposal differs from the validated one")
+        if approver == proposal.requested_by:
+            self._log("rejected", proposal_id=proposal.proposal_id, code="self_approval")
+            raise ApprovalError("the requester cannot approve its own proposal")
         if self._clock() > proposal.expires_at:
             rec["state"] = "expired"
             raise ApprovalError("proposal has expired")

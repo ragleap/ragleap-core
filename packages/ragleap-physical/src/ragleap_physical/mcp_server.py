@@ -118,7 +118,7 @@ def make_server(tools: PhysicalTools, host: str = "127.0.0.1", port: int = 0, *,
                 return self._send(415, _rpc_error(None, -32600, "content type must be application/json"))
             try:
                 msg = json.loads(self.rfile.read(length))
-            except (ValueError, UnicodeDecodeError):
+            except (ValueError, UnicodeDecodeError, RecursionError):  # deeply nested JSON raises RecursionError
                 return self._send(400, _rpc_error(None, -32700, "parse error"))
             if isinstance(msg, list):
                 return self._send(400, _rpc_error(None, -32600, "batches are not supported"))

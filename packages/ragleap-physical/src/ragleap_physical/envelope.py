@@ -11,6 +11,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import math
 from typing import Any, Mapping, Optional
 
 from .errors import ConfigError, EnvelopeViolation
@@ -18,7 +19,7 @@ from .observation import Observation, finite, ident
 from .proposal import Proposal
 
 SUPPORTED_COMMANDS = frozenset({"set_position_target", "set_tool_offset"})
-_KEYS = {"envelope_version", "allowed_commands", "targets", "rate", "episode", "on_violation", "workspace"}
+_KEYS = {"envelope_version", "allowed_commands", "targets", "rate", "episode", "on_violation", "workspace", "observe_only"}
 _TARGET_KEYS = {"pos_min", "pos_max", "vel_max", "force_max"}
 _OFFSET_KEYS = {"offset_min", "offset_max", "step_max", "min_gap_s"}
 
@@ -28,6 +29,15 @@ def _num(value: Any, what: str) -> float:
         return finite(value, what)
     except ValueError as exc:  # ValidationError is a ValueError
         raise ConfigError(str(exc)) from None
+
+
+def _is_number(v: Any) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
+def _valid_magnitude(v: Any) -> bool:
+    """A speed or force prediction: a real number, finite, not negative."""
+    return _is_number(v) and math.isfinite(v) and v >= 0
 
 
 class Envelope:
@@ -43,11 +53,17 @@ class Envelope:
         if cfg.get("on_violation") != "reject":
             raise ConfigError("on_violation must be 'reject' (clamping is not allowed)")
         cmds = cfg.get("allowed_commands")
-        if not isinstance(cmds, list) or not cmds or not set(cmds) <= SUPPORTED_COMMANDS:
-            raise ConfigError("allowed_commands must be a non-empty list of supported commands")
         targets = cfg.get("targets")
-        if not isinstance(targets, dict) or not targets:
-            raise ConfigError("targets must be a non-empty mapping")
+        if cfg.get("observe_only") is True:  # no commands, no targets: everything is refused (default deny)
+            if cmds != [] or targets != {} or cfg.get("workspace") is not None:
+                raise ConfigError("an observe-only envelope has no commands, no targets and no workspace")
+        elif cfg.get("observe_only") is not None:
+            raise ConfigError("observe_only must be true or absent")
+        else:
+            if not isinstance(cmds, list) or not cmds or not set(cmds) <= SUPPORTED_COMMANDS:
+                raise ConfigError("allowed_commands must be a non-empty list of supported commands")
+            if not isinstance(targets, dict) or not targets:
+                raise ConfigError("targets must be a non-empty mapping")
         for name, lim in targets.items():
             try:
                 ident(name, "target")
@@ -82,6 +98,17 @@ class Envelope:
                 ws[axis] = [lo, hi]
         self._cfg = cfg
         self.digest = hashlib.sha256(json.dumps(cfg, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+    @classmethod
+    def observe_only(cls) -> "Envelope":
+        """For a bridge that only reads. It allows no command and no target, so any proposal is refused."""
+        return cls({"envelope_version": 0, "observe_only": True, "allowed_commands": [], "targets": {},
+                    "rate": {"max_commands_per_s": 1}, "episode": {"max_sim_time_s": 1e12, "max_steps": 10 ** 12},
+                    "on_violation": "reject"})
+
+    @property
+    def is_observe_only(self) -> bool:
+        return self._cfg.get("observe_only") is True
 
     @property
     def max_steps(self) -> int:
@@ -154,7 +181,9 @@ class Envelope:
         for s in obs.sensors:
             if s.kind == "site_position" and s.unit == "m" and s.id[-2:] in ("_x", "_y", "_z"):
                 found.setdefault(s.id[:-2], {})[s.id[-1]] = s.value
-        points = [v for v in found.values() if set(v) == {"x", "y", "z"}]
+        if any(set(v) != {"x", "y", "z"} for v in found.values()):
+            raise EnvelopeViolation("workspace_unknown", "a tracked point is incomplete, so the workspace cannot be checked")
+        points = list(found.values())
         if not points:
             raise EnvelopeViolation("workspace_unknown", "no position is reported, so the workspace cannot be checked")
         for point in points:
@@ -165,14 +194,26 @@ class Envelope:
     def check_dry_run(self, target: str, pred) -> None:
         """Dry-run result: speed and force of every joint, and the workspace, before anything moves."""
         limits = self._cfg["targets"]
-        if getattr(pred, "per_joint", None) is not None:
-            for name, (vel, force) in pred.per_joint.items():
+        # Aggregate values must always be valid numbers, even when per_joint is given (a bad total is a bad prediction).
+        for label, v in (("speed", getattr(pred, "max_abs_vel", None)), ("force", getattr(pred, "max_abs_force", None))):
+            if not _valid_magnitude(v):
+                raise EnvelopeViolation("prediction_invalid", "the predicted " + label + " is not a finite, non-negative number")
+        if getattr(pred, "per_joint", None):  # an empty mapping falls through to the aggregate check
+            for name, pair in pred.per_joint.items():
+                if not isinstance(pair, (tuple, list)) or len(pair) != 2 or not all(_valid_magnitude(x) for x in pair):
+                    raise EnvelopeViolation("prediction_invalid", "a joint prediction is not a pair of finite, non-negative numbers")
+                vel, force = pair
                 lim = limits.get(name)
                 if lim is None:
                     if vel > 1e-9 or force > 1e-9:
                         raise EnvelopeViolation("joint_not_allowed", "a joint that is not in the envelope would move")
                     continue
                 self._check_vf(lim, vel, force)
+            # F06: the aggregate is the largest per-joint value; a smaller aggregate means the report contradicts itself
+            top_v = max(pair[0] for pair in pred.per_joint.values())
+            top_f = max(pair[1] for pair in pred.per_joint.values())
+            if pred.max_abs_vel + 1e-9 < top_v or pred.max_abs_force + 1e-9 < top_f:
+                raise EnvelopeViolation("prediction_invalid", "the aggregate prediction is smaller than a joint prediction")
         elif "vel_max" in limits[target]:
             self._check_vf(limits[target], pred.max_abs_vel, pred.max_abs_force)
         ws = self._cfg.get("workspace")
@@ -180,6 +221,11 @@ class Envelope:
             lo_seen, hi_seen = getattr(pred, "site_min", None), getattr(pred, "site_max", None)
             if lo_seen is None or hi_seen is None:
                 raise EnvelopeViolation("workspace_unknown", "the dry run reports no positions, so the workspace cannot be checked")
+            if not (isinstance(lo_seen, (tuple, list)) and isinstance(hi_seen, (tuple, list)) and len(lo_seen) == 3 and len(hi_seen) == 3
+                    and all(_is_number(x) and math.isfinite(x) for x in (*lo_seen, *hi_seen))):
+                raise EnvelopeViolation("prediction_invalid", "the predicted positions are not finite numbers")
+            if any(lo_seen[i] > hi_seen[i] for i in range(3)):  # F05: a lower bound above its upper bound contradicts itself
+                raise EnvelopeViolation("prediction_invalid", "the predicted position bounds are inverted")
             for i, axis in enumerate(("x", "y", "z")):
                 if lo_seen[i] < ws[axis][0] or hi_seen[i] > ws[axis][1]:
                     raise EnvelopeViolation("workspace", "the predicted motion leaves the workspace")
@@ -194,6 +240,8 @@ class Envelope:
     def check_prediction(self, target: str, max_abs_vel: float, max_abs_force: float) -> None:
         """Dry-run result against speed and force limits."""
         lim = self._cfg["targets"][target]
+        if not (_valid_magnitude(max_abs_vel) and _valid_magnitude(max_abs_force)):
+            raise EnvelopeViolation("prediction_invalid", "the prediction is not a finite, non-negative number")
         if max_abs_vel > lim["vel_max"]:
             raise EnvelopeViolation("vel", "predicted speed is above the limit")
         if max_abs_force > lim["force_max"]:

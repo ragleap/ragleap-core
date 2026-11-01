@@ -23,6 +23,7 @@ lives in the bridge, in one place. The model cannot change the limits.
 - A simulated machine tool (tool wear): the AI can only adjust a tool offset, in micrometres, inside an envelope (range,
   step size, minimum gap between changes). Changing the tool is a human action and is not a command. It is a model with
   invented numbers and says nothing about a real machine.
+- Hardened after independent review by two other AI sessions (see the CHANGELOG): stricter input and prediction checks, no self-approval.
 - Not built: a second simulator, real hardware, Java and npm clients.
 - Simulation is not reality. Do not read a passing simulation test as proof for a real machine.
 
