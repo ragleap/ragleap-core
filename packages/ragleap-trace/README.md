@@ -42,6 +42,16 @@ takes a list of callables for each (read from its `RagLeap.__init__` and README)
   pair an answer with the wrong query. A stream stopped early fires no answer event.
 - Handlers never raise; a malformed event is counted in `tracer.dropped`.
 
+## Integration tests
+
+`integration/` runs the adapter against a real `RagLeap` with a real Postgres (pgvector), a fake
+embedder and a fake generator (copied from ragleap-rag's own tests, so no paid API is called). It needs
+ragleap-rag installed and `RAGLEAP_TEST_DATABASE_URL`. It covers `ask()`, `ask_stream()` run to the end,
+a stream stopped early (no `on_answer` fires; the next query replaces the pending one), privacy through
+real events, and a contract check that the event keys the adapter relies on still exist.
+`python scripts/integration_break.py` breaks the adapter, the tracer and ragleap-rag itself in temp copies
+and every break must make the tests fail. These tests are not part of the wheel.
+
 ## What it guarantees (each has a test and a break proof)
 
 - A span is recorded even when the body raises; the exception still propagates.
@@ -57,7 +67,7 @@ takes a list of callables for each (read from its `RagLeap.__init__` and README)
 - The key denylist is defense in depth, not a guarantee: a value under an innocent key is recorded as you gave it. Do not put secrets or personal data in attributes.
 - No retention or rotation in 0.1.0: the JSONL file grows until you remove it.
 - No opt-in content capture, no sampling, no network exporters, no multi-tenant tagging.
-- The core is verified on Python 3.10 and 3.12 in CI. Not verified: use with a real ragleap-rag instance (the list form of the hooks was read from its source, not run), a real stream stopped early, spans handed between threads, Windows file permissions.
+- Verified in CI (3.10, 3.12): the core and the adapter's unit tests. Verified in a sandbox only so far: the adapter against a real RagLeap (see Integration tests). Not verified: real LLM providers (the usage keys in the tests come from a fake shaped like the real providers), vector backends other than pgvector, spans handed between threads, Windows file permissions.
 
 ## Development
 
