@@ -1,6 +1,6 @@
 """synthesize_stream(): chunked playback of a finished waveform (docs/design/streaming.md). Standard library only.
 
-Status: pre-alpha, not exported. The engine synthesizes the whole utterance first (existing synthesize()); this module then
+Status: pre-alpha; synthesize_stream is exported from the package. The engine synthesizes the whole utterance first (existing synthesize()); this module then
 splits the WAV into ordered chunks. It is NOT incremental model generation and gives no first-audio latency advantage.
 Cancellation stops delivery between chunks; it cannot interrupt a synthesis call already running.
 """

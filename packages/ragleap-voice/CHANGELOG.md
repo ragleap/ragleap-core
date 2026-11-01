@@ -4,6 +4,8 @@ All notable changes to `ragleap-voice` are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
+### Changed
+- `transcribe_stream` and `synthesize_stream` are now exported from `ragleap_voice` (`from ragleap_voice import transcribe_stream, synthesize_stream`). They are still a batch adapter and chunked playback of a finished waveform, as documented in `docs/design/streaming.md`; no partial transcripts, no latency claim. `Down2Stream`, `Up2Stream` and `StreamGate` stay unexported.
 
 ## [0.3.0] - 2026-11-01
 ### Status

@@ -2,7 +2,7 @@
 
 Status: pre-alpha. Evidence tags: [verified] merged on main and tested with fakes; [plan]; [unverified]. Drafted with a peer engineer's design; claims here follow the merged code.
 
-## What exists (all in `ragleap_voice`, none exported yet)
+## What exists (all in `ragleap_voice`; only `transcribe_stream` and `synthesize_stream` are exported, the resamplers and `StreamGate` are not)
 
 - [verified] `audio.Down2Stream`, `audio.Up2Stream` (PR 1084): stateful 2:1 resamplers; chunked output equals the one-shot `down2`/`up2` exactly; `process()` after `finish()` raises `ValueError`.
 - [verified] `gate.StreamGate` (PR 1085): frame-by-frame energy gate (speech_start, speech_end, no_speech). A level gate cannot tell loud constant noise from speech; thresholds are unmeasured starting points.
