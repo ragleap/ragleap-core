@@ -671,6 +671,23 @@ and CLI.
   and surfaces it, but does not yet steer the AI's response language
   to match — that's a reasonable next step for a contributor
 
+## Documents, folders and computer control
+
+**Documents tab.** In the dashboard you can list, upload and delete documents and add web pages by address. 28 file types are supported. Deleting a document also removes its entries from the knowledge graph.
+
+**Computer control is experimental, off by default and has not been independently reviewed. Please do not switch it on for real data.** Folders are shared with AI employees only by a command you run on the machine, `ragleap files`. The app, the API and the AI employees cannot create or widen a grant. A small sandbox runner reads granted folders read-only. AI employees can list and read files and can ask for access; a request always needs the owner's approval and grants nothing by itself. File contents stay out of the activity log, and the Files tab shows the grants.
+
+    ragleap files add ~/Documents/handbook --name handbook --purpose knowledge
+    ragleap files list
+    ragleap files status
+    ragleap files off      # pause all file access now
+    ragleap files on
+    ragleap files remove handbook
+
+`ragleap files add PATH --name NAME` takes a folder (not a single file), `--purpose use` or `knowledge`, and an optional `--expires` such as `30m`, `12h`, `7d` or a date. Only read-only grants exist for now. `.env` files and keys inside a granted folder stay hidden from the AI, and a folder that contains or sits inside the RagLeap install folder is refused. To turn computer control on, add `COMPUTER_CONTROL=true` to `.env` and run `docker compose --profile sandbox up -d`. The file tools also need `FILE_TOOLS_ENABLED=true` and the `SANDBOX_TOKEN` that the installer creates.
+
+**Folder auto-ingest (off by default).** Grant a folder with `--purpose knowledge` and the sandbox copies the allowed documents (28 supported formats; no symlinks, no `.env` files or keys, 25 MB per file) into a read-only staging volume. The app reads new, changed and deleted files every 15 minutes. The first read of a folder waits for the owner's approval, because embeddings can cost money; the Documents tab has a Folders card with an Approve button. It needs `COMPUTER_CONTROL=true`, `FOLDER_INGEST_ENABLED=true`, a rebuilt sandbox image and `db/schema.sql` applied. Optional settings: `FOLDER_INGEST_INTERVAL_MINUTES` (default 15), `FOLDER_INGEST_MAX_FILES` (default 50), `FOLDER_INGEST_DELETE_REMOVED` (default true) and `FOLDER_INGEST_AUTO_APPROVE` (default off). Folder ingest was tested on one server with a small folder; Docker Desktop, rootless Docker and macOS are untested.
+
 ## Integrations
 
 ```mermaid
