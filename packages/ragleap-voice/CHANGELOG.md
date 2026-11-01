@@ -4,6 +4,8 @@ All notable changes to `ragleap-voice` are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
+### Added
+- `ragleap_voice.audio`: `alaw_encode()` and `alaw_decode()` (ITU-T G.711 Tables 1a/1b), not exported. The decoder matches Table 1 on all 256 codes; the encoder assigns an input exactly on a decision value to the upper interval, which differs from `audioop.lin2alaw` on the 127 negative decision values (one code each). G.711 section 3.6 leaves that choice to the equipment specification. No conformance claim. Table checks for mu-law and A-law are in `benchmarks/voice/`.
 ### Changed
 - `transcribe_stream` and `synthesize_stream` are now exported from `ragleap_voice` (`from ragleap_voice import transcribe_stream, synthesize_stream`). They are still a batch adapter and chunked playback of a finished waveform, as documented in `docs/design/streaming.md`; no partial transcripts, no latency claim. `Down2Stream`, `Up2Stream` and `StreamGate` stay unexported.
 

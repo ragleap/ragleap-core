@@ -1,0 +1,60 @@
+"""Exhaustive mu-law check against ITU-T G.711 (1988) Tables 2a/2b (printed pages 5 and 6 of the Blue Book extract).
+Section 3.6 (page 1): the tables use a 13 (14) bit uniform code; conversion at decision values is left to the equipment
+specification. The standard does NOT fix how 16-bit PCM maps onto that scale or how ties are broken, so this script tests
+every convention below and reports each one; it picks none. Positive input between decision values n and n+1 -> code
+255-n; negative -> 127-n (Table 2a/2b notes). Decoder value y_n = (x_n + x_(n+1))/2. Standard library plus ragleap_voice.
+Not a conformance claim."""
+import audioop, struct
+from array import array
+from bisect import bisect_left, bisect_right
+from ragleap_voice.audio import ulaw_decode, ulaw_encode
+
+X = [0, 1] + [2 * n - 1 for n in range(2, 17)]
+for step, last in ((4, 32), (8, 48), (16, 64), (32, 80), (64, 96), (128, 112), (256, 128)):
+    while len(X) <= last:
+        X.append(X[-1] + step)
+for n, v in ((16, 31), (32, 95), (48, 223), (64, 479), (80, 991), (96, 2015), (112, 4063), (127, 7903), (128, 8159)):
+    assert X[n] == v, (n, X[n], v)
+Y = [0] + [(X[n] + X[n + 1]) // 2 for n in range(1, 128)]
+assert Y[1] == 2 and Y[127] == 8031 and (X[127] + X[128]) % 2 == 0
+
+# decoder: code c>=128 -> +Y[255-c]; c<128 -> -Y[127-c]; PCM16 = 4 * table value
+def table_dec(c):
+    return 4 * (Y[255 - c] if c >= 128 else -Y[127 - c])
+r_dec = [int(ulaw_decode(bytes([c]))[0]) for c in range(256)]
+a_dec = [struct.unpack("<h", audioop.ulaw2lin(bytes([c]), 2))[0] for c in range(256)]
+print("decoder vs table (x4): ragleap mismatches", sum(r_dec[c] != table_dec(c) for c in range(256)),
+      "| audioop mismatches", sum(a_dec[c] != table_dec(c) for c in range(256)))
+
+SCALES = {
+    "floor>>2": (lambda s: abs(s >> 2), 1),
+    "trunc|s|>>2": (lambda s: abs(s) >> 2, 1),
+    "round(|s|/4)": (lambda s: (abs(s) + 2) >> 2, 1),
+    "exact(|s| vs 4*x)": (lambda s: abs(s), 4),
+}
+def expected(s, scale, tie):
+    f, k = SCALES[scale]
+    m, xs = f(s), [k * x for x in X]
+    n = bisect_right(xs, m) - 1 if tie == "tie-up" else bisect_left(xs, m) - 1
+    n = max(0, min(n, 127))
+    return 127 - n if s < 0 else 255 - n
+
+inputs = range(-32768, 32768)
+r_enc = [ulaw_encode(array("h", [s]))[0] for s in inputs]
+a_enc = [audioop.lin2ulaw(struct.pack("<h", s), 2)[0] for s in inputs]
+best = {"ragleap": None, "audioop": None}
+print("\nconvention                      ragleap_mismatch  audioop_mismatch")
+for scale in SCALES:
+    for tie in ("tie-up", "tie-down"):
+        exp = [expected(s, scale, tie) for s in inputs]
+        rm = [(s, e, a) for s, e, a in zip(inputs, exp, r_enc) if e != a]
+        am = [(s, e, a) for s, e, a in zip(inputs, exp, a_enc) if e != a]
+        print("%-31s %16d %17d" % (scale + " / " + tie, len(rm), len(am)))
+        for name, mm in (("ragleap", rm), ("audioop", am)):
+            if best[name] is None or len(mm) < len(best[name][1]):
+                best[name] = (scale + " / " + tie, mm)
+for name, (conv, mm) in best.items():
+    print("\n%s: fewest mismatches under [%s]: %d. First 10 (input, expected byte, actual byte):" % (name, conv, len(mm)))
+    for s, e, a in mm[:10]:
+        print("   %6d expected=0x%02x actual=0x%02x" % (s, e, a))
+print("\nA zero count means 'matches this convention', which is a statement about that convention, not conformance.")

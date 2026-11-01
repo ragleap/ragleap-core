@@ -8,7 +8,9 @@ Status: pre-alpha, not exported from the package yet.
 - The resamplers are 2:1 only: a 31-tap Hamming-windowed sinc, cutoff 0.225 cycles per input sample, unity DC gain, zero
   history at the clip edges. Their effect on recognition accuracy has not been measured.
 - Down2Stream and Up2Stream are stateful versions of down2 and up2 (chunked output equals one-shot output exactly).
-- A-law is not implemented.
+- A-law (alaw_encode, alaw_decode) follows ITU-T G.711 Tables 1a/1b. G.711 section 3.6 leaves the 16-bit scaling and decision-value ties to the
+  equipment specification; here the exact magnitude is compared with 8 * decision value and an exact tie goes to the upper interval, the same
+  rule as the mu-law encoder. It differs from audioop.lin2alaw on exactly the 127 negative decision values (always one code). Not a conformance claim.
 """
 import array
 import math
@@ -199,3 +201,37 @@ class Up2Stream(_Resample2Stream):
         u = [0] * (2 * len(samples))
         u[::2] = samples
         return u
+
+
+import bisect as _bisect
+
+_ALAW_X = [0]
+for _w in [2] * 32 + [4] * 16 + [8] * 16 + [16] * 16 + [32] * 16 + [64] * 16 + [128] * 16:
+    _ALAW_X.append(_ALAW_X[-1] + _w)
+_ALAW_X8 = tuple(8 * _x for _x in _ALAW_X)  # decision values on the 16-bit scale (Table 1a/1b, 13-bit x 8)
+_ALAW_DEC = [0] * 256
+for _n in range(128):
+    _mid = 8 * ((_ALAW_X[_n] + _ALAW_X[_n + 1]) // 2)
+    _ALAW_DEC[(128 + _n) ^ 0x55] = _mid
+    _ALAW_DEC[_n ^ 0x55] = -_mid
+_ALAW_DEC = tuple(_ALAW_DEC)
+
+
+def alaw_encode(samples):
+    """Encode signed 16-bit PCM ints to A-law bytes. Exact decision values go to the upper-magnitude interval."""
+    out = bytearray()
+    for s in samples:
+        if isinstance(s, bool) or not isinstance(s, int):
+            raise TypeError("samples must be integers")
+        if not -32768 <= s <= 32767:
+            raise ValueError("samples must be signed 16-bit integers")
+        i = min(127, _bisect.bisect_right(_ALAW_X8, abs(s)) - 1)
+        out.append((i if s < 0 else 128 + i) ^ 0x55)
+    return bytes(out)
+
+
+def alaw_decode(codes):
+    """Decode A-law bytes (bytes, bytearray or memoryview) to array('h'). Each code decodes to its interval midpoint."""
+    if not isinstance(codes, (bytes, bytearray, memoryview)):
+        raise TypeError("codes must be bytes, bytearray or memoryview")
+    return array.array("h", [_ALAW_DEC[c] for c in bytes(codes)])

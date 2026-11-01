@@ -50,3 +50,13 @@ Status: draft for discussion. Nothing here is implemented; every item is **plann
 [verified] A prototype in `benchmarks/voice/audio_helpers_speed.py` (results in `benchmarks/voice/README.md`) measured pure-Python helpers on 20 ms frames on the project VPS (Python 3.10.12, 1 CPU, quiet): one call in both directions used about 6.4% of one core, so at most about 15 simultaneous calls if nothing else ran. The 8 to 16 kHz resampler is the largest part. Pure Python was roughly 9 to 215 times slower than `audioop` on the individual helpers.
 
 This answers open question 1 for a pilot: a pure-Python default is workable for a few simultaneous calls. It does not show that it is acceptable at scale; an optional faster path (an extra) remains the plan for that. Not measured: Python 3.12 and 3.13, other CPUs, a polyphase resampler, resampling quality and its effect on recognition accuracy. The mu-law encoder in the prototype differs from `audioop` on 0.6% of input samples (381 of 65536, all negative inputs; in each case the prototype's code decodes closer to the original sample). Which of the two matches a reference G.711 encoder is unchecked: the helper must be tested against published G.711 test vectors before it is written.
+
+## G.711 conventions (checked against the standard)
+
+Source: ITU-T G.711 (1988), section 3.6 (page 1 of the extract), Tables 1a/1b (printed pages 3 and 4), Tables 2a/2b (printed pages 5 and 6). [verified: read from the PDF]
+
+- Section 3.6 says the tables use a 13 (14) bit uniform code and that conversion at decision values is left to the individual equipment specification. It fixes neither the 16-bit scaling nor the tie rule.
+- Decoders: mu-law and A-law both match the tables (x4 and x8) on all 256 codes, for ragleap and for Python audioop.
+- Encoders: ragleap compares the exact magnitude with 4 * (mu-law) or 8 * (A-law) times the decision value; an input exactly on a decision value goes to the upper interval. audioop matches the tables under a different scaling (floor for mu-law, one's-complement magnitude for A-law). The two differ only at negative decision values, always by one code (381 inputs for mu-law, 127 for A-law).
+- Scripts: `benchmarks/voice/g711_mulaw_table_check.py` and `g711_alaw_table_check.py` test every convention and pick none.
+- This is a stated convention, not a conformance claim. [unverified] Other published reference vectors (for example the G.191 tools, whose licence is not cleared) have not been used.
