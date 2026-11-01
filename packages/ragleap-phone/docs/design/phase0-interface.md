@@ -1,6 +1,6 @@
 # ragleap-phone, Phase 0: provider interface and audio contract (draft)
 
-Status: draft for discussion (RFC issue #814). Nothing below is built; every item is **planned**.
+Status: draft for discussion (RFC issue #814). No phone code is built; every phone-side item is **planned**. The `ragleap-voice` building blocks it will use (stateful resamplers, a stream gate, a batch-adapter `transcribe_stream`) are on main; they do not mean the phone adapter, call integration or phone streaming path exists.
 Evidence tags: [verified] seen in the repo or public documentation; [plan] intention; [unverified] not checked.
 
 ## 1. Scope
@@ -44,16 +44,16 @@ Rules for every adapter:
 ## 4. Audio and event contract
 
 - Frames: PCM 16-bit little-endian, mono, 20 ms. The phone side is 8 kHz. Mu-law and A-law are converted at the adapter edge.
-- The bridge resamples 8 kHz to the 16 kHz that most speech models expect, and back. The resampler and its quality are to be measured. [plan]
+- The adapter decodes the negotiated codec at its edge. Inbound 8 kHz audio goes to 16 kHz with `Up2Stream` (state kept across frames). Outbound, the adapter reads the sample rate from the synthesis result and must not assume 16 kHz; only a rate that is twice 8 kHz uses `Down2Stream`, any other rate needs an explicitly supported path. `Up2Stream` and `Down2Stream` are merged (PR 1084, exact equality with the one-shot helpers tested); resampling quality and its effect on recognition are not measured. [plan]
 - Events: call.started, dtmf (digit), playback.finished (the equivalent of Twilio's mark), call.ended, error.
 - Every frame carries a monotonic timestamp so latency can be measured end to end.
 
 ## 5. What ragleap-phone needs from ragleap-voice
 
 These are requirements for the Stage 3 streaming design in the 0.1.0 API draft (#762), which reserves the names below:
-- `transcribe_stream(frames)`: partial and final transcripts from a frame stream, with an end-of-turn signal.
-- `synthesize_stream(text)`: audio chunks as they are produced, cancellable within one frame.
-- Both accept 16 kHz and report the time to first partial result and the time to first audio.
+- `transcribe_stream(chunks, ...)` (package-level, in `ragleap-voice`, PR 1086): a parent-side batch adapter. It buffers the chunks, uses `StreamGate` (PR 1085) to decide whether speech qualified, and runs the batch transcription once at the end. It emits committed segments and a final result, or an explicit no-speech outcome. No partial transcripts from batch engines such as Whisper. Does not need the planned worker streaming protocol.
+- `synthesize_stream(text)`: [plan, not built] labelled chunks of a completed synthesis waveform, not model-generated incremental audio. Cancellation stops delivery and discards late output; it cannot interrupt a model call already running, and a worker may have to be killed.
+- Measure time to first committed segment, time to final transcript and time to first playable chunk, and record sample rates, codec, buffering and whether the engine is a batch adapter. No partial-result or incremental-generation latency is reported for an implementation that buffers the whole input or waveform first.
 - No silent fallback to a hosted service. A phone deployment may run with no internet.
 - Targets are measured on real phone audio and published. No number is promised here.
 
