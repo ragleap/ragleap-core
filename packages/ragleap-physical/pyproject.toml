@@ -21,6 +21,7 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
+mujoco = ["mujoco>=3.0"]
 test = ["pytest>=7"]
 interop = ["mcp>=1.28,<2"]  # only for the interop test; pinned below v2
 
