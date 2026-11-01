@@ -1,0 +1,23 @@
+<mujoco model="arm3_v1">
+  <option timestep="0.002"/>
+  <worldbody>
+    <body name="link1" pos="0 0 1" gravcomp="1">
+      <joint name="joint_1" type="hinge" axis="0 1 0" damping="0.05"/>
+      <geom type="capsule" size="0.035" fromto="0 0 0 0.4 0 0" mass="1"/>
+      <body name="link2" pos="0.4 0 0" gravcomp="1">
+        <joint name="joint_2" type="hinge" axis="0 1 0" damping="0.05"/>
+        <geom type="capsule" size="0.03" fromto="0 0 0 0.3 0 0" mass="0.7"/>
+        <body name="link3" pos="0.3 0 0" gravcomp="1">
+          <joint name="joint_3" type="hinge" axis="0 1 0" damping="0.05"/>
+          <geom type="capsule" size="0.025" fromto="0 0 0 0.2 0 0" mass="0.4"/>
+          <site name="ee" pos="0.2 0 0" size="0.015"/>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+  <actuator>
+    <position name="act_joint_1" joint="joint_1" kp="10" kv="4" ctrllimited="true" ctrlrange="-1.2 1.2"/>
+    <position name="act_joint_2" joint="joint_2" kp="7" kv="2" ctrllimited="true" ctrlrange="-1.2 1.2"/>
+    <position name="act_joint_3" joint="joint_3" kp="5" kv="1.5" ctrllimited="true" ctrlrange="-1.2 1.2"/>
+  </actuator>
+</mujoco>

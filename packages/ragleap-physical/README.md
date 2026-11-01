@@ -24,6 +24,9 @@ lives in the bridge, in one place. The model cannot change the limits.
   step size, minimum gap between changes). Changing the tool is a human action and is not a command. It is a model with
   invented numbers and says nothing about a real machine.
 - Hardened after independent review by two other AI sessions (see the CHANGELOG): stricter input and prediction checks, no self-approval.
+- A three-joint arm model (MuJoCo XML in `examples/robots/`, plus a built-in stand-in), an offline ROS 2 observe-only mock that
+  needs no ROS install, and a repeatability experiment in `benchmarks/` (exact replay within one installed environment;
+  cross-machine repeatability is not claimed).
 - Not built: a second simulator, real hardware, Java and npm clients.
 - Simulation is not reality. Do not read a passing simulation test as proof for a real machine.
 

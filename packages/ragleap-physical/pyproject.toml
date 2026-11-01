@@ -29,5 +29,5 @@ interop = ["mcp>=1.28,<2"]  # only for the interop test; pinned below v2
 packages = ["src/ragleap_physical"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "examples/robots", "benchmarks"]
 pythonpath = ["src", "tests"]
