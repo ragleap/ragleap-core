@@ -38,3 +38,6 @@ All notable changes are listed here. Format: Keep a Changelog.
   experiment in `benchmarks/`. Tests in `examples/robots/` and `benchmarks/` now run by default.
 - Operator console (`ragleap_physical.console`): a named person approves the exact proposal, applies it and can stop. Loopback only,
   one token per person. New read-only `Bridge.pending_proposals()`.
+- Observe-only energy site mock and MTConnect document reader (simulation only, strict input limits), a first-hour guide, an
+  industry guide with runnable examples, and Hindi and Tamil README drafts (not reviewed by native speakers).
+- The wear study notebook has a pluggable wear model (Taylor's equation, with assumptions stated).
