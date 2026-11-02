@@ -4,6 +4,8 @@ All notable changes to `ragleap-voice` are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
+### Changed
+- Whisper engine: `load()` no longer opens the model; it is opened once in `run()` with the requested device. Before, a call with an explicit device (for example `device="cuda"`) opened the 3 GB model twice. Measured cost of the double open on one Colab T4 was about 2.5 s per call (from a profile, not a benchmark).
 
 ## [0.3.1] - 2026-11-01
 ### Status
