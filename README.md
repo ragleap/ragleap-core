@@ -581,8 +581,19 @@ HTTP route.
    and `VOICE_TTS_PROVIDER=elevenlabs` uses `ELEVENLABS_API_KEY` with the
    voice id from `ELEVENLABS_VOICE_ID`)
 2. Optionally set `VOICE_BOT_NAME`, `VOICE_GREETING`, `VOICE_TTS_VOICE`
-3. Point a Twilio phone number's `<Connect><Stream>` TwiML at
-   `wss://your-domain.com:8765`
+3. Set `VOICE_WS_TOKEN` in `.env` to a long random value (the installer does this for new
+   installs; `openssl rand -hex 24` makes one). **Without it the voice server refuses every call.**
+4. Point a Twilio phone number's `<Connect><Stream>` TwiML at
+   `wss://your-domain.com:8765/<your VOICE_WS_TOKEN>`. Use `wss` (not `ws`): the token is part of
+   the address, and a connection without it never becomes a call. If the token ever leaks, change it
+   in `.env` and in the TwiML.
+
+**Security:** anyone who can phone your number can talk to the bot, which is the point of a public
+line, so decide what your documents and role instructions should say to a stranger. Spoken
+feedback ("good answer" / "bad answer") is ignored on the voice channel, because callers are
+anonymous and that feedback changes the memory used on every channel. `VOICE_MAX_CALLS` (default 10)
+and `VOICE_MAX_CALL_MINUTES` (default 30) limit simultaneous calls and call length, which also
+limits what a caller can spend of your speech and model credits.
 
 **Honest status:** the WebSocket server, Twilio event protocol handling, and
 error handling are verified working. The full Whisper/TTS round-trip has
