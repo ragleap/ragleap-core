@@ -313,6 +313,7 @@ else
   set_env RAGLEAP_API_KEY "$DASH_LOGIN"
   set_env ADDON_ENCRYPTION_KEY "$(fernet_key)"
   set_env SANDBOX_TOKEN "$(rand_hex 24)"
+  set_env VOICE_WS_TOKEN "$(rand_hex 24)"
   if [ -n "$OFFLINE" ]; then set_env COMPOSE_PROJECT_NAME ragleap-core; fi
   for pv in APP_PORT:8000 DB_PORT:5433 VOICE_PORT:8766 NEO4J_HTTP_PORT:7475 NEO4J_BOLT_PORT:7688 REDIS_PORT:6380; do
     pn="${pv%%:*}"; pd="${pv##*:}"; pp="$(pick_port "$pd")"
