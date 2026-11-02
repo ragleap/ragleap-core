@@ -102,10 +102,10 @@ class WhisperEngine:
         if path is None:
             raise EngineError("the verified folder of %r was not provided." % MODEL)
         self._fw, self._path = faster_whisper, str(path)
-        self._open("auto")
+        self._model, self._device = None, None  # opened in run() with the requested device
 
     def run(self, request):
-        if self._model is None:
+        if self._path is None:
             raise EngineError("the whisper engine was not loaded.", hint="call load() before run().")
         unknown = sorted(set(request.options) - set(_OPTIONS))
         if unknown:
@@ -118,7 +118,7 @@ class WhisperEngine:
         if not isinstance(device, str) or device not in _DEVICES:
             raise UnsupportedFeatureError("device must be one of: %s." % ", ".join(_DEVICES))
         audio = _samples(request.audio)
-        if device != self._device:
+        if self._model is None or device != self._device:
             self._model = None
             self._open(device)
         parts, segs = [], []

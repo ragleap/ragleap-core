@@ -94,7 +94,7 @@ def test_missing_numpy(monkeypatch):
 def test_load_is_local_and_offline(fake_fw, tmp_path, monkeypatch):
     monkeypatch.delenv("HF_HUB_OFFLINE", raising=False)
     monkeypatch.delenv("TRANSFORMERS_OFFLINE", raising=False)
-    loaded(tmp_path)
+    loaded(tmp_path).run(req())
     m = FakeModel.instances[0]
     assert m.path == str(tmp_path) and m.kw["local_files_only"] is True
     assert m.kw["device"] == "auto" and m.kw["compute_type"] == "default"
@@ -104,7 +104,7 @@ def test_load_is_local_and_offline(fake_fw, tmp_path, monkeypatch):
 
 def test_load_restores_existing_env(fake_fw, tmp_path, monkeypatch):
     monkeypatch.setenv("HF_HUB_OFFLINE", "0")
-    loaded(tmp_path)
+    loaded(tmp_path).run(req())
     assert os.environ["HF_HUB_OFFLINE"] == "0"
 
 
@@ -141,7 +141,7 @@ def test_unsupported_audio_formats(fake_fw, tmp_path):
         assert "ffmpeg" in str(info.value)
     with pytest.raises(AudioDecodeError):
         eng.run(Request(kind="stt", language="en", audio=b"not a wav"))
-    assert FakeModel.instances[0].calls == []
+    assert FakeModel.instances == []  # bad audio is rejected before the model is even opened
 
 
 def test_options(fake_fw, tmp_path):
@@ -158,11 +158,12 @@ def test_device_option_reloads_only_when_it_changes(fake_fw, tmp_path):
     eng = loaded(tmp_path)
     eng.run(req(options={"device": "cpu"}))
     eng.run(req(options={"device": "cpu"}))
-    assert len(FakeModel.instances) == 2
-    first, second = FakeModel.instances
-    assert (first.kw["device"], first.kw["compute_type"]) == ("auto", "default")
-    assert (second.kw["device"], second.kw["compute_type"]) == ("cpu", "int8")
-    assert second.kw["local_files_only"] is True and len(second.calls) == 2
+    assert len(FakeModel.instances) == 1
+    (only,) = FakeModel.instances
+    assert (only.kw["device"], only.kw["compute_type"]) == ("cpu", "int8")
+    assert only.kw["local_files_only"] is True and len(only.calls) == 2
+    eng.run(req(options={"device": "cuda"}))
+    assert len(FakeModel.instances) == 2 and FakeModel.instances[1].kw["device"] == "cuda"
 
 
 def test_cuda_failure_while_running(fake_fw, tmp_path):
@@ -185,8 +186,9 @@ def test_cuda_failure_while_loading(monkeypatch, tmp_path):
         def __init__(self, path, **kw):
             raise ValueError("This CTranslate2 package was not compiled with CUDA support")
     monkeypatch.setitem(sys.modules, "faster_whisper", types.SimpleNamespace(WhisperModel=NoCuda))
+    monkeypatch.setitem(sys.modules, "numpy", types.SimpleNamespace(frombuffer=lambda raw, dtype: FakeArr(raw, dtype)))
     with pytest.raises(EngineUnavailableError):
-        loaded(tmp_path)
+        loaded(tmp_path).run(req())  # the model is opened in run(), not load()
 
 
 def test_run_before_load_and_after_close(fake_fw, tmp_path):
@@ -215,3 +217,19 @@ def test_through_transcribe(fake_fw, tmp_path):
     t = _transcribe(wav_bytes(), reg, env[0], cache_dir=env[1], language="en", allow_unverified=True)
     assert t.text == "hello world" and t.engine == "whisper" and t.model_status == "unverified"
     assert any("allow_unverified" in n for n in t.notes)
+
+
+def test_model_is_opened_once_per_load_not_twice(fake_fw, tmp_path):
+    eng = loaded(tmp_path)
+    assert FakeModel.instances == []  # load() does not open the model
+    eng.run(req())
+    eng.run(req())
+    assert len(FakeModel.instances) == 1 and FakeModel.instances[0].kw["device"] == "auto"
+
+
+def test_run_after_close_is_an_error(fake_fw, tmp_path):
+    eng = loaded(tmp_path)
+    eng.run(req())
+    eng.close()
+    with pytest.raises(EngineError):
+        eng.run(req())
