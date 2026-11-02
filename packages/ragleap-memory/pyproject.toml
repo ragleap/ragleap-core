@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ragleap-memory"
-version = "0.1.0"
+version = "0.2.0"
 description = "Durable, tenant-scoped long-term memory for LLM applications: typed entries with trust labels, SQLite full-text search, supersession of changed facts, per-scope export and erase, and an optional tamper-evident audit log. Standard library plus ragleap-security. Single-tenant is one fixed scope. Not independently audited."
 readme = "README.md"
 license = "MIT"
