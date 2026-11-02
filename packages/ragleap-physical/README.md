@@ -27,6 +27,9 @@ lives in the bridge, in one place. The model cannot change the limits.
 - A three-joint arm model (MuJoCo XML in `examples/robots/`, plus a built-in stand-in), an offline ROS 2 observe-only mock that
   needs no ROS install, and a repeatability experiment in `benchmarks/` (exact replay within one installed environment;
   cross-machine repeatability is not claimed).
+- An operator console (`ragleap_physical.console`): the human side of the bridge. A named person sees the pending proposals,
+  approves the exact digest, applies, and can stop. Loopback only, one token per person, and the approver's name comes from the
+  token, never from the request. It is not a tool: the AI cannot reach it.
 - Not built: a second simulator, real hardware, Java and npm clients.
 - Simulation is not reality. Do not read a passing simulation test as proof for a real machine.
 

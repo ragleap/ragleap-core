@@ -191,6 +191,12 @@ class Bridge:
         return rec["proposal"]
 
     @_locked
+    def pending_proposals(self) -> list:
+        """Operator side: proposals waiting for a person (validated, not expired), oldest first. Not a model tool."""
+        self._expire_and_count(self._clock())
+        return [rec["proposal"] for rec in self._ledger.values() if rec["state"] == "validated"]
+
+    @_locked
     def approve(self, proposal: Proposal, approver: str) -> str:
         """Record an approval bound to the exact proposal shown. Returns its digest."""
         rec = self._ledger.get(proposal.proposal_id)
