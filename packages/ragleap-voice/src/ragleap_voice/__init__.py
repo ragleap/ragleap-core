@@ -11,6 +11,7 @@ from .gate import GateDecision
 from .synth import synthesize
 from .stream import transcribe_stream
 from .synth_stream import synthesize_stream
+from .transcriber import Transcriber
 from .whisper_engine import WhisperEngine
 from .parler_engine import make_parler_engine
 
@@ -19,7 +20,7 @@ __version__ = "0.3.1"
 register_engine(WhisperEngine())
 register_engine(make_parler_engine())
 
-__all__ = ["synthesize_stream", "transcribe_stream", "AudioDecodeError", "Capabilities", "ConsentRequiredError", "Engine", "EngineError", "EngineInfo",
+__all__ = ["Transcriber", "synthesize_stream", "transcribe_stream", "AudioDecodeError", "Capabilities", "ConsentRequiredError", "Engine", "EngineError", "EngineInfo",
            "EngineNotInstalledError", "EngineUnavailableError", "LicenceError", "ModelNotFoundError",
            "ModelNotVerifiedError", "NoEngineError", "RagleapVoiceError", "Registry", "Request", "Result",
            "Segment", "Speech", "Transcript", "UnsupportedFeatureError", "UnsupportedLanguageError",
