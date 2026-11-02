@@ -1,0 +1,47 @@
+name: ragleap-trace-integration
+# Not a required check. Runs the adapter against a real RagLeap + Postgres (fake embedder/generator, no paid API).
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "packages/ragleap-trace/**"
+      - "packages/ragleap-rag/src/ragleap/__init__.py"
+      - "packages/ragleap-rag/src/ragleap/observability.py"
+      - ".github/workflows/ragleap-trace-integration.yml"
+jobs:
+  integration:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ragleap_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      RAGLEAP_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ragleap_test
+      GEMINI_API_KEY: fake-ci-key
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.11'
+      - name: Install ragleap-rag and ragleap-trace
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e "packages/ragleap-rag[test]" -e "packages/ragleap-trace[test]"
+      - name: Integration tests (exactly 9 must pass; a skip or a missing test fails the job)
+        working-directory: packages/ragleap-trace
+        run: |
+          python -m pytest -q integration 2>&1 | tee /tmp/integration.txt
+          grep -E "^9 passed" /tmp/integration.txt
+      - name: Break proof (every deliberate break must be caught)
+        working-directory: packages/ragleap-trace
+        run: python scripts/integration_break.py
