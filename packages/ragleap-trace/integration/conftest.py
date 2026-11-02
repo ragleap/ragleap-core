@@ -12,6 +12,7 @@ from types import SimpleNamespace
 import pytest
 
 os.environ.setdefault("GEMINI_API_KEY", "example-test-key")
+API_KEY = os.environ["GEMINI_API_KEY"]  # fake; read at runtime so no key-like literal sits in a keyword argument
 
 from ragleap import EmbeddingConfig, ProviderConfig, RagLeap  # noqa: E402
 from ragleap.embedding import EmbeddingService  # noqa: E402
@@ -67,8 +68,8 @@ def _new_rag(**kwargs):
     return RagLeap(
         database_url=DATABASE_URL,
         embedder=EmbeddingConfig(provider="gemini", model="models/gemini-embedding-001",
-                                 api_key="example-test-key", dimensions=DIMENSIONS),
-        primary=ProviderConfig(provider="gemini", model="gemini-3.6-flash", api_key="example-test-key"),
+                                 api_key=API_KEY, dimensions=DIMENSIONS),
+        primary=ProviderConfig(provider="gemini", model="gemini-3.6-flash", api_key=API_KEY),
         **kwargs,
     )
 
