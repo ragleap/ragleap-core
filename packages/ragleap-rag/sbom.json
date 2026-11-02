@@ -1,7 +1,7 @@
 {
   "components": [
     {
-      "bom-ref": "Authlib==1.9.1",
+      "bom-ref": "Authlib==1.9.2",
       "description": "The ultimate Python library in building OAuth and OpenID Connect servers and clients.",
       "externalReferences": [
         {
@@ -50,12 +50,12 @@
         }
       ],
       "name": "Authlib",
-      "purl": "pkg:pypi/authlib@1.9.1",
+      "purl": "pkg:pypi/authlib@1.9.2",
       "type": "library",
-      "version": "1.9.1"
+      "version": "1.9.2"
     },
     {
-      "bom-ref": "EbookLib==0.20",
+      "bom-ref": "EbookLib==0.21",
       "description": "Ebook library which can handle EPUB2/EPUB3 format",
       "externalReferences": [
         {
@@ -74,7 +74,7 @@
           "url": "https://github.com/aerkalov/ebooklib"
         },
         {
-          "comment": "from packaging metadata: Home-page",
+          "comment": "from packaging metadata Project-URL: Homepage",
           "type": "website",
           "url": "https://github.com/aerkalov/ebooklib"
         }
@@ -88,9 +88,9 @@
         }
       ],
       "name": "EbookLib",
-      "purl": "pkg:pypi/ebooklib@0.20",
+      "purl": "pkg:pypi/ebooklib@0.21",
       "type": "library",
-      "version": "0.20"
+      "version": "0.21"
     },
     {
       "bom-ref": "PyYAML==6.0.3",
@@ -213,7 +213,7 @@
       "version": "2.3.0"
     },
     {
-      "bom-ref": "anyio==4.15.1",
+      "bom-ref": "anyio==4.16.0",
       "description": "High-level concurrency and networking framework on top of asyncio or Trio",
       "externalReferences": [
         {
@@ -246,9 +246,9 @@
         }
       ],
       "name": "anyio",
-      "purl": "pkg:pypi/anyio@4.15.1",
+      "purl": "pkg:pypi/anyio@4.16.0",
       "type": "library",
-      "version": "4.15.1"
+      "version": "4.16.0"
     },
     {
       "bom-ref": "arrow==1.4.0",
@@ -412,7 +412,7 @@
       "version": "5.0"
     },
     {
-      "bom-ref": "cachetools==7.2.5",
+      "bom-ref": "cachetools==7.2.8",
       "description": "Extensible memoizing collections and decorators",
       "externalReferences": [
         {
@@ -455,9 +455,9 @@
         }
       ],
       "name": "cachetools",
-      "purl": "pkg:pypi/cachetools@7.2.5",
+      "purl": "pkg:pypi/cachetools@7.2.8",
       "type": "library",
-      "version": "7.2.5"
+      "version": "7.2.8"
     },
     {
       "bom-ref": "certifi==2026.10.23",
@@ -740,7 +740,7 @@
       "version": "50.0.2"
     },
     {
-      "bom-ref": "cyclonedx-bom==7.5.0",
+      "bom-ref": "cyclonedx-bom==7.6.0",
       "description": "CycloneDX Software Bill of Materials (SBOM) generator for Python projects and environments",
       "externalReferences": [
         {
@@ -789,9 +789,9 @@
         }
       ],
       "name": "cyclonedx-bom",
-      "purl": "pkg:pypi/cyclonedx-bom@7.5.0",
+      "purl": "pkg:pypi/cyclonedx-bom@7.6.0",
       "type": "library",
-      "version": "7.5.0"
+      "version": "7.6.0"
     },
     {
       "bom-ref": "cyclonedx-python-lib==11.12.0",
@@ -1042,7 +1042,7 @@
       "version": "1.15.1"
     },
     {
-      "bom-ref": "filelock==4.2.4",
+      "bom-ref": "filelock==4.2.6",
       "description": "A platform independent file lock.",
       "externalReferences": [
         {
@@ -1053,17 +1053,22 @@
         {
           "comment": "from packaging metadata Project-URL: Tracker",
           "type": "issue-tracker",
-          "url": "https://github.com/tox-dev/py-filelock/issues"
+          "url": "https://github.com/tox-dev/filelock/issues"
         },
         {
           "comment": "from packaging metadata Project-URL: Source",
           "type": "other",
-          "url": "https://github.com/tox-dev/py-filelock"
+          "url": "https://github.com/tox-dev/filelock"
+        },
+        {
+          "comment": "from packaging metadata Project-URL: Changelog",
+          "type": "release-notes",
+          "url": "https://py-filelock.readthedocs.io/en/latest/changelog.html"
         },
         {
           "comment": "from packaging metadata Project-URL: Homepage",
           "type": "website",
-          "url": "https://github.com/tox-dev/py-filelock"
+          "url": "https://github.com/tox-dev/filelock"
         }
       ],
       "licenses": [
@@ -1075,9 +1080,9 @@
         }
       ],
       "name": "filelock",
-      "purl": "pkg:pypi/filelock@4.2.4",
+      "purl": "pkg:pypi/filelock@4.2.6",
       "type": "library",
-      "version": "4.2.4"
+      "version": "4.2.6"
     },
     {
       "bom-ref": "flatbuffers==25.12.19",
@@ -1213,7 +1218,7 @@
       "version": "2.62.0"
     },
     {
-      "bom-ref": "google-genai==2.33.0",
+      "bom-ref": "google-genai==2.34.0",
       "description": "GenAI Python SDK",
       "externalReferences": [
         {
@@ -1231,9 +1236,9 @@
         }
       ],
       "name": "google-genai",
-      "purl": "pkg:pypi/google-genai@2.33.0",
+      "purl": "pkg:pypi/google-genai@2.34.0",
       "type": "library",
-      "version": "2.33.0"
+      "version": "2.34.0"
     },
     {
       "bom-ref": "grpcio==1.78.0",
@@ -1335,7 +1340,7 @@
       "version": "4.4.1"
     },
     {
-      "bom-ref": "hf-xet==1.7.0",
+      "bom-ref": "hf-xet==1.8.0",
       "description": "Fast transfer of large files with the Hugging Face Hub.",
       "externalReferences": [
         {
@@ -1368,9 +1373,9 @@
         }
       ],
       "name": "hf-xet",
-      "purl": "pkg:pypi/hf-xet@1.7.0",
+      "purl": "pkg:pypi/hf-xet@1.8.0",
       "type": "library",
-      "version": "1.7.0"
+      "version": "1.8.0"
     },
     {
       "bom-ref": "hpack==4.2.0",
@@ -1604,7 +1609,7 @@
       "version": "2.16.0"
     },
     {
-      "bom-ref": "huggingface_hub==2.3.0",
+      "bom-ref": "huggingface_hub==2.4.0",
       "description": "Client library to download and publish models, datasets and other repos on the huggingface.co hub",
       "externalReferences": [
         {
@@ -1628,9 +1633,9 @@
         }
       ],
       "name": "huggingface_hub",
-      "purl": "pkg:pypi/huggingface-hub@2.3.0",
+      "purl": "pkg:pypi/huggingface-hub@2.4.0",
       "type": "library",
-      "version": "2.3.0"
+      "version": "2.4.0"
     },
     {
       "bom-ref": "hyperframe==6.1.0",
@@ -1809,7 +1814,7 @@
       "version": "1.7.7"
     },
     {
-      "bom-ref": "jsonpointer==3.5",
+      "bom-ref": "jsonpointer==3.7",
       "description": "Identify specific nodes in a JSON document (RFC 6901) ",
       "externalReferences": [
         {
@@ -1827,9 +1832,9 @@
         }
       ],
       "name": "jsonpointer",
-      "purl": "pkg:pypi/jsonpointer@3.5",
+      "purl": "pkg:pypi/jsonpointer@3.7",
       "type": "library",
-      "version": "3.5"
+      "version": "3.7"
     },
     {
       "bom-ref": "jsonschema==4.26.0",
@@ -2052,7 +2057,7 @@
       "version": "6.1.3"
     },
     {
-      "bom-ref": "lxml_html_clean==0.4.5",
+      "bom-ref": "lxml_html_clean==0.4.6",
       "description": "HTML cleaner from lxml project",
       "externalReferences": [
         {
@@ -2075,9 +2080,9 @@
         }
       ],
       "name": "lxml_html_clean",
-      "purl": "pkg:pypi/lxml-html-clean@0.4.5",
+      "purl": "pkg:pypi/lxml-html-clean@0.4.6",
       "type": "library",
-      "version": "0.4.5"
+      "version": "0.4.6"
     },
     {
       "bom-ref": "msgspec==0.22.0",
@@ -2194,7 +2199,7 @@
       "version": "1.4.1"
     },
     {
-      "bom-ref": "onnxruntime==1.31.0",
+      "bom-ref": "onnxruntime==1.31.1",
       "description": "ONNX Runtime is a runtime accelerator for Machine Learning models",
       "externalReferences": [
         {
@@ -2217,12 +2222,12 @@
         }
       ],
       "name": "onnxruntime",
-      "purl": "pkg:pypi/onnxruntime@1.31.0",
+      "purl": "pkg:pypi/onnxruntime@1.31.1",
       "type": "library",
-      "version": "1.31.0"
+      "version": "1.31.1"
     },
     {
-      "bom-ref": "openai==3.37.0",
+      "bom-ref": "openai==3.42.1",
       "description": "The official Python library for the openai API",
       "externalReferences": [
         {
@@ -2245,9 +2250,9 @@
         }
       ],
       "name": "openai",
-      "purl": "pkg:pypi/openai@3.37.0",
+      "purl": "pkg:pypi/openai@3.42.1",
       "type": "library",
-      "version": "3.37.0"
+      "version": "3.42.1"
     },
     {
       "bom-ref": "openpyxl==3.1.5",
@@ -2288,7 +2293,7 @@
       "version": "3.1.5"
     },
     {
-      "bom-ref": "opentelemetry-api==1.45.1",
+      "bom-ref": "opentelemetry-api==1.45.2",
       "description": "OpenTelemetry Python API",
       "externalReferences": [
         {
@@ -2311,9 +2316,9 @@
         }
       ],
       "name": "opentelemetry-api",
-      "purl": "pkg:pypi/opentelemetry-api@1.45.1",
+      "purl": "pkg:pypi/opentelemetry-api@1.45.2",
       "type": "library",
-      "version": "1.45.1"
+      "version": "1.45.2"
     },
     {
       "bom-ref": "orjson==3.13.0",
@@ -2606,7 +2611,7 @@
       "version": "32.0.1"
     },
     {
-      "bom-ref": "portalocker==4.4.1",
+      "bom-ref": "portalocker==4.4.2",
       "description": "Cross-platform file locking, with Redis, PID-file and bounded-semaphore locks",
       "externalReferences": [
         {
@@ -2639,9 +2644,9 @@
         }
       ],
       "name": "portalocker",
-      "purl": "pkg:pypi/portalocker@4.4.1",
+      "purl": "pkg:pypi/portalocker@4.4.2",
       "type": "library",
-      "version": "4.4.1"
+      "version": "4.4.2"
     },
     {
       "bom-ref": "protobuf==6.33.6",
@@ -2793,7 +2798,7 @@
       "version": "26.0.0"
     },
     {
-      "bom-ref": "pyasn1==0.6.4",
+      "bom-ref": "pyasn1==0.6.5",
       "description": "Pure-Python implementation of ASN.1 types and DER/BER/CER codecs (X.208)",
       "externalReferences": [
         {
@@ -2831,9 +2836,9 @@
         }
       ],
       "name": "pyasn1",
-      "purl": "pkg:pypi/pyasn1@0.6.4",
+      "purl": "pkg:pypi/pyasn1@0.6.5",
       "type": "library",
-      "version": "0.6.4"
+      "version": "0.6.5"
     },
     {
       "bom-ref": "pyasn1_modules==0.4.2",
@@ -2897,7 +2902,7 @@
       "version": "3.12"
     },
     {
-      "bom-ref": "pydantic==2.14.1",
+      "bom-ref": "pydantic==2.14.2",
       "description": "Data validation using Python type hints",
       "externalReferences": [
         {
@@ -2935,12 +2940,12 @@
         }
       ],
       "name": "pydantic",
-      "purl": "pkg:pypi/pydantic@2.14.1",
+      "purl": "pkg:pypi/pydantic@2.14.2",
       "type": "library",
-      "version": "2.14.1"
+      "version": "2.14.2"
     },
     {
-      "bom-ref": "pydantic_core==2.50.1",
+      "bom-ref": "pydantic_core==2.50.2",
       "description": "Core functionality for Pydantic validation and serialization",
       "externalReferences": [
         {
@@ -2973,9 +2978,9 @@
         }
       ],
       "name": "pydantic_core",
-      "purl": "pkg:pypi/pydantic-core@2.50.1",
+      "purl": "pkg:pypi/pydantic-core@2.50.2",
       "type": "library",
-      "version": "2.50.1"
+      "version": "2.50.2"
     },
     {
       "bom-ref": "pymilvus==3.0.2",
@@ -3044,7 +3049,7 @@
       "version": "3.3.3"
     },
     {
-      "bom-ref": "pypdf==6.21.2",
+      "bom-ref": "pypdf==6.21.4",
       "description": "A pure-python PDF library capable of splitting, merging, cropping, and transforming PDF files",
       "externalReferences": [
         {
@@ -3077,9 +3082,9 @@
         }
       ],
       "name": "pypdf",
-      "purl": "pkg:pypi/pypdf@6.21.2",
+      "purl": "pkg:pypi/pypdf@6.21.4",
       "type": "library",
-      "version": "6.21.2"
+      "version": "6.21.4"
     },
     {
       "bom-ref": "pytesseract==0.3.13",
@@ -3105,7 +3110,7 @@
       "version": "0.3.13"
     },
     {
-      "bom-ref": "python-dateutil==3.0.0",
+      "bom-ref": "python-dateutil==4.0.0",
       "description": "Extensions to the standard Python datetime module",
       "externalReferences": [
         {
@@ -3119,7 +3124,7 @@
           "url": "https://github.com/dateutil/dateutil"
         },
         {
-          "comment": "from packaging metadata: Home-page",
+          "comment": "from packaging metadata Project-URL: Homepage",
           "type": "website",
           "url": "https://github.com/dateutil/dateutil"
         }
@@ -3128,20 +3133,14 @@
         {
           "license": {
             "acknowledgement": "declared",
-            "name": "License :: OSI Approved :: Apache Software License"
-          }
-        },
-        {
-          "license": {
-            "acknowledgement": "declared",
-            "name": "License :: OSI Approved :: BSD License"
+            "id": "BSD-3-Clause"
           }
         }
       ],
       "name": "python-dateutil",
-      "purl": "pkg:pypi/python-dateutil@3.0.0",
+      "purl": "pkg:pypi/python-dateutil@4.0.0",
       "type": "library",
-      "version": "3.0.0"
+      "version": "4.0.0"
     },
     {
       "bom-ref": "python-docx==1.2.0",
@@ -3243,7 +3242,7 @@
       "version": "1.0.2"
     },
     {
-      "bom-ref": "pytz==2026.5",
+      "bom-ref": "pytz==2026.6",
       "description": "World timezone definitions, modern and historical",
       "externalReferences": [
         {
@@ -3276,9 +3275,9 @@
         }
       ],
       "name": "pytz",
-      "purl": "pkg:pypi/pytz@2026.5",
+      "purl": "pkg:pypi/pytz@2026.6",
       "type": "library",
-      "version": "2026.5"
+      "version": "2026.6"
     },
     {
       "bom-ref": "qdrant-client==1.20.0",
@@ -4076,7 +4075,7 @@
       "version": "4.16.0"
     },
     {
-      "bom-ref": "tzdata==2026.5",
+      "bom-ref": "tzdata==2026.6",
       "description": "Provider of IANA time zone data",
       "externalReferences": [
         {
@@ -4109,9 +4108,9 @@
         }
       ],
       "name": "tzdata",
-      "purl": "pkg:pypi/tzdata@2026.5",
+      "purl": "pkg:pypi/tzdata@2026.6",
       "type": "library",
-      "version": "2026.5"
+      "version": "2026.6"
     },
     {
       "bom-ref": "tzlocal==5.4.5",
@@ -4325,7 +4324,7 @@
       "version": "25.10.0"
     },
     {
-      "bom-ref": "websockets==17.3",
+      "bom-ref": "websockets==17.4",
       "description": "An implementation of the WebSocket Protocol (RFC 6455 & 7692)",
       "externalReferences": [
         {
@@ -4363,9 +4362,9 @@
         }
       ],
       "name": "websockets",
-      "purl": "pkg:pypi/websockets@17.3",
+      "purl": "pkg:pypi/websockets@17.4",
       "type": "library",
-      "version": "17.3"
+      "version": "17.4"
     },
     {
       "bom-ref": "xlrd==2.0.2",
@@ -4391,7 +4390,7 @@
       "version": "2.0.2"
     },
     {
-      "bom-ref": "xlsxwriter==3.3.0",
+      "bom-ref": "xlsxwriter==3.3.1",
       "description": "A Python module for creating Excel XLSX files.",
       "externalReferences": [
         {
@@ -4429,9 +4428,9 @@
         }
       ],
       "name": "xlsxwriter",
-      "purl": "pkg:pypi/xlsxwriter@3.3.0",
+      "purl": "pkg:pypi/xlsxwriter@3.3.1",
       "type": "library",
-      "version": "3.3.0"
+      "version": "3.3.1"
     }
   ],
   "dependencies": [
@@ -4440,14 +4439,13 @@
         "cryptography==50.0.2",
         "joserfc==1.7.7"
       ],
-      "ref": "Authlib==1.9.1"
+      "ref": "Authlib==1.9.2"
     },
     {
       "dependsOn": [
-        "lxml==6.1.3",
-        "six==1.17.0"
+        "lxml==6.1.3"
       ],
-      "ref": "EbookLib==0.20"
+      "ref": "EbookLib==0.21"
     },
     {
       "ref": "PyYAML==6.0.3"
@@ -4457,13 +4455,13 @@
     },
     {
       "dependsOn": [
-        "anyio==4.15.1",
+        "anyio==4.16.0",
         "docstring_parser==0.18.0",
         "google-auth==2.62.0",
         "httpx2==2.16.0",
         "jiter==0.18.0",
-        "opentelemetry-api==1.45.1",
-        "pydantic==2.14.1",
+        "opentelemetry-api==1.45.2",
+        "pydantic==2.14.2",
         "sniffio==1.3.1",
         "typing_extensions==4.16.0"
       ],
@@ -4474,14 +4472,14 @@
         "idna==3.20",
         "typing_extensions==4.16.0"
       ],
-      "ref": "anyio==4.15.1"
+      "ref": "anyio==4.16.0"
     },
     {
       "dependsOn": [
         "dateparser==1.4.3",
-        "python-dateutil==3.0.0",
-        "pytz==2026.5",
-        "tzdata==2026.5"
+        "python-dateutil==4.0.0",
+        "pytz==2026.6",
+        "tzdata==2026.6"
       ],
       "ref": "arrow==1.4.0"
     },
@@ -4490,9 +4488,9 @@
     },
     {
       "dependsOn": [
-        "pytz==2026.5",
+        "pytz==2026.6",
         "setuptools==79.0.1",
-        "tzdata==2026.5"
+        "tzdata==2026.6"
       ],
       "ref": "babel==2.18.0"
     },
@@ -4510,7 +4508,7 @@
       "ref": "boolean.py==5.0"
     },
     {
-      "ref": "cachetools==7.2.5"
+      "ref": "cachetools==7.2.8"
     },
     {
       "ref": "certifi==2026.10.23"
@@ -4553,7 +4551,7 @@
         "packaging==26.3",
         "pip-requirements-parser==32.0.1"
       ],
-      "ref": "cyclonedx-bom==7.5.0"
+      "ref": "cyclonedx-bom==7.6.0"
     },
     {
       "dependsOn": [
@@ -4570,8 +4568,8 @@
     },
     {
       "dependsOn": [
-        "python-dateutil==3.0.0",
-        "pytz==2026.5",
+        "python-dateutil==4.0.0",
+        "pytz==2026.6",
         "regex==2026.9.29",
         "tzlocal==5.4.5"
       ],
@@ -4597,7 +4595,7 @@
       "ref": "faiss-cpu==1.15.1"
     },
     {
-      "ref": "filelock==4.2.4"
+      "ref": "filelock==4.2.6"
     },
     {
       "ref": "flatbuffers==25.12.19"
@@ -4629,21 +4627,21 @@
     },
     {
       "dependsOn": [
-        "anyio==4.15.1",
+        "anyio==4.16.0",
         "distro==1.9.0",
         "google-auth==2.62.0",
         "httpx2==2.16.0",
         "httpx==0.28.1",
         "pillow==13.0.0",
         "protobuf==6.33.6",
-        "pydantic==2.14.1",
+        "pydantic==2.14.2",
         "requests==2.34.2",
         "sniffio==1.3.1",
         "tenacity==9.1.4",
         "typing_extensions==4.16.0",
-        "websockets==17.3"
+        "websockets==17.4"
       ],
-      "ref": "google-genai==2.33.0"
+      "ref": "google-genai==2.34.0"
     },
     {
       "dependsOn": [
@@ -4662,7 +4660,7 @@
       "ref": "h2==4.4.1"
     },
     {
-      "ref": "hf-xet==1.7.0"
+      "ref": "hf-xet==1.8.0"
     },
     {
       "ref": "hpack==4.2.0"
@@ -4672,14 +4670,14 @@
         "charset-normalizer==3.5.2",
         "dateparser==1.4.3",
         "lxml==6.1.3",
-        "python-dateutil==3.0.0",
+        "python-dateutil==4.0.0",
         "urllib3==2.8.0"
       ],
       "ref": "htmldate==1.11.0"
     },
     {
       "dependsOn": [
-        "anyio==4.15.1",
+        "anyio==4.16.0",
         "h11==0.16.0",
         "h2==4.4.1",
         "truststore==0.10.5"
@@ -4688,7 +4686,7 @@
     },
     {
       "dependsOn": [
-        "anyio==4.15.1",
+        "anyio==4.16.0",
         "certifi==2026.10.23",
         "h11==0.16.0",
         "h2==4.4.1"
@@ -4697,7 +4695,7 @@
     },
     {
       "dependsOn": [
-        "anyio==4.15.1",
+        "anyio==4.16.0",
         "click==8.5.0",
         "h2==4.4.1",
         "httpcore2==2.16.0",
@@ -4709,7 +4707,7 @@
     },
     {
       "dependsOn": [
-        "anyio==4.15.1",
+        "anyio==4.16.0",
         "certifi==2026.10.23",
         "click==8.5.0",
         "h2==4.4.1",
@@ -4720,22 +4718,21 @@
     },
     {
       "dependsOn": [
-        "Authlib==1.9.1",
+        "Authlib==1.9.2",
         "PyYAML==6.0.3",
         "click==8.5.0",
-        "filelock==4.2.4",
+        "filelock==4.2.6",
         "fsspec==2026.9.0",
-        "hf-xet==1.7.0",
+        "hf-xet==1.8.0",
         "httpx2==2.16.0",
         "numpy==2.4.6",
         "packaging==26.3",
         "pillow==13.0.0",
         "requests==2.34.2",
         "tqdm==4.70.1",
-        "typing_extensions==4.16.0",
-        "urllib3==2.8.0"
+        "typing_extensions==4.16.0"
       ],
-      "ref": "huggingface_hub==2.3.0"
+      "ref": "huggingface_hub==2.4.0"
     },
     {
       "ref": "hyperframe==6.1.0"
@@ -4759,7 +4756,7 @@
       "ref": "joserfc==1.7.7"
     },
     {
-      "ref": "jsonpointer==3.5"
+      "ref": "jsonpointer==3.7"
     },
     {
       "dependsOn": [
@@ -4773,7 +4770,7 @@
         "fqdn==1.6.0",
         "idna==3.20",
         "isoduration==20.11.0",
-        "jsonpointer==3.5",
+        "jsonpointer==3.7",
         "jsonschema-specifications==2025.9.1",
         "referencing==0.37.0",
         "rfc3339-validator==0.1.4",
@@ -4806,7 +4803,7 @@
     {
       "dependsOn": [
         "beautifulsoup4==4.15.0",
-        "lxml_html_clean==0.4.5"
+        "lxml_html_clean==0.4.6"
       ],
       "ref": "lxml==6.1.3"
     },
@@ -4814,7 +4811,7 @@
       "dependsOn": [
         "lxml==6.1.3"
       ],
-      "ref": "lxml_html_clean==0.4.5"
+      "ref": "lxml_html_clean==0.4.6"
     },
     {
       "dependsOn": [
@@ -4838,23 +4835,23 @@
         "packaging==26.3",
         "protobuf==6.33.6"
       ],
-      "ref": "onnxruntime==1.31.0"
+      "ref": "onnxruntime==1.31.1"
     },
     {
       "dependsOn": [
-        "anyio==4.15.1",
+        "anyio==4.16.0",
         "google-auth==2.62.0",
         "httpx2==2.16.0",
         "jiter==0.18.0",
         "numpy==2.4.6",
         "pandas==3.1.0",
-        "pydantic==2.14.1",
+        "pydantic==2.14.2",
         "sniffio==1.3.1",
         "typing_extensions==4.16.0",
         "urllib3==2.8.0",
-        "websockets==17.3"
+        "websockets==17.4"
       ],
-      "ref": "openai==3.37.0"
+      "ref": "openai==3.42.1"
     },
     {
       "dependsOn": [
@@ -4866,7 +4863,7 @@
       "dependsOn": [
         "typing_extensions==4.16.0"
       ],
-      "ref": "opentelemetry-api==1.45.1"
+      "ref": "opentelemetry-api==1.45.2"
     },
     {
       "ref": "orjson==3.13.0"
@@ -4889,11 +4886,11 @@
         "odfpy==1.4.1",
         "openpyxl==3.1.5",
         "pyarrow==26.0.0",
-        "python-dateutil==3.0.0",
-        "pytz==2026.5",
-        "tzdata==2026.5",
+        "python-dateutil==4.0.0",
+        "pytz==2026.6",
+        "tzdata==2026.6",
         "xlrd==2.0.2",
-        "xlsxwriter==3.3.0"
+        "xlsxwriter==3.3.1"
       ],
       "ref": "pandas==3.1.0"
     },
@@ -4908,7 +4905,7 @@
     },
     {
       "dependsOn": [
-        "anyio==4.15.1",
+        "anyio==4.16.0",
         "httpx==0.28.1",
         "msgspec==0.22.0",
         "orjson==3.13.0"
@@ -4930,7 +4927,7 @@
         "redis==8.1.0",
         "typing_extensions==4.16.0"
       ],
-      "ref": "portalocker==4.4.1"
+      "ref": "portalocker==4.4.2"
     },
     {
       "ref": "protobuf==6.33.6"
@@ -4948,11 +4945,11 @@
       "ref": "pyarrow==26.0.0"
     },
     {
-      "ref": "pyasn1==0.6.4"
+      "ref": "pyasn1==0.6.5"
     },
     {
       "dependsOn": [
-        "pyasn1==0.6.4"
+        "pyasn1==0.6.5"
       ],
       "ref": "pyasn1_modules==0.4.2"
     },
@@ -4962,22 +4959,22 @@
     {
       "dependsOn": [
         "annotated-types==0.8.0",
-        "pydantic_core==2.50.1",
+        "pydantic_core==2.50.2",
         "typing-inspection==0.4.4",
         "typing_extensions==4.16.0",
-        "tzdata==2026.5"
+        "tzdata==2026.6"
       ],
-      "ref": "pydantic==2.14.1"
+      "ref": "pydantic==2.14.2"
     },
     {
       "dependsOn": [
         "typing_extensions==4.16.0"
       ],
-      "ref": "pydantic_core==2.50.1"
+      "ref": "pydantic_core==2.50.2"
     },
     {
       "dependsOn": [
-        "cachetools==7.2.5",
+        "cachetools==7.2.8",
         "grpcio==1.78.0",
         "orjson==3.13.0",
         "pandas==3.1.0",
@@ -4999,7 +4996,7 @@
         "pillow==13.0.0",
         "typing_extensions==4.16.0"
       ],
-      "ref": "pypdf==6.21.2"
+      "ref": "pypdf==6.21.4"
     },
     {
       "dependsOn": [
@@ -5010,10 +5007,9 @@
     },
     {
       "dependsOn": [
-        "six==1.17.0",
-        "tzdata==2026.5"
+        "tzdata==2026.6"
       ],
-      "ref": "python-dateutil==3.0.0"
+      "ref": "python-dateutil==4.0.0"
     },
     {
       "dependsOn": [
@@ -5033,12 +5029,12 @@
         "lxml==6.1.3",
         "pillow==13.0.0",
         "typing_extensions==4.16.0",
-        "xlsxwriter==3.3.0"
+        "xlsxwriter==3.3.1"
       ],
       "ref": "python-pptx==1.0.2"
     },
     {
-      "ref": "pytz==2026.5"
+      "ref": "pytz==2026.6"
     },
     {
       "dependsOn": [
@@ -5046,9 +5042,9 @@
         "httpx==0.28.1",
         "numpy==2.4.6",
         "orjson==3.13.0",
-        "portalocker==4.4.1",
+        "portalocker==4.4.2",
         "protobuf==6.33.6",
-        "pydantic==2.14.1",
+        "pydantic==2.14.2",
         "urllib3==2.8.0"
       ],
       "ref": "qdrant-client==1.20.0"
@@ -5056,7 +5052,7 @@
     {
       "dependsOn": [
         "cryptography==50.0.2",
-        "opentelemetry-api==1.45.1",
+        "opentelemetry-api==1.45.2",
         "requests==2.34.2"
       ],
       "ref": "redis==8.1.0"
@@ -5099,18 +5095,18 @@
     },
     {
       "dependsOn": [
-        "EbookLib==0.20",
+        "EbookLib==0.21",
         "PyYAML==6.0.3",
         "anthropic==2.3.0",
         "beautifulsoup4==4.15.0",
         "faiss-cpu==1.15.1",
-        "google-genai==2.33.0",
-        "huggingface_hub==2.3.0",
+        "google-genai==2.34.0",
+        "huggingface_hub==2.4.0",
         "jsonschema==4.26.0",
-        "lxml_html_clean==0.4.5",
+        "lxml_html_clean==0.4.6",
         "odfpy==1.4.1",
-        "onnxruntime==1.31.0",
-        "openai==3.37.0",
+        "onnxruntime==1.31.1",
+        "openai==3.42.1",
         "openpyxl==3.1.5",
         "pandas==3.1.0",
         "pillow==13.0.0",
@@ -5118,7 +5114,7 @@
         "psycopg2-binary==2.9.13",
         "pyarrow==26.0.0",
         "pymilvus==3.0.2",
-        "pypdf==6.21.2",
+        "pypdf==6.21.4",
         "pytesseract==0.3.13",
         "python-docx==1.2.0",
         "python-pptx==1.0.2",
@@ -5139,7 +5135,7 @@
     },
     {
       "dependsOn": [
-        "filelock==4.2.4",
+        "filelock==4.2.6",
         "packaging==26.3",
         "pip==26.2.2"
       ],
@@ -5175,7 +5171,7 @@
     },
     {
       "dependsOn": [
-        "huggingface_hub==2.3.0",
+        "huggingface_hub==2.4.0",
         "numpy==2.4.6",
         "requests==2.34.2"
       ],
@@ -5214,11 +5210,11 @@
       "ref": "typing_extensions==4.16.0"
     },
     {
-      "ref": "tzdata==2026.5"
+      "ref": "tzdata==2026.6"
     },
     {
       "dependsOn": [
-        "tzdata==2026.5"
+        "tzdata==2026.6"
       ],
       "ref": "tzlocal==5.4.5"
     },
@@ -5236,13 +5232,13 @@
     },
     {
       "dependsOn": [
-        "Authlib==1.9.1",
+        "Authlib==1.9.2",
         "certifi==2026.10.23",
         "grpcio==1.78.0",
         "httpx==0.28.1",
         "packaging==26.3",
         "protobuf==6.33.6",
-        "pydantic==2.14.1",
+        "pydantic==2.14.2",
         "validators==0.36.0"
       ],
       "ref": "weaviate-client==4.24.1"
@@ -5251,13 +5247,13 @@
       "ref": "webcolors==25.10.0"
     },
     {
-      "ref": "websockets==17.3"
+      "ref": "websockets==17.4"
     },
     {
       "ref": "xlrd==2.0.2"
     },
     {
-      "ref": "xlsxwriter==3.3.0"
+      "ref": "xlsxwriter==3.3.1"
     }
   ],
   "metadata": {
@@ -5298,7 +5294,7 @@
       "type": "library",
       "version": "0.14.0"
     },
-    "timestamp": "2026-10-26T10:40:19.214856+00:00",
+    "timestamp": "2026-11-02T12:59:08.492550+00:00",
     "tools": {
       "components": [
         {
@@ -5348,7 +5344,7 @@
           ],
           "name": "cyclonedx-py",
           "type": "application",
-          "version": "7.5.0"
+          "version": "7.6.0"
         },
         {
           "description": "Python library for CycloneDX",
@@ -5402,7 +5398,7 @@
       ]
     }
   },
-  "serialNumber": "urn:uuid:a3358b52-c3be-4d7e-92f5-9899f2bdbdf7",
+  "serialNumber": "urn:uuid:7f6cdf0b-0f14-4942-ac8d-e5eb072c6ef6",
   "version": 1,
   "$schema": "http://cyclonedx.org/schema/bom-1.6.schema.json",
   "bomFormat": "CycloneDX",
