@@ -3,7 +3,7 @@
 All notable changes to `ragleap-memory` are documented here. Format
 loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [0.2.0] - unreleased
+## [0.2.0] - 2026-11-02
 
 Design: #900 (comment of 2026-10-25). Pushpa's requirements: low and predictable token use, no bill spike however large the memory, strongly indexed separate compartments.
 
@@ -29,12 +29,23 @@ Design: #900 (comment of 2026-10-25). Pushpa's requirements: low and predictable
 - 306 tests pass in the author's sandbox (Python 3.12, SQLite 3.45.1): the 89 tests of 0.1.0 unchanged plus 217 new ones (many are parameterised). All 84 mutations are killed there. Two things were found by tests or mutations along the way: a race when a shard is evicted between lookup and use, and an import header with `"version": true` that was accepted because `True == 1` in Python; both are fixed and tested.
 - A hand-built 0.1.0 database migrates, keeps its entries and search, and its totals feed the quota. A migration that fails half way leaves the file as 0.1.0 wrote it.
 - On the VPS (Python 3.10.12, SQLite 3.37.2), run by Pushpa: 306 tests pass and all 84 mutations are killed.
+- CI on pull request #1107: all 49 checks passed, including `ragleap-memory-tests` on Python 3.10, 3.11 and 3.12 and the Plugin Security Scan.
+
+### Measured (one run on the VPS, 2026-11-02)
+
+AMD EPYC 7543P (1 core reported), Python 3.10.12, SQLite 3.37.2, load average 0.14. Synthetic text (12 words per entry, a Zipf-like 5,000-word vocabulary), 3-word queries, 200 queries per case, `k=50`. Every search also writes a usage counter: in a separate check on 10,000 entries that write cost about 2 ms of an 11.7 ms median.
+
+- A 300-token budget held in every case (the largest total served was 300 tokens). Without a budget a search served 859 to 1,057 tokens on average. The budget does not make a search faster.
+- One tenant, one file: 10,000 entries median 20.6 ms, p95 47.5 ms; 100,000 entries median 89.9 ms, p95 253.7 ms.
+- Hard case (only 30 distinct words, so nearly every entry matches): 100,000 entries median 242.7 ms, p95 331.0 ms.
+- 100 tenants, 100,000 entries in total, one tenant queried: one shared file median 28.9 ms (p95 46.8 ms); `ShardedStore` median 5.4 ms (p95 9.8 ms); `ShardedStore` with queries rotating over all 100 tenants and `max_open` 64: median 15.2 ms (p95 24.3 ms).
+- Adding entries one at a time (one transaction each): about 290 to 510 per second.
+- Numbers varied between runs on the same machine (a 10,000-entry case measured 20.6 ms median in the full run and 11.7 ms in a later separate run), so treat them as orders of magnitude, not as a promise.
 
 ### Not verified
 
-- The CI matrix (3.10, 3.11, 3.12): not run yet when this was written.
 - Import of very large files (the file is read in full before it is written; the limits bound it), and any import from tools other than this library's own export.
-- Any performance number. No benchmark has been run on the VPS. Earlier numbers from a different machine are not published here.
+- Speed beyond the single run above: 1,000,000 entries, other hardware or disks, real text instead of synthetic text, several processes, and the speed of `import_file`.
 - Windows, network file systems, several processes writing one file, power-loss durability, and more than a few threads on `ShardedStore`.
 - Retrieval quality and multilingual precision (unchanged from 0.1.0). Token estimates against any real tokenizer.
 - No independent security review has been done.
