@@ -3,7 +3,9 @@
 Standard library only. The engine is handed directories of verified model files and never fetches anything itself.
 Nothing here swallows an error and turns it into a default.
 """
+import os
 import pathlib
+import time
 from collections.abc import Mapping
 
 from .cache import cache_root, model_dir
@@ -22,6 +24,47 @@ from .results import Transcript
 from .wavio import read_wav
 
 _PULL_HINT = "pull the model first: ragleap-voice models pull (see its --help for the arguments)."
+
+
+_RACY_NS = 2_000_000_000  # a folder with an entry changed within this long before the check is not cached (timestamp granularity)
+_VERIFIED = {}  # (folder, lock files) -> fingerprint of the folder when it last passed a full hash check, per process
+
+
+def _fingerprint(d):
+    """Stat-only fingerprint of a model folder: path, mode, size, inode, mtime_ns and ctime_ns of every entry. None on error."""
+    base = str(d)
+    out = []
+    try:
+        for dirpath, dirnames, filenames in os.walk(base, followlinks=False):
+            for name in sorted(dirnames) + sorted(filenames):
+                full = os.path.join(dirpath, name)
+                st = os.lstat(full)
+                out.append((os.path.relpath(full, base), st.st_mode, st.st_size, st.st_ino, st.st_mtime_ns, st.st_ctime_ns))
+        st = os.lstat(base)
+        out.append((".", st.st_mode, 0, st.st_ino, st.st_mtime_ns, st.st_ctime_ns))
+    except OSError:
+        return None
+    return tuple(sorted(out))
+
+
+def _verify_cached(lock, d):
+    """verify_dir, but a folder that passed a full SHA-256 check earlier in this process is accepted again while its
+    fingerprint is unchanged. This weakens the per-call check: someone who can alter a model file and restore its size,
+    inode, mtime and ctime inside one running process is not caught until the next process. Set RAGLEAP_VOICE_VERIFY=always
+    to hash on every call. Failed checks are never cached."""
+    if os.environ.get("RAGLEAP_VOICE_VERIFY", "").strip().lower() == "always":
+        return verify_dir(lock, d)
+    key = (str(d), tuple((f["path"], f["size"], f["sha256"]) for f in lock["files"]))
+    before = _fingerprint(d)
+    if before is not None and _VERIFIED.get(key) == before:
+        return []
+    _VERIFIED.pop(key, None)
+    problems = verify_dir(lock, d)
+    if not problems and before is not None and _fingerprint(d) == before:
+        newest = max(max(e[4], e[5]) for e in before)
+        if time.time_ns() - newest > _RACY_NS:
+            _VERIFIED[key] = before
+    return problems
 
 
 def _pick_engine(registry, name, language):
@@ -120,7 +163,7 @@ def _resolve_models(eng, manifest_path, cache_dir, allow_unverified):
         if not problems and (e.sha256 or e.status == "verified") and lock_digest(lock) != e.sha256:
             problems = ["the lock digest does not match the manifest"]
         if not problems:
-            problems = verify_dir(lock, d)
+            problems = _verify_cached(lock, d)
         if problems:
             more = "" if len(problems) <= 3 else " (and %d more)" % (len(problems) - 3)
             raise ModelNotVerifiedError("model %r failed verification: %s%s." % (e.name, "; ".join(problems[:3]), more),

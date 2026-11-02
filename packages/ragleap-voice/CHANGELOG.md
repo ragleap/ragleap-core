@@ -5,6 +5,7 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 ### Changed
+- `transcribe()` and `synthesize()` now verify a model folder with the full SHA-256 check once per process; later calls accept it while a stat fingerprint of the folder (path, mode, size, inode, mtime, ctime) is unchanged, and any change forces a full re-hash. Failed checks are never cached. Set `RAGLEAP_VOICE_VERIFY=always` to hash on every call. This weakens the per-call check: someone who can change a model file and restore its size, inode, mtime and ctime inside one running process is not caught until the process restarts. `models verify` and the check after `models pull` still hash everything. A folder with any entry changed in the last 2 seconds is not cached, because file timestamps are coarse. A profile on one Colab T4 showed the per-call hash of the 3 GB Whisper model at roughly 10 s; the saving after this change is not yet measured.
 - Whisper engine: `load()` no longer opens the model; it is opened once in `run()` with the requested device. Before, a call with an explicit device (for example `device="cuda"`) opened the 3 GB model twice. Measured cost of the double open on one Colab T4 was about 2.5 s per call (from a profile, not a benchmark).
 
 ## [0.3.1] - 2026-11-01
