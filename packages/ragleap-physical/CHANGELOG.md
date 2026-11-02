@@ -36,3 +36,5 @@ All notable changes are listed here. Format: Keep a Changelog.
 - Found by two independent adversarial review rounds and by the lead's own review. AI-assisted.
 - Three-joint arm model (`FakeArm3Adapter`, MuJoCo XML), offline ROS 2 observe-only mock (`MockROS2ObserveAdapter`), repeatability
   experiment in `benchmarks/`. Tests in `examples/robots/` and `benchmarks/` now run by default.
+- Operator console (`ragleap_physical.console`): a named person approves the exact proposal, applies it and can stop. Loopback only,
+  one token per person. New read-only `Bridge.pending_proposals()`.
