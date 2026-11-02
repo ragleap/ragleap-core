@@ -54,6 +54,7 @@ pip install -e ".[mujoco,test]"   # with the optional MuJoCo adapter
 pip install -e ".[test,interop]"  # also runs the MCP SDK interop test
 pytest
 python examples/demo_fake.py
+python examples/two_link_workspace_demo.py
 ```
 
 Report vulnerabilities privately through the repository's Security tab (see `SECURITY.md`).
