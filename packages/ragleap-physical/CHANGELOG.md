@@ -4,6 +4,17 @@ All notable changes are listed here. Format: Keep a Changelog.
 
 ## [Unreleased]
 
+## [0.0.2] - 2026-11-02
+
+### Added
+- Operator console (`ragleap_physical.console`): a named person approves the exact proposal, applies it and can stop. Loopback only,
+  one token per person. New read-only `Bridge.pending_proposals()`.
+- Observe-only energy site mock and MTConnect document reader (simulation only, strict input limits), a first-hour guide, an
+  industry guide with runnable examples, and Hindi and Tamil README drafts (not reviewed by native speakers).
+- The wear study notebook has a pluggable wear model (Taylor's equation, with assumptions stated).
+
+## [0.0.1] - 2026-11-02
+
 ### Added
 - Observation and proposal formats v0, capability levels, safety envelope, bridge with approvals,
   dry run, outcome check and stop.
@@ -20,6 +31,8 @@ All notable changes are listed here. Format: Keep a Changelog.
   hard scenarios and paired statistics. It makes no claim about real machines.
 - Simulated machine tool (`FakeMachineToolAdapter`) and the `set_tool_offset` command (range, step and minimum-gap limits
   re-checked at apply time). Tool change is not a command.
+- Three-joint arm model (`FakeArm3Adapter`, MuJoCo XML), offline ROS 2 observe-only mock (`MockROS2ObserveAdapter`), repeatability
+  experiment in `benchmarks/`. Tests in `examples/robots/` and `benchmarks/` now run by default.
 
 ### Changed (hardening, found by independent review)
 - Identifiers and actor ids no longer accept a trailing newline (`fullmatch`); a huge integer is a `ValidationError`, not an `OverflowError`.
@@ -34,10 +47,3 @@ All notable changes are listed here. Format: Keep a Changelog.
 - The requester can no longer approve its own proposal (refused and audited).
 - Units `W` and `kWh` accepted. `Envelope.observe_only()` and `Bridge(adapter, None, ...)` for observe and analyse only.
 - Found by two independent adversarial review rounds and by the lead's own review. AI-assisted.
-- Three-joint arm model (`FakeArm3Adapter`, MuJoCo XML), offline ROS 2 observe-only mock (`MockROS2ObserveAdapter`), repeatability
-  experiment in `benchmarks/`. Tests in `examples/robots/` and `benchmarks/` now run by default.
-- Operator console (`ragleap_physical.console`): a named person approves the exact proposal, applies it and can stop. Loopback only,
-  one token per person. New read-only `Bridge.pending_proposals()`.
-- Observe-only energy site mock and MTConnect document reader (simulation only, strict input limits), a first-hour guide, an
-  industry guide with runnable examples, and Hindi and Tamil README drafts (not reviewed by native speakers).
-- The wear study notebook has a pluggable wear model (Taylor's equation, with assumptions stated).
