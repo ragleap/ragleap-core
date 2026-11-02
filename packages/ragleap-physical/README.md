@@ -30,6 +30,9 @@ lives in the bridge, in one place. The model cannot change the limits.
 - An operator console (`ragleap_physical.console`): the human side of the bridge. A named person sees the pending proposals,
   approves the exact digest, applies, and can stop. Loopback only, one token per person, and the approver's name comes from the
   token, never from the request. It is not a tool: the AI cannot reach it.
+- Two observe-only industrial mocks, with no network and no real meter or machine: a simulated energy site and an MTConnect
+  document reader with strict limits (it refuses DTDs and entities, and caps size). MTConnect itself is not purely read-only;
+  these adapters only read. See `docs/industry/observe-only-adapters.md` and the first-hour guide `docs/first-hour.md`.
 - Not built: a second simulator, real hardware, Java and npm clients.
 - Simulation is not reality. Do not read a passing simulation test as proof for a real machine.
 
@@ -54,3 +57,6 @@ python examples/demo_fake.py
 ```
 
 Report vulnerabilities privately through the repository's Security tab (see `SECURITY.md`).
+
+## Other languages (drafts, not reviewed by native speakers)
+[Hindi](README.hi.md) · [Tamil](README.ta.md)
