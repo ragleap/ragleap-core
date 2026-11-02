@@ -150,11 +150,15 @@ class TranscriptStream:
 
 
 def transcribe_stream(chunks=None, *, rate=16000, language=None, engine="auto", allow_unverified=False, cache_dir=None,
-                      options=None, gate="energy", gate_options=None, max_bytes=DEFAULT_MAX_BYTES):
-    """Return a TranscriptStream. Pass chunks (an iterable of PCM16 bytes) or call feed() and finish() yourself."""
+                      options=None, gate="energy", gate_options=None, max_bytes=DEFAULT_MAX_BYTES, transcriber=None):
+    """Return a TranscriptStream. Pass chunks (an iterable of PCM16 bytes) or call feed() and finish() yourself.
+    transcriber: an optional Transcriber that keeps the Whisper model open; then engine is ignored."""
     from .api import transcribe
 
     def runner(wav):
+        if transcriber is not None:
+            return transcriber.transcribe(wav, language=language, allow_unverified=allow_unverified, cache_dir=cache_dir,
+                                          timestamps=True, options=options, gate="off")
         return transcribe(wav, language=language, engine=engine, allow_unverified=allow_unverified, cache_dir=cache_dir,
                           timestamps=True, options=options, gate="off")
 
