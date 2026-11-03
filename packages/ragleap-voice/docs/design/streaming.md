@@ -1,6 +1,6 @@
 # Streaming (v1, implemented as adapters)
 
-Status: pre-alpha. Evidence tags: [verified] merged on main and tested with fakes; [plan]; [unverified]. Drafted with a peer engineer's design; claims here follow the merged code.
+Status: pre-alpha. Evidence tags: [verified] merged on main and tested with fakes; [plan]; [unverified]. Claims here follow the merged code.
 
 ## What exists (all in `ragleap_voice`; only `transcribe_stream` and `synthesize_stream` are exported, the resamplers and `StreamGate` are not)
 

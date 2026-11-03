@@ -48,6 +48,30 @@ Rules for every adapter:
 - Events: call.started, dtmf (digit), playback.finished (the equivalent of Twilio's mark), call.ended, error.
 - Every frame carries a monotonic timestamp so latency can be measured end to end.
 
+### Transport authentication (required)
+
+Status: a requirement for every phone adapter. Implementation is planned; no adapter is assumed to meet it until it is tested. [plan]
+
+Every phone adapter must authenticate its transport before accepting media or acting on provider events.
+
+- Provider webhooks: validate the provider's request signature, or an equivalent authenticated-request mechanism, before processing the webhook.
+- Media WebSocket: authenticate the connection with the provider's supported signature or a session token before accepting media frames.
+- Where the provider uses separate webhook and media connections, authenticating one must not be treated as authenticating the other. Each connection is authenticated under its own transport contract.
+
+Required behaviour:
+
+1. Unauthenticated media connections are refused by default.
+2. Missing, invalid or expired authentication evidence causes the connection or request to be rejected.
+3. Authentication is checked before media is accepted or provider events are acted on.
+4. A failed check never falls back to an unauthenticated mode.
+5. A missing or invalid authentication configuration produces a loud, actionable startup or connection warning. An adapter that cannot enforce authentication must not run as if it were protected.
+6. Authentication secrets are never written to logs, transcripts, error messages or diagnostic output.
+7. Tests cover accepted and rejected cases for every supported transport.
+
+Acceptance criteria: a correctly authenticated webhook is accepted; a webhook with missing or invalid evidence is rejected; a correctly authenticated media connection is accepted; a media connection without authentication is refused by default; invalid or expired session credentials are rejected; misconfiguration produces a prominent warning and does not silently disable authentication; an authentication failure prevents media processing and event handling.
+
+[unverified] Signature algorithms, token format, credential provisioning, rotation, expiry and revocation depend on the selected provider and transport and must be specified by each adapter design. This requirement does not prescribe a universal mechanism.
+
 ## 5. What ragleap-phone needs from ragleap-voice
 
 These are requirements for the Stage 3 streaming design in the 0.1.0 API draft (#762), which reserves the names below:
