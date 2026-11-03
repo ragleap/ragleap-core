@@ -1,6 +1,7 @@
 # UTCP: governed UTCP manuals as ragleap-tools Tools, and Code Mode (design note)
 
-Status: design note only. Nothing is implemented. Written 2026-10-31 (task J-7).
+Status: first slice implemented in ragleap-integrations 0.4.0 (connect_utcp); see
+"Implemented in 0.4.0" below. Written 2026-10-31 (task J-7).
 Every statement about UTCP or Code Mode below comes from the sources listed
 under Verification status; none of it was tested by us.
 
@@ -85,6 +86,33 @@ how much of the batching benefit it keeps is not measured; (2) our own
 restricted runner in a separate process with operating-system limits; (3) the
 UTCP `code-mode` package as an optional dependency.
 
+## Implemented in 0.4.0
+
+The first slice of A is in `ragleap_integrations.utcp` (`connect_utcp`). Where
+it differs from the proposal above, or settles a point the proposal left open:
+
+- The `http` call template fields were read in the project's documentation:
+  `http_method`, `url`, `content_type`, `auth`, `auth_tools`, `headers`,
+  `body_field` and `header_fields`; path parameters are `{name}` in the URL, the
+  `body_field` argument is the body and the remaining arguments are query
+  parameters. A template may carry only those fields plus `name`; any other
+  field (for example `query_params`) makes the tool skipped, because ignoring
+  it would change what a call means. `auth`, `auth_tools` and `header_fields`
+  are accepted only when empty; with a value, the tool is skipped.
+- No `${NAME}` or `$NAME` placeholder is substituted anywhere and nothing is
+  read from the environment; a tool with a placeholder is skipped. This closes
+  the one risk the documentation leaves open (a manual naming a local
+  variable so that its value is sent to the provider).
+- OpenAPI documents are refused (the Python reference client converts them
+  automatically; this package does not).
+- The transport gained a `method` parameter (`https_request`); `https_post`
+  is unchanged for callers.
+- Declared auth is not used. The owner's token is sent as a bearer token to
+  approved origins. Tools that declare their own auth are skipped until each
+  auth type has been read and tested.
+- Still open: a multi-tenant `UtcpHub` (or one hub for MCP and UTCP), and
+  everything in item C.
+
 ## Rejected alternatives
 
 - Depend on the `utcp` Python packages for the client. It would add
@@ -121,7 +149,8 @@ UTCP `code-mode` package as an optional dependency.
 
 ## Limitations
 
-- Nothing here is built or tested.
+- The proposal above was written before any code; the first slice is now built and tested (see
+  "Implemented in 0.4.0") but not live-verified against a real UTCP server.
 - The first slice would cover `http` manuals only and a bearer token only.
 - Origin pinning will reject manuals whose tools legitimately live on several
   hosts unless the owner lists them.
@@ -129,7 +158,9 @@ UTCP `code-mode` package as an optional dependency.
 
 ## Verification status
 
-- No code, no tests, no live check.
+- 0.4.0: 545 tests including the new client, no live check against a real UTCP server.
+  The HTTP call template fields were additionally read in the project's HTTP protocol
+  documentation and the Python client's API reference on 2026-10-31.
 - Read on 2026-10-31: the UTCP implementation guide (utcp.io), the UTCP
   specification repository's documentation PR, the README and pull requests of
   the Python, TypeScript and Ruby UTCP clients (as shown by search results and

@@ -1,7 +1,8 @@
 """
 ragleap_integrations._net
 
-A bounded HTTPS POST for MCP servers - standard library only.
+A bounded HTTPS request - POST for MCP servers, GET/POST/PUT/DELETE/PATCH for UTCP -
+standard library only.
 
 Every property below is enforced in code, not just documented:
 - https only, no credentials in the URL, no IP-literal hosts.
@@ -38,6 +39,7 @@ from typing import Callable, Dict, Optional, Tuple
 from urllib.parse import urlsplit
 
 MAX_URL_CHARS = 2048
+ALLOWED_METHODS = ("GET", "POST", "PUT", "DELETE", "PATCH")
 DEFAULT_TOTAL_TIMEOUT = 30.0
 DEFAULT_OP_TIMEOUT = 10.0
 DEFAULT_MAX_BYTES = 1024 * 1024
@@ -59,6 +61,7 @@ _REASONS = {
     "deadline": "response too slow",
     "too_large": "response too large; raise max_response_bytes",
     "io": "network error",
+    "method": "http method not allowed",
 }
 
 
@@ -151,10 +154,11 @@ def _default_context() -> ssl.SSLContext:
     return ctx
 
 
-def https_post(
+def https_request(
+    method: str,
     url: str,
     headers: Dict[str, str],
-    body: bytes,
+    body: Optional[bytes],
     *,
     total_timeout: float = DEFAULT_TOTAL_TIMEOUT,
     op_timeout: float = DEFAULT_OP_TIMEOUT,
@@ -164,11 +168,13 @@ def https_post(
     connect: Optional[Callable[[str, int, float], socket.socket]] = None,
     ssl_context: Optional[ssl.SSLContext] = None,
 ) -> HttpResponse:
-    """One POST to the pinned IP. Raises TransportError; never follows
+    """One request (method is one of ALLOWED_METHODS) to the pinned IP. Raises TransportError; never follows
     redirects. stop(buffer_so_far) -> True ends the read early (used to
     stop at the final response of an event stream). resolver, connect and
     ssl_context exist so tests can run without real DNS or certificates;
     production callers leave them alone."""
+    if method not in ALLOWED_METHODS:
+        raise TransportError("method")
     host, port, path = validate_url(url)
     ip = resolve_public(host, port, resolver)
 
@@ -213,7 +219,7 @@ def https_post(
             "User-Agent": USER_AGENT,
         }
         send_headers.update(headers)
-        conn.request("POST", path, body=body, headers=send_headers)
+        conn.request(method, path, body=body, headers=send_headers)
         resp = conn.getresponse()
         status = resp.status
         resp_headers = {k.lower(): v for k, v in resp.getheaders()}
@@ -266,3 +272,8 @@ def https_post(
                 raw.close()
             except OSError:
                 pass
+
+
+def https_post(url: str, headers: Dict[str, str], body: bytes, **kwargs) -> HttpResponse:
+    """One POST (what the MCP client sends); see https_request for the options."""
+    return https_request("POST", url, headers, body, **kwargs)
