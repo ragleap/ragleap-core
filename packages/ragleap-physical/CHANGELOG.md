@@ -12,6 +12,8 @@ All notable changes are listed here. Format: Keep a Changelog.
 - Observe-only energy site mock and MTConnect document reader (simulation only, strict input limits), a first-hour guide, an
   industry guide with runnable examples, and Hindi and Tamil README drafts (not reviewed by native speakers).
 - The wear study notebook has a pluggable wear model (Taylor's equation, with assumptions stated).
+- Package metadata: project links (homepage, documentation, source, issues, changelog, roadmap), author, keywords and more classifiers, so the
+  PyPI page shows them. No code change.
 
 ## [0.0.1] - 2026-11-02
 
