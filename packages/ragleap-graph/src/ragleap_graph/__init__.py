@@ -179,6 +179,7 @@ from ragleap_graph.extraction import (
     LLMRelationExtractor,
 )
 from ragleap_graph.retrieval import GraphRetriever, GraphRetrievalConfig
+from ragleap_graph.communities import detect_communities as _detect_communities
 
 logger = logging.getLogger(__name__)
 
@@ -1422,6 +1423,420 @@ class GraphIndex:
             return contributions[:max(1, int(limit))]
         except Exception as e:
             logger.error(f"Lineage lookup error: {e}", exc_info=True)
+            return []
+
+    # ------------------------------------------------------------------
+    # Communities (unreleased): groups of entities that belong together,
+    # for questions about the whole corpus instead of one entity.
+    # ------------------------------------------------------------------
+
+    _COMMUNITY_CONSTRAINT = (
+        "CREATE CONSTRAINT community_composite_key IF NOT EXISTS "
+        "FOR (c:Community) REQUIRE c.composite_key IS UNIQUE"
+    )
+    _COMMUNITY_CO_OCCURS_EDGES = """
+        MATCH (a:Entity {namespace: $namespace})-[r:CO_OCCURS_WITH]-(b:Entity {namespace: $namespace})
+        WHERE a.name < b.name
+          AND coalesce(a.user_id, '') = $user_id
+          AND coalesce(b.user_id, '') = $user_id
+        RETURN a.name AS a, b.name AS b, coalesce(r.weight, 1.0) AS weight
+        LIMIT $limit
+    """
+    _COMMUNITY_RELATES_EDGES = """
+        MATCH (a:Entity {namespace: $namespace})-[r:RELATES_AS]-(b:Entity {namespace: $namespace})
+        WHERE a.name < b.name
+          AND coalesce(a.user_id, '') = $user_id
+          AND coalesce(b.user_id, '') = $user_id
+        RETURN a.name AS a, b.name AS b, coalesce(r.weight, 1.0) AS weight
+        LIMIT $limit
+    """
+    _COMMUNITY_EXISTING = """
+        MATCH (c:Community {namespace: $namespace})
+        WHERE coalesce(c.user_id, '') = $user_id
+        RETURN c.composite_key AS key, c.summary IS NOT NULL AS has_summary
+    """
+    _COMMUNITY_MERGE = """
+        MERGE (c:Community {composite_key: $composite_key})
+        ON CREATE SET c.created_at = datetime(), c.namespace = $namespace, c.user_id = $user_id,
+            c.members_hash = $members_hash
+        SET c.size = $size, c.internal_weight = $internal_weight, c.resolution = $resolution,
+            c.updated_at = datetime()
+    """
+    _COMMUNITY_MEMBERS = """
+        MATCH (c:Community {composite_key: $composite_key})
+        UNWIND $members AS member_name
+        MATCH (e:Entity {name: member_name, namespace: $namespace})
+        WHERE coalesce(e.user_id, '') = $user_id
+        MERGE (e)-[:IN_COMMUNITY]->(c)
+    """
+    _COMMUNITY_DELETE = """
+        MATCH (c:Community {composite_key: $composite_key})
+        DETACH DELETE c
+    """
+    _COMMUNITY_DISPLAY_NAMES = """
+        MATCH (e:Entity {namespace: $namespace})
+        WHERE e.name IN $members AND coalesce(e.user_id, '') = $user_id
+        RETURN e.name AS name, e.display_name AS display_name
+    """
+    _COMMUNITY_RELATIONS = """
+        MATCH (s:Entity {namespace: $namespace})-[r:RELATES_AS]->(o:Entity {namespace: $namespace})
+        WHERE s.name IN $members AND o.name IN $members
+          AND coalesce(s.user_id, '') = $user_id AND coalesce(o.user_id, '') = $user_id
+        RETURN s.display_name AS subject, r.relation_type AS relation_type, o.display_name AS object,
+               coalesce(r.weight, 1.0) AS weight
+        ORDER BY weight DESC
+        LIMIT $limit
+    """
+    _COMMUNITY_SET_SUMMARY = """
+        MATCH (c:Community {composite_key: $composite_key})
+        SET c.summary = $summary, c.summary_updated_at = datetime()
+    """
+    _COMMUNITY_LIST = """
+        MATCH (c:Community {namespace: $namespace})
+        WHERE coalesce(c.user_id, '') = $user_id
+        RETURN c.composite_key AS community_id, c.size AS member_count, c.internal_weight AS internal_weight,
+               c.summary AS summary, 0 AS matched_entities
+        ORDER BY member_count DESC, community_id ASC
+        LIMIT $limit
+    """
+    _COMMUNITY_BY_ENTITY = """
+        MATCH (e:Entity)-[:IN_COMMUNITY]->(c:Community)
+        WHERE e.namespace = $namespace
+          AND c.namespace = $namespace
+          AND coalesce(e.user_id, '') = $user_id
+          AND coalesce(c.user_id, '') = $user_id
+          AND e.name IN $entity_names
+        RETURN c.composite_key AS community_id, c.size AS member_count, c.internal_weight AS internal_weight,
+               c.summary AS summary, count(DISTINCT e) AS matched_entities
+        ORDER BY matched_entities DESC, member_count DESC, community_id ASC
+        LIMIT $limit
+    """
+    _COMMUNITY_MEMBER_NAMES = """
+        MATCH (e:Entity)-[:IN_COMMUNITY]->(c:Community {composite_key: $community_id})
+        WHERE coalesce(e.user_id, '') = $user_id
+        RETURN e.display_name AS entity_name
+        ORDER BY entity_name
+        LIMIT $limit
+    """
+    _COMMUNITY_MEMBER_LIMIT = 25
+    _COMMUNITY_SUMMARY_LIMIT = 20000
+
+    @staticmethod
+    def _check_community_args(resolution, min_size, max_edges) -> None:
+        _detect_communities([], resolution=resolution, min_size=min_size)
+        if isinstance(max_edges, bool) or not isinstance(max_edges, int) or max_edges < 1:
+            raise ValueError(f"max_edges must be a positive integer, got {max_edges!r}")
+
+    def _fetch_community_edges(self, session, ns, uid, include_relations, max_edges):
+        queries = [self._COMMUNITY_CO_OCCURS_EDGES]
+        if include_relations:
+            queries.append(self._COMMUNITY_RELATES_EDGES)
+        edges: List[Tuple[str, str, float]] = []
+        for query in queries:
+            result = session.run(query, namespace=ns, user_id=uid, limit=max_edges + 1)
+            rows = [(row["a"], row["b"], row["weight"]) for row in result]
+            if len(rows) > max_edges:
+                raise ValueError(
+                    f"more than max_edges={max_edges} edges of one kind in this namespace; "
+                    f"raise max_edges or use a smaller namespace"
+                )
+            edges.extend(rows)
+        return edges
+
+    def detect_communities(
+        self,
+        namespace: Optional[str] = None,
+        user_id: Optional[str] = None,
+        resolution: float = 1.0,
+        min_size: int = 2,
+        include_relations: bool = False,
+        max_edges: int = 200_000,
+    ) -> List[Dict[str, Any]]:
+        """
+        Group the entities of a namespace into communities, without writing anything.
+
+        Reads the CO_OCCURS_WITH edges (plus the typed RELATES_AS relations when
+        include_relations=True) and runs ragleap_graph.communities.detect_communities
+        on them. Returns [{"members": [entity names, lowercase], "size", "internal_weight",
+        "members_hash"}, ...], largest first. Raises ValueError for a bad argument or
+        when one kind of edge exceeds max_edges (a partial graph would give wrong
+        communities); other Neo4j failures are logged and give [].
+        """
+        self._check_community_args(resolution, min_size, max_edges)
+        if not self.driver:
+            logger.warning("Neo4j driver not available")
+            return []
+        ns = namespace or ""
+        uid = user_id or ""
+        try:
+            with self.driver.session() as session:
+                edges = self._fetch_community_edges(session, ns, uid, include_relations, max_edges)
+            communities = _detect_communities(edges, resolution=resolution, min_size=min_size)
+            self._audit.log(
+                user_id=uid,
+                namespace=ns,
+                action="detect_communities",
+                detail={"edges": len(edges), "communities": len(communities), "resolution": resolution},
+            )
+            return communities
+        except ValueError:
+            raise
+        except Exception as e:
+            logger.error(f"Community detection error: {e}", exc_info=True)
+            return []
+
+    def refresh_communities(
+        self,
+        namespace: Optional[str] = None,
+        user_id: Optional[str] = None,
+        resolution: float = 1.0,
+        min_size: int = 2,
+        include_relations: bool = False,
+        max_edges: int = 200_000,
+        summarizer: Optional[Any] = None,
+        force: bool = False,
+        max_summary_items: int = 20,
+    ) -> Dict[str, Any]:
+        """
+        Detect the communities of a namespace and store them as :Community nodes with
+        :IN_COMMUNITY edges from their entities.
+
+        A community is identified by a hash of its members, so a community whose members
+        did not change is kept (with its summary) and one whose members changed is replaced
+        by a new node; communities that no longer exist are deleted. The uniqueness
+        constraint on :Community is created the first time this runs. Do not refresh the
+        same namespace from two places at once.
+
+        summarizer: optional function taking one dict and returning text; it is called for
+        new communities, for communities that have no summary yet, and for all of them with
+        force=True. The dict has community_id, members (entity names), display_names, size,
+        internal_weight, top_pairs (strongest co-occurring pairs, [{"a", "b", "weight"}]) and
+        relations (typed relations inside the community). The text is stripped and cut to
+        20000 characters. A summarizer that raises or returns no text is counted in
+        summary_errors and the refresh carries on; no model is bundled.
+
+        Returns {"success", "communities", "created", "kept", "removed", "summarized",
+        "summary_errors", "error"}. Bad arguments and too many edges raise ValueError; other
+        Neo4j failures are logged and reported in "error".
+        """
+        self._check_community_args(resolution, min_size, max_edges)
+        if isinstance(max_summary_items, bool) or not isinstance(max_summary_items, int) or max_summary_items < 1:
+            raise ValueError(f"max_summary_items must be a positive integer, got {max_summary_items!r}")
+        if summarizer is not None and not callable(summarizer):
+            raise ValueError("summarizer must be a function taking one dict and returning text")
+        result: Dict[str, Any] = {
+            "success": False,
+            "communities": 0,
+            "created": 0,
+            "kept": 0,
+            "removed": 0,
+            "summarized": 0,
+            "summary_errors": 0,
+            "error": None,
+        }
+        if not self.driver:
+            result["error"] = "Neo4j driver not available"
+            return result
+        ns = namespace or ""
+        uid = user_id or ""
+        try:
+            with self.driver.session() as session:
+                edges = self._fetch_community_edges(session, ns, uid, include_relations, max_edges)
+                found = _detect_communities(edges, resolution=resolution, min_size=min_size)
+                session.run(self._COMMUNITY_CONSTRAINT)
+                existing = {
+                    row["key"]: bool(row["has_summary"])
+                    for row in session.run(self._COMMUNITY_EXISTING, namespace=ns, user_id=uid)
+                }
+                keys: List[str] = []
+                for community in found:
+                    key = _composite_key(ns, uid, "community", community["members_hash"])
+                    keys.append(key)
+                    session.run(
+                        self._COMMUNITY_MERGE,
+                        composite_key=key,
+                        namespace=ns,
+                        user_id=uid,
+                        members_hash=community["members_hash"],
+                        size=community["size"],
+                        internal_weight=float(community["internal_weight"]),
+                        resolution=float(resolution),
+                    )
+                    session.run(
+                        self._COMMUNITY_MEMBERS,
+                        composite_key=key,
+                        namespace=ns,
+                        user_id=uid,
+                        members=community["members"],
+                    )
+                keep = set(keys)
+                created = [k for k in keys if k not in existing]
+                kept = [k for k in keys if k in existing]
+                removed = sorted(k for k in existing if k not in keep)
+                for key in removed:
+                    session.run(self._COMMUNITY_DELETE, composite_key=key)
+                result.update(communities=len(found), created=len(created), kept=len(kept), removed=len(removed))
+                if summarizer is not None:
+                    self._summarize_communities(
+                        session, found, keys, existing, edges, ns, uid, summarizer, force, max_summary_items, result
+                    )
+                result["success"] = True
+            self._audit.log(
+                user_id=uid,
+                namespace=ns,
+                action="refresh_communities",
+                detail={
+                    "communities": result["communities"],
+                    "created": result["created"],
+                    "kept": result["kept"],
+                    "removed": result["removed"],
+                    "summarized": result["summarized"],
+                    "summary_errors": result["summary_errors"],
+                },
+            )
+            return result
+        except ValueError:
+            raise
+        except Exception as e:
+            logger.error(f"Community refresh error: {e}", exc_info=True)
+            result["success"] = False
+            result["error"] = str(e)
+            return result
+
+    def _summarize_communities(
+        self, session, found, keys, existing, edges, ns, uid, summarizer, force, limit, result
+    ) -> None:
+        owner: Dict[str, str] = {}
+        for key, community in zip(keys, found):
+            for name in community["members"]:
+                owner[name] = key
+        pairs: Dict[Tuple[str, str], float] = {}
+        for a, b, weight in edges:
+            low, high = (a, b) if a < b else (b, a)
+            pairs[(low, high)] = pairs.get((low, high), 0.0) + float(weight)
+        by_key: Dict[str, List[Tuple[str, str, float]]] = {}
+        for (a, b), weight in pairs.items():
+            if a != b and a in owner and owner.get(a) == owner.get(b):
+                by_key.setdefault(owner[a], []).append((a, b, weight))
+        for key, community in zip(keys, found):
+            needs = force or key not in existing or not existing[key]
+            if not needs:
+                continue
+            names = {
+                row["name"]: row["display_name"]
+                for row in session.run(
+                    self._COMMUNITY_DISPLAY_NAMES, namespace=ns, user_id=uid, members=community["members"]
+                )
+            }
+            relations = [
+                {
+                    "subject": row["subject"],
+                    "relation_type": row["relation_type"],
+                    "object": row["object"],
+                    "weight": float(row["weight"]),
+                }
+                for row in session.run(
+                    self._COMMUNITY_RELATIONS,
+                    namespace=ns,
+                    user_id=uid,
+                    members=community["members"],
+                    limit=limit,
+                )
+            ]
+            top_pairs = sorted(by_key.get(key, []), key=lambda p: (-p[2], p[0], p[1]))[:limit]
+            info = {
+                "community_id": key,
+                "members": list(community["members"]),
+                "display_names": [names.get(m) or m for m in community["members"]],
+                "size": community["size"],
+                "internal_weight": community["internal_weight"],
+                "top_pairs": [{"a": a, "b": b, "weight": w} for a, b, w in top_pairs],
+                "relations": relations,
+            }
+            try:
+                text = summarizer(info)
+                if not isinstance(text, str) or not text.strip():
+                    raise ValueError("summarizer must return a non-empty string")
+            except Exception as exc:
+                result["summary_errors"] += 1
+                logger.warning(f"Community summary failed: {exc}")
+                continue
+            session.run(
+                self._COMMUNITY_SET_SUMMARY,
+                composite_key=key,
+                summary=text.strip()[:self._COMMUNITY_SUMMARY_LIMIT],
+            )
+            result["summarized"] += 1
+
+    def find_communities(
+        self,
+        entity_names: Optional[List[str]] = None,
+        namespace: Optional[str] = None,
+        user_id: Optional[str] = None,
+        limit: int = 25,
+        include_members: bool = False,
+    ) -> List[Dict[str, Any]]:
+        """
+        Look up stored communities (see refresh_communities). With entity_names, the
+        communities that contain any of them, most matched entities first; without, the
+        largest communities. Returns [{"community_id", "size", "internal_weight", "summary"
+        (None until summarized), "matched_entities"}], plus "members" (up to 25 display
+        names) with include_members=True.
+        """
+        if not self.driver:
+            logger.warning("Neo4j driver not available")
+            return []
+        names = None
+        if entity_names is not None:
+            names = self._normalize_entity_list(entity_names)
+            if not names:
+                return []
+        ns = namespace or ""
+        uid = user_id or ""
+        lim = max(1, int(limit))
+        try:
+            with self.driver.session() as session:
+                if names is None:
+                    rows = list(session.run(self._COMMUNITY_LIST, namespace=ns, user_id=uid, limit=lim))
+                else:
+                    rows = list(
+                        session.run(
+                            self._COMMUNITY_BY_ENTITY,
+                            namespace=ns,
+                            user_id=uid,
+                            entity_names=names,
+                            limit=lim,
+                        )
+                    )
+                found: List[Dict[str, Any]] = []
+                for row in rows:
+                    item: Dict[str, Any] = {
+                        "community_id": row["community_id"],
+                        "size": int(row["member_count"] or 0),
+                        "internal_weight": float(row["internal_weight"] or 0.0),
+                        "summary": row["summary"],
+                        "matched_entities": int(row["matched_entities"] or 0),
+                    }
+                    if include_members:
+                        item["members"] = [
+                            member["entity_name"]
+                            for member in session.run(
+                                self._COMMUNITY_MEMBER_NAMES,
+                                community_id=row["community_id"],
+                                user_id=uid,
+                                limit=self._COMMUNITY_MEMBER_LIMIT,
+                            )
+                        ]
+                    found.append(item)
+                self._audit.log(
+                    user_id=uid,
+                    namespace=ns,
+                    action="find_communities",
+                    detail={"entity_names": names, "result_count": len(found)},
+                )
+                return found
+        except Exception as e:
+            logger.error(f"Community lookup error: {e}", exc_info=True)
             return []
 
     def backfill_user_id_defaults(self, namespace: Optional[str] = None) -> Dict[str, int]:
