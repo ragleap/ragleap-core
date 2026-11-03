@@ -312,6 +312,27 @@ English clip RMS: min -66.6, median -57.4, max -19.7 dBFS; 16 of 30 at or below 
 - Levels of quiet real speech and of noise overlap. The default floor drops 16 of 30 English clips; a floor low enough to keep them (-60) lets noise at -60 dBFS and above through to the recogniser. A level gate cannot separate them, so the gate stays off by default and no protection is claimed beyond digital silence and very quiet noise.
 - Limits: synthetic white noise only; part B in English only; small samples; one seed; no real room or telephone noise; three languages in part A.
 
+## StreamGate on noise (first measurement, gate only)
+
+Script: `colab_gate_noise_benchmark.py` (Colab, CPU is enough, no token; ragleap-voice 0.3.2). Run on 2026-11-02, one run, seed 1. 30 public FLEURS English test clips for speech; white noise, 50 Hz hum and digital silence are generated in the script. No speech model was run: this measures the gate only. A trigger is a `speech_start` event; intervals are Wilson 95%.
+
+**Noise only (a trigger is a false accept; lower is better):**
+
+| input | default floor -46.8 | floor -60 |
+|---|---|---|
+| digital silence | 0/30 [0.00-0.11] | 0/30 [0.00-0.11] |
+| white noise -60 dBFS | 0/30 [0.00-0.11] | 29/30 [0.83-0.99] |
+| white noise -50 dBFS | 0/30 [0.00-0.11] | 30/30 [0.89-1.00] |
+| white noise -40, -30, -20 dBFS | 30/30 [0.89-1.00] | 30/30 [0.89-1.00] |
+| 50 Hz hum -40, -30 dBFS | 30/30 [0.89-1.00] | 30/30 [0.89-1.00] |
+
+**Speech plus white noise (a trigger is a detection):** clean speech and SNR 20, 10 and 0 dB gave the same result, 13/30 [0.27-0.61] at the default floor and 29/30 [0.83-0.99] at floor -60. Noise alone also triggers, so this does not show that speech is separated from noise: the outcome follows the level of the speech clip itself.
+
+- The default floor drops 17 of 30 quiet FLEURS English clips; floor -60 keeps 29 of 30 but passes noise at -60 dBFS and louder.
+- Steady noise at -40 dBFS and louder passes with either floor. A level gate cannot separate it from speech, so `gate` stays off by default and no protection is claimed beyond digital silence and very quiet noise.
+- `StreamGate` needs 5 consecutive speech-like frames to start; the batch gate measured above counts speech-like frames in total. The 13/30 and 14/30 pass counts are close but are not the same test.
+- Not measured: real room or phone noise, music, babble, other languages, 8 kHz telephone audio, a model-based detector (its licence is unverified).
+
 ## Audio helpers in pure Python: speed on 20 ms frames (prototype)
 
 Question: can the standard-library-only core do the audio conversions the phone contract needs (mu-law, level, gain, 8 to 16 kHz and back) in real time, now that `audioop` is gone from Python 3.13? Script: `audio_helpers_speed.py` (a prototype for `docs/design/audio-helpers.md`, not package code). Run on 2026-10-22 on the project VPS: Python 3.10.12, x86_64, 1 CPU, load average 0.14, `nice -n 19`, best of 3 rounds of 150 repetitions per helper. `audioop` (present on 3.10) is timed alongside for reference.
