@@ -35,13 +35,15 @@
 [![PyPI ragleap-memory](https://img.shields.io/pypi/v/ragleap-memory?label=ragleap-memory)](https://pypi.org/project/ragleap-memory/) [![Downloads](https://img.shields.io/pepy/dt/ragleap-memory?label=downloads)](https://pypi.org/project/ragleap-memory/)
 [![PyPI ragleap-security](https://img.shields.io/pypi/v/ragleap-security?label=ragleap-security)](https://pypi.org/project/ragleap-security/) [![Downloads](https://img.shields.io/pepy/dt/ragleap-security?label=downloads)](https://pypi.org/project/ragleap-security/)
 
-**DevOps libraries (Python)**
+**DevOps libraries (Python; Java jars for terraform and ansible)**
 
 [![PyPI ragleap-ops](https://img.shields.io/pypi/v/ragleap-ops?label=ragleap-ops)](https://pypi.org/project/ragleap-ops/) [![Downloads](https://img.shields.io/pepy/dt/ragleap-ops?label=downloads)](https://pypi.org/project/ragleap-ops/)
 [![PyPI ragleap-app-chart](https://img.shields.io/pypi/v/ragleap-app-chart?label=ragleap-app-chart)](https://pypi.org/project/ragleap-app-chart/) [![Downloads](https://img.shields.io/pepy/dt/ragleap-app-chart?label=downloads)](https://pypi.org/project/ragleap-app-chart/)
 [![PyPI ragleap-observability](https://img.shields.io/pypi/v/ragleap-observability?label=ragleap-observability)](https://pypi.org/project/ragleap-observability/) [![Downloads](https://img.shields.io/pepy/dt/ragleap-observability?label=downloads)](https://pypi.org/project/ragleap-observability/)
 [![PyPI ragleap-terraform](https://img.shields.io/pypi/v/ragleap-terraform?label=ragleap-terraform)](https://pypi.org/project/ragleap-terraform/) [![Downloads](https://img.shields.io/pepy/dt/ragleap-terraform?label=downloads)](https://pypi.org/project/ragleap-terraform/)
+[![Maven Central ragleap-terraform (Java)](https://img.shields.io/maven-central/v/io.github.antonyrag/ragleap-terraform?label=ragleap-terraform%20(Java))](https://central.sonatype.com/artifact/io.github.antonyrag/ragleap-terraform)
 [![PyPI ragleap-ansible](https://img.shields.io/pypi/v/ragleap-ansible?label=ragleap-ansible)](https://pypi.org/project/ragleap-ansible/) [![Downloads](https://img.shields.io/pepy/dt/ragleap-ansible?label=downloads)](https://pypi.org/project/ragleap-ansible/)
+[![Maven Central ragleap-ansible (Java)](https://img.shields.io/maven-central/v/io.github.antonyrag/ragleap-ansible?label=ragleap-ansible%20(Java))](https://central.sonatype.com/artifact/io.github.antonyrag/ragleap-ansible)
 
 **Community**
 
@@ -197,6 +199,8 @@ pip install ragleap-terraform
 uv add ragleap-terraform
 ```
 
+The same module files are also on Maven Central as a jar, `io.github.antonyrag:ragleap-terraform` (see the Maven Central badge in the list above for the current version). It is not a code port: it carries the files of the PyPI wheel, and a small class reads them from the classpath, for example `RagleapTerraform.readString("modules/kind-cluster/main.tf")`. Terraform itself is not included.
+
 Prefer Ansible for a fresh Ubuntu server? `ragleap-ansible` is a set of Ansible roles that create a deploy user, set up sudo and unattended upgrades, and can optionally harden SSH and enable a firewall. It does not install k3s, Helm or the charts yet, and it has been tested in a container only:
 
 ```bash
@@ -204,6 +208,8 @@ pip install ragleap-ansible
 # or, with uv
 uv add ragleap-ansible
 ```
+
+The same files are also on Maven Central as a jar, `io.github.antonyrag:ragleap-ansible` (see the Maven Central badge in the list above for the current version). It is not a code port: it carries the files of the PyPI wheel, and a small read-only class reads them from the classpath, for example `RagleapAnsible.readPlaybookString("bootstrap.yml")`. It does not run Ansible.
 
 Looking at open, local speech models? `ragleap-voice` is a pre-alpha library (MIT) with `transcribe()` and `synthesize()`, an optional Whisper large-v3 engine and an Indic Parler-TTS engine, on top of a licence-checked manifest of candidate models with hash-verified downloads from Hugging Face. Every model is still unverified and none is a default, each engine has been tested on only a few clips, and no claim is made that it is better than any other product:
 
@@ -375,7 +381,7 @@ ragleap-core/
 ├── skills/ragleap/        # Read-only skill for coding agents
 ├── .codex-plugin/         # Plugin manifest for that skill
 ├── packages/              # Standalone pip packages (ragleap-rag, -graph, -tools, ...)
-├── java/                  # Java ports of ragleap-rag, ragleap-graph and ragleap-vectorstores
+├── java/                  # Java ports of ragleap-rag, ragleap-graph and ragleap-vectorstores, plus jars of the ragleap-terraform and ragleap-ansible files
 ├── .github/workflows/     # CI: compile check, Docker build, smoke tests
 ├── docker-compose.yml     # app + db + voice, plus optional neo4j, redis, worker, sandbox and ollama profiles
 └── Dockerfile
@@ -432,8 +438,8 @@ pip install ragleap-rag
 - **`ragleap-ops`** — Kubernetes deployment manifests for RagLeap Core, live-tested end-to-end on a real cluster. Install with `pip install ragleap-ops` or `uv add ragleap-ops`.
 - **`ragleap-app-chart`** — generic, reusable Helm chart for deploying arbitrary services to Kubernetes, not RagLeap-specific. Point it at your own app via a `services:` list. Install with `pip install ragleap-app-chart` or `uv add ragleap-app-chart`.
 - **`ragleap-observability`** — Prometheus, Grafana, Loki + Promtail for `ragleap-ops`, live-verified end-to-end against a real cluster (real connection confirmed, real non-zero metrics returned; 21+ real log streams with correct namespace/pod/container labels). AlertManager is wired to Prometheus with a first real alert rule, plus optional Slack/email receivers (off by default; delivery verified against a stand-in, real send not yet confirmed). Install with `pip install ragleap-observability` or `uv add ragleap-observability`.
-- **`ragleap-terraform`** — Terraform module that creates a local kind cluster and installs the RagLeap Helm charts, applied and destroyed on a real cluster (no cloud modules yet). Install with `pip install ragleap-terraform` or `uv add ragleap-terraform`.
-- **`ragleap-ansible`** — Ansible roles that prepare and harden a fresh Ubuntu server: deploy user, sudo, unattended upgrades, opt-in SSH hardening and an opt-in firewall (tested in a container; does not install k3s, Helm or the charts yet). Install with `pip install ragleap-ansible` or `uv add ragleap-ansible`.
+- **`ragleap-terraform`** — Terraform module that creates a local kind cluster and installs the RagLeap Helm charts, applied and destroyed on a real cluster (no cloud modules yet). Install with `pip install ragleap-terraform` or `uv add ragleap-terraform`. The same files are also on Maven Central as a jar, `io.github.antonyrag:ragleap-terraform` (not a code port).
+- **`ragleap-ansible`** — Ansible roles that prepare and harden a fresh Ubuntu server: deploy user, sudo, unattended upgrades, opt-in SSH hardening and an opt-in firewall (tested in a container; does not install k3s, Helm or the charts yet). Install with `pip install ragleap-ansible` or `uv add ragleap-ansible`. The same files are also on Maven Central as a jar, `io.github.antonyrag:ragleap-ansible` (not a code port).
 - **`ragleap-voice`** — pre-alpha, open and local (MIT). `transcribe()` and `synthesize()` with an optional Whisper large-v3 engine and an Indic Parler-TTS engine, on top of a licence-checked manifest and hash-verified model downloads. Every model is still unverified and none is a default; each engine has been tested on only a few clips. Install with `pip install ragleap-voice` or `uv add ragleap-voice` (engines are optional extras, e.g. `ragleap-voice[whisper]`).
 
 All fourteen are MIT licensed. Browse the full package index at [packages.ragleap.com](https://packages.ragleap.com).
