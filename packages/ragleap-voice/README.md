@@ -2,7 +2,7 @@
 
 Open-source (MIT), local-first speech tooling, with Indian languages as a priority.
 
-**Status: pre-alpha. Versions 0.1.0 to 0.3.1 add `transcribe()` and `synthesize()` with a Whisper large-v3 engine and an Indic Parler-TTS engine (see "What 0.1.0 adds" below). Every model is unverified and none is a default. Each engine has been run on only a few clips on one maintainer's machine. This is a first release for testing, not a finished product.**
+**Status: pre-alpha. Versions 0.1.0 to 0.3.2 add `transcribe()` and `synthesize()` with a Whisper large-v3 engine and an Indic Parler-TTS engine (see "What 0.1.0 adds" below). Every model is unverified and none is a default. Each engine has been run on only a few clips on one maintainer's machine. This is a first release for testing, not a finished product.**
 
 ## What works today
 
@@ -23,7 +23,9 @@ A command line and a small standard-library-only Python core (no runtime depende
 
 Nothing in the package uses the network unless you run `models pull` or `models lock`.
 
-## What 0.1.0 to 0.3.1 add
+## What 0.1.0 to 0.3.2 add
+
+**0.3.2** speeds up repeated Whisper calls: the model folder is fully hashed once per process (set `RAGLEAP_VOICE_VERIFY=always` to hash every call), the model is opened once per call instead of twice, and an opt-in `Transcriber` keeps the model open between calls. On one Colab T4 (one clip, not a benchmark) a call went from about 14-15 s to about 3.4 s with `transcribe()` and about 0.75 s with a `Transcriber`; this is batch decoding, not streaming latency.
 
 **0.3.1** exports `transcribe_stream` (a batch adapter: it buffers the audio and runs `transcribe()` once, with no partial transcripts) and `synthesize_stream` (chunked playback of a finished waveform) from the package, and adds A-law encode/decode helpers (`ragleap_voice.audio`, not exported) checked against G.711 Tables 1a/1b under a stated tie convention, with no conformance claim. Not measured: real phone audio, Python 3.13. Details: `docs/design/streaming.md` and `docs/design/audio-helpers.md`.
 
