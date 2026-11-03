@@ -37,6 +37,9 @@ from ragleap_integrations.mcp import (
 _HINTS = {
     "inputSchema is too large": "raise max_schema_chars",
     "not offered by the server": "check the tool name",
+    "not offered by the manual": "check the tool name",
+    "inputs schema is too large": "raise max_schema_chars",
+    "url is outside the approved origins": "list the origin in origins",
 }
 
 
@@ -57,7 +60,7 @@ class Connection:
         one, the setting that controls it."""
         lines = ["%d tool(s) ready, %d skipped" % (len(self.tools), len(self.skipped))]
         for t in self.tools:
-            flagged = t.metadata.get("mcp", {}).get("requires_approval", True)
+            flagged = (t.metadata.get("mcp") or t.metadata.get("utcp") or {}).get("requires_approval", True)
             lines.append("  ready: %s (approval: %s)" % (t.name, "required" if flagged else "not required"))
         for key, reason in self.skipped:
             hint = _HINTS.get(reason)

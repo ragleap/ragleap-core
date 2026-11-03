@@ -4,15 +4,15 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ragleap-integrations"
-version = "0.3.0"
-description = "MCP client that turns allowlisted tools on remote MCP servers into ragleap-tools Tool objects. Streamable HTTP only, standard library plus ragleap-tools, owner-configured allowlist, pinned and bounded network access. BYOK, no vendor lock-in."
+version = "0.4.0"
+description = "MCP and UTCP clients that turn allowlisted tools on remote servers into ragleap-tools Tool objects. Streamable HTTP for MCP, http call templates for UTCP, standard library plus ragleap-tools, owner-configured allowlist, pinned and bounded network access. BYOK, no vendor lock-in."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
 authors = [
     { name = "Antony", email = "antony@ragleap.com" }
 ]
-keywords = ["mcp", "model-context-protocol", "llm", "tool-calling", "agents", "integrations", "self-hosted", "byok"]
+keywords = ["mcp", "utcp", "model-context-protocol", "llm", "tool-calling", "agents", "integrations", "self-hosted", "byok"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",

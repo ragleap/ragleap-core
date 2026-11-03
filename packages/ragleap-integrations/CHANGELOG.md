@@ -5,6 +5,98 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-03
+
+### Added
+
+- `connect_utcp(url, *, allow, name="utcp", token=None, origins=(), approve=None,
+  pre_approved=(), on_event=None, transport=None, **limits)`
+  (`ragleap_integrations.utcp`): reads one UTCP manual once and returns its
+  allowlisted `http` tools as a `Connection` (`.tools`, `.toolkit`, `.skipped`,
+  `.report()`, as for `connect()`). Also `UtcpServerConfig`, `UtcpConfig`,
+  `UtcpClient`, `UtcpToolSpec`, `make_utcp_tools`, `UtcpConfigError` and
+  `UtcpDiscoveryError`.
+- Rules: an exact allowlist (no wildcard); approved origins (the manual's own
+  plus the owner's `origins`), checked at discovery and on every call; the
+  manual is a one-time snapshot; no `${NAME}` or `$NAME` substitution and no
+  environment lookups; only the `http` template with GET, POST, PUT, DELETE or
+  PATCH; path parameters URL-encoded, `body_field` as a JSON body, the other
+  arguments in the query string; the owner's token as a bearer token to
+  approved origins only; every tool flagged `requires_approval` unless
+  pre-approved; the same `approve` hook, audit events (with `"protocol":
+  "utcp"`) and constant error texts as the MCP client.
+- Skipped with a stated reason: other call template types, `header_fields`, a
+  template with an `auth` block, placeholders, a template field this version
+  does not understand (such as `query_params`), non-JSON request bodies, a
+  query string or fragment in the URL, URLs that are not https on a public
+  host, URLs outside the approved origins, forbidden or placeholder static
+  headers, and oversized schemas. A document that is not a UTCP manual
+  (including an OpenAPI document) is refused.
+- `_net.https_request(method, url, headers, body, ...)`: the bounded transport
+  for GET, POST, PUT, DELETE and PATCH, with every protection of the POST
+  path (public-address check, pinned IP, verified TLS, no redirects, size cap,
+  deadline). Any other method is refused before DNS.
+- `scripts/utcp_live.py`, a read-only discovery check (repository only, not in
+  the wheel). Design doc `docs/design/utcp.md` updated.
+
+### Changed
+
+- `https_post` is now a thin wrapper over `https_request`; its signature and
+  behavior are unchanged, and code that does not use `connect_utcp` behaves as
+  in 0.3.0: the 331 earlier tests pass unchanged.
+- `Connection.report()` also reads the metadata of UTCP tools and gives hints
+  for the new skip reasons.
+
+### Verified (0.4.0)
+
+- 545 tests (the 331 earlier ones plus 184 for the UTCP client and 30 for the
+  transport methods, the latter against a real local TLS server with a
+  throwaway certificate: the request line, headers and body of each method,
+  redirects not followed, the size cap, hostname and address checks, and the
+  methods refused before DNS) on Python 3.10 and 3.12; 541 passed and 4
+  skipped without `ragleap-security`. 127 of 127 deliberate breaks of the new
+  code caught (one equivalent mutant is not counted: a manual header named
+  `Authorization` could override the token, but that header is already
+  forbidden, so the override is unreachable).
+
+### Not verified (0.4.0)
+
+- Any call against a real UTCP server. No public server with a current-format
+  manual was found for the check; the tests use a recording fake transport and
+  the transport tests use a local TLS server.
+- The normative text of the UTCP specification, its auth types, and whether the
+  reference clients restrict hosts or substitute placeholders from a manual:
+  only the project's documentation and reference clients were read.
+
+### Known limitations
+
+- Only `http` templates of UTCP manuals; no auth blocks, `header_fields`, OAuth,
+  OpenAPI conversion or multi-tenant hub (`UtcpHub`) yet.
+- The result is the response body text, capped at `max_result_chars`; it is not
+  parsed or validated against the manual's output schema.
+- A server's description, schema and reply text is untrusted and not screened
+  for prompt injection.
+- Not safe to share one `UtcpClient` between threads while calls are running.
+
+### Verified (after 0.3.0)
+
+- Live-checked on 2026-10-27 with the published 0.3.0 wheel on Python 3.10.12
+  against the same third party's mock MCP auth server, with the same script
+  (`scripts/tenant_live.py`) and the same six checks, all passing: two tenants'
+  requests carried only their own token, a made-up token got HTTP 401 while
+  the real tenants kept working, a changed token affected only its tenant, and
+  `RateLimit(2, 60)` denied the third call locally. The limit is unchanged: the
+  mock server cannot tell tenants apart, so separation is shown from the
+  requests that were sent. The published wheel (hash starting 2b828b015267) and
+  sdist (191341205d85) matched the TestPyPI files, the installed files were
+  byte-identical to main, and `pip check` was clean with and without the extra.
+
+### Not verified (after 0.3.0)
+
+- `approve_scoped`, `allow_for` and `policy_for` against a real server; a real
+  `ragleap_security.AuditLog` fed by a live run; concurrent tenants against a
+  real server; a server that really separates tenants' data (unchanged).
+
 ## [0.3.0] - 2026-10-27
 
 ### Added
