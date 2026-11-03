@@ -333,6 +333,25 @@ Script: `colab_gate_noise_benchmark.py` (Colab, CPU is enough, no token; ragleap
 - `StreamGate` needs 5 consecutive speech-like frames to start; the batch gate measured above counts speech-like frames in total. The 13/30 and 14/30 pass counts are close but are not the same test.
 - Not measured: real room or phone noise, music, babble, other languages, 8 kHz telephone audio, a model-based detector (its licence is unverified).
 
+## Silero VAD (ONNX) on the same noise inputs (first measurement)
+
+Script: `colab_silero_vad_benchmark.py` (Colab, CPU, no token). Run on 2026-11-03, one run, seed 1, same 30 FLEURS English clips, noise generator and seed as the StreamGate benchmark above. Model file: `silero_vad_16k_op15.onnx` from `snakers4/silero-vad` at commit `066409f3d9db45a30d21dfcbf9147826ffdd7052`, 1,289,603 bytes, SHA-256 `7ed98ddbad84ccac4cd0aeb3099049280713df825c610a8ed34543318f1b2c49`. Read with the `onnx` package: opset 15, standard `ai.onnx` operators only, no custom domains, no external data. A trigger is 3 consecutive 32 ms frames with probability at least 0.5; both numbers are unmeasured starting points. Intervals are Wilson 95%.
+
+| input | StreamGate default floor / floor -60 | Silero ONNX |
+|---|---|---|
+| digital silence | 0/30 / 0/30 | 0/30 [0.00-0.11] |
+| white noise -60 to -20 dBFS | 0/30 up to 30/30 (see above) | 0/30 at every level |
+| 50 Hz hum -40, -30 dBFS | 30/30 | 0/30 |
+| clean speech (detected) | 13/30 / 29/30 | 30/30 [0.89-1.00] |
+| speech + noise, SNR 20, 10, 0 dB (detected) | 13/30 / 29/30 | 30/30 |
+
+The sanity check passed first (maximum probability 1.00 on speech, 0.01 on silence).
+
+- On these inputs Silero separates speech from steady synthetic noise, which a level gate cannot do.
+- Limits: the noise is synthetic (white noise and a 50 Hz hum), which is the easy case; the speech is clean read English; 16 kHz only, 8 kHz telephone audio is not tested; one run. Speech plus noise at 30/30 shows speech is still detected, not that it is separated at every SNR.
+- Not established: training-data provenance; the weights' licence beyond the repository's MIT licence and a README statement that it is published under a permissive licence (MIT); behaviour on real room noise, music, babble or phone-line artefacts.
+- Silero is not in `models.toml`, not an extra and not a default. Adding it would need a manifest entry and lock file, which need the maintainer's review.
+
 ## Audio helpers in pure Python: speed on 20 ms frames (prototype)
 
 Question: can the standard-library-only core do the audio conversions the phone contract needs (mu-law, level, gain, 8 to 16 kHz and back) in real time, now that `audioop` is gone from Python 3.13? Script: `audio_helpers_speed.py` (a prototype for `docs/design/audio-helpers.md`, not package code). Run on 2026-10-22 on the project VPS: Python 3.10.12, x86_64, 1 CPU, load average 0.14, `nice -n 19`, best of 3 rounds of 150 repetitions per helper. `audioop` (present on 3.10) is timed alongside for reference.
