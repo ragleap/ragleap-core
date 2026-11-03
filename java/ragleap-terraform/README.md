@@ -11,7 +11,7 @@ This is **not a code port**: the jar carries the same files as the PyPI wheel, u
 paths, and `.github/scripts/java-terraform-parity.sh` compares the two (file list and file
 contents). Terraform itself is not included or run by this jar.
 
-**Status:** not published to Maven Central yet. The build and the parity check run in the manual
+**Status:** published to Maven Central as `io.github.antonyrag:ragleap-terraform` (version 0.1.1; [release notes](https://github.com/ragleap/ragleap-core/releases/tag/ragleap-terraform-java-v0.1.1)). The build and the parity check run in the manual
 `java-terraform-test` workflow. Publishing needs the owner's GPG key and Central token:
 `mvn clean deploy -Prelease` from this folder, as for the other Java libraries.
 
