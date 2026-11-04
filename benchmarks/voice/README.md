@@ -352,6 +352,25 @@ The sanity check passed first (maximum probability 1.00 on speech, 0.01 on silen
 - Not established: training-data provenance; the weights' licence beyond the repository's MIT licence and a README statement that it is published under a permissive licence (MIT); behaviour on real room noise, music, babble or phone-line artefacts.
 - Silero is not in `models.toml`, not an extra and not a default. Adding it would need a manifest entry and lock file, which need the maintainer's review.
 
+## Silero VAD (ONNX) vs StreamGate: more synthetic noise and a 16k to 8k to 16k path (second measurement)
+
+Script: `colab_silero_vad_benchmark2.py` (Colab, CPU, no token). Run on 2026-11-03, one run, seed 1, same pinned Silero file as above, 30 trials per row, Wilson 95% intervals.
+
+| input (5 s, trigger = false accept) | gate default | gate floor -60 | Silero |
+|---|---|---|---|
+| pink -50 dBFS | 10/30 | 30/30 | 0/30 |
+| band-limited 300-3400 Hz, clipped white -50 dBFS | 0/30 | 30/30 | 0/30 |
+| pink, band-limited, clipped white at -35 and -20 dBFS | 30/30 | 30/30 | 0/30 |
+| same inputs after 16k to 8k to 16k (pink, band-limited at -35, -20) | 30/30 | 30/30 | 0/30 |
+| clean speech, detected: 16 kHz and after the 8 kHz path | 13/30 | 29/30 | 30/30 |
+| babble of 3 speakers at -30 dBFS (speech, so a trigger is correct) | 30/30 | 30/30 | 30/30 |
+
+- Silero stayed at 0/30 on every non-speech noise and kept all clean speech after the resample path; the level gate did not.
+- The babble row is one fixed input repeated 30 times, not 30 independent inputs. It also shows Silero cannot tell the target speaker from background talkers.
+- Limits: all noise is synthetic; the 8 kHz path is a resample with `Down2Stream` and `Up2Stream`, not a G.711 codec or a real phone line; thresholds (probability 0.5, 3 frames) are unmeasured; one run.
+- Still not established: training-data provenance, the weights' licence beyond the repository's MIT licence and a README statement, behaviour on real recorded noise, and onnxruntime behaviour on a malformed file.
+- Silero is still not in `models.toml`, not an extra and not a default.
+
 ## Audio helpers in pure Python: speed on 20 ms frames (prototype)
 
 Question: can the standard-library-only core do the audio conversions the phone contract needs (mu-law, level, gain, 8 to 16 kHz and back) in real time, now that `audioop` is gone from Python 3.13? Script: `audio_helpers_speed.py` (a prototype for `docs/design/audio-helpers.md`, not package code). Run on 2026-10-22 on the project VPS: Python 3.10.12, x86_64, 1 CPU, load average 0.14, `nice -n 19`, best of 3 rounds of 150 repetitions per helper. `audioop` (present on 3.10) is timed alongside for reference.
