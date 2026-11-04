@@ -4,6 +4,19 @@ All notable changes are listed here. Format: Keep a Changelog.
 
 ## [Unreleased]
 
+## [0.0.3] - 2026-11-03
+
+### Added
+- A second runnable demo, `examples/two_link_workspace_demo.py`: a two-link arm with one accepted and one refused workspace move
+  (thanks to @bhuvanm0981-ctrl).
+- Package metadata, so the PyPI page shows them: project links (homepage, documentation, source, issues, changelog, roadmap), an author,
+  keywords and more classifiers.
+
+### Fixed
+- The operator console and the MCP server now read and discard a small request body before they refuse a request, so a client gets the answer and
+  not a connection reset. A Windows test run reported `WinError 10053` on a refused request (thanks to @Anurag07-crypto). The reset could not be
+  reproduced on Linux; a test checks that the body is drained. Not yet verified on Windows.
+
 ## [0.0.2] - 2026-11-02
 
 ### Added
@@ -12,8 +25,6 @@ All notable changes are listed here. Format: Keep a Changelog.
 - Observe-only energy site mock and MTConnect document reader (simulation only, strict input limits), a first-hour guide, an
   industry guide with runnable examples, and Hindi and Tamil README drafts (not reviewed by native speakers).
 - The wear study notebook has a pluggable wear model (Taylor's equation, with assumptions stated).
-- Package metadata: project links (homepage, documentation, source, issues, changelog, roadmap), author, keywords and more classifiers, so the
-  PyPI page shows them. No code change.
 
 ## [0.0.1] - 2026-11-02
 

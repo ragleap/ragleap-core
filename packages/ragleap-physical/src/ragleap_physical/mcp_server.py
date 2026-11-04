@@ -46,7 +46,7 @@ def handle_message(tools: PhysicalTools, msg: Any) -> Optional[dict]:
         version = asked if asked in SUPPORTED_PROTOCOLS else SUPPORTED_PROTOCOLS[0]
         return {"jsonrpc": "2.0", "id": msg_id, "result": {
             "protocolVersion": version, "capabilities": {"tools": {"listChanged": False}},
-            "serverInfo": {"name": SERVER_NAME, "version": "0.0.2"}}}
+            "serverInfo": {"name": SERVER_NAME, "version": "0.0.3"}}}
     if method == "ping":
         return {"jsonrpc": "2.0", "id": msg_id, "result": {}}
     if method == "tools/list":
@@ -76,9 +76,29 @@ def make_server(tools: PhysicalTools, host: str = "127.0.0.1", port: int = 0, *,
         def log_message(self, *args: Any) -> None:  # never log bodies or headers
             pass
 
+        def _drain(self) -> None:
+            """Read and discard a small unread request body before a refusal, so the client gets the answer and not a connection reset
+            (Windows clients report WinError 10053 when a server closes a socket that still holds unread data)."""
+            if getattr(self, "_body_done", False):
+                return
+            self._body_done = True
+            try:
+                n = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                return
+            if 0 < n <= MAX_BODY:
+                try:
+                    self.rfile.read(n)
+                    self.server.drained_bytes = getattr(self.server, "drained_bytes", 0) + n
+                except Exception:
+                    pass
+
         def _send(self, status: int, body: Optional[Mapping[str, Any]] = None, extra: Optional[dict] = None) -> None:
+            if status >= 400:
+                self._drain()
             data = b"" if body is None else json.dumps(body, allow_nan=False).encode()
             self.send_response(status)
+            self.send_header("Connection", "close")
             if body is not None:
                 self.send_header("Content-Type", "application/json")
             for k, v in (extra or {}).items():
@@ -117,6 +137,7 @@ def make_server(tools: PhysicalTools, host: str = "127.0.0.1", port: int = 0, *,
             if not (self.headers.get("Content-Type") or "").lower().startswith("application/json"):
                 return self._send(415, _rpc_error(None, -32600, "content type must be application/json"))
             try:
+                self._body_done = True
                 msg = json.loads(self.rfile.read(length))
             except (ValueError, UnicodeDecodeError, RecursionError):  # deeply nested JSON raises RecursionError
                 return self._send(400, _rpc_error(None, -32700, "parse error"))

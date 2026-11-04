@@ -8,7 +8,7 @@ from .observation import Observation
 from .proposal import ExpectedOutcome, Proposal
 from .tools import PhysicalTools
 
-__version__ = "0.0.2"
+__version__ = "0.0.3"
 __all__ = ["ApplyResult", "Bridge", "Capability", "Envelope", "Observation", "ExpectedOutcome", "Proposal", "PhysicalTools",
            "PhysicalError", "ValidationError", "ConfigError", "EnvelopeViolation", "ApprovalError",
            "CapabilityError", "SafetyStop", "__version__"]
