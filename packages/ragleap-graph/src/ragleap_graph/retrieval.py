@@ -50,6 +50,14 @@ class GraphRetrievalConfig:
         rest of ragleap-graph, no hardcoded vocabulary.
     max_query_entities:
         Passed to extract_query_entities()'s max_entities.
+    include_communities:
+        Opt-in (default False). When True, retrieve() also looks up the stored
+        communities (GraphIndex.find_communities) that contain the query entities
+        and adds them to graph_context["communities"] and to the citations.
+        Needs communities created with GraphIndex.refresh_communities().
+    max_communities:
+        Passed to find_communities()'s limit. Only used when
+        include_communities is True.
     """
 
     mode: RetrievalMode = "hybrid"
@@ -57,6 +65,8 @@ class GraphRetrievalConfig:
     max_graph_results: int = 10
     domain_terms: Optional[list[str]] = None
     max_query_entities: int = 10
+    include_communities: bool = False
+    max_communities: int = 3
 
     def __post_init__(self) -> None:
         if self.mode not in ("hybrid", "graph_only"):
@@ -67,6 +77,10 @@ class GraphRetrievalConfig:
             raise ValueError("max_graph_results must be >= 1")
         if self.max_query_entities < 1:
             raise ValueError("max_query_entities must be >= 1")
+        if not isinstance(self.include_communities, bool):
+            raise ValueError("include_communities must be a bool")
+        if self.max_communities < 1:
+            raise ValueError("max_communities must be >= 1")
 
 
 class GraphRetriever:
@@ -109,6 +123,7 @@ class GraphRetriever:
             "graph_context": {
                 "related_documents": [...], # from GraphIndex.find_documents_by_entities()
                 "related_entities": [...],  # from GraphIndex.search_related_entities()
+                # include_communities=True adds "communities": [...] here
             },
             "citations": [...],             # chunk citations + graph-path citations
             "retrieval_method": "hybrid_vector_graph" | "graph_only",
@@ -154,8 +169,11 @@ class GraphRetriever:
     def _build_graph_context(
         self, query_entities: list[str], namespace: Optional[str]
     ) -> dict:
+        context: dict = {"related_documents": [], "related_entities": []}
+        if self._config.include_communities:
+            context["communities"] = []
         if not query_entities:
-            return {"related_documents": [], "related_entities": []}
+            return context
 
         related_documents = self._graph.find_documents_by_entities(
             query_entities, namespace=namespace, limit=self._config.max_graph_results
@@ -166,7 +184,15 @@ class GraphRetriever:
             max_depth=self._config.graph_expand_depth,
             limit=self._config.max_graph_results,
         )
-        return {"related_documents": related_documents, "related_entities": related_entities}
+        context["related_documents"] = related_documents
+        context["related_entities"] = related_entities
+        if self._config.include_communities:
+            context["communities"] = self._graph.find_communities(
+                query_entities,
+                namespace=namespace,
+                limit=self._config.max_communities,
+            )
+        return context
 
     def _build_citations(self, chunks: list[dict], graph_context: dict) -> list[dict]:
         citations: list[dict] = []
@@ -188,6 +214,20 @@ class GraphRetriever:
                 "entity_name": entity.get("entity_name"),
                 "relationship": entity.get("relationship"),
                 "depth": entity.get("depth"),
+            })
+
+        for community in graph_context.get("communities", []):
+            summary = community.get("summary")
+            if summary is None:
+                summary_preview = None
+            else:
+                summary_preview = summary[:150] + ("..." if len(summary) > 150 else "")
+            citations.append({
+                "type": "community",
+                "community_id": community.get("community_id"),
+                "size": community.get("size"),
+                "summary_preview": summary_preview,
+                "matched_entities": community.get("matched_entities"),
             })
 
         return citations
