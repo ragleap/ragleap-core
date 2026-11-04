@@ -29,15 +29,29 @@ It walks the whole path with a built-in one-joint simulator: observe, propose, a
 
 This shows that a test really guards a limit. Do it in a scratch copy, never in your branch:
 
-```
+**macOS / Linux:**
+
+```bash
 cp -r . /tmp/scratch && cd /tmp/scratch
 find . -name __pycache__ -prune -exec rm -rf {} +
 export PYTHONDONTWRITEBYTECODE=1
 ```
 
+**Windows PowerShell:**
+
+```powershell
+$scratch = Join-Path $env:TEMP ("ragleap-physical-scratch-" + [guid]::NewGuid().ToString("N"))
+Copy-Item -Path . -Destination $scratch -Recurse
+Set-Location $scratch
+
+Get-ChildItem -Path . -Directory -Filter "__pycache__" -Recurse -Force |
+    Remove-Item -Recurse -Force
+$env:PYTHONDONTWRITEBYTECODE = "1"
+```
+
 In the copy, open `src/ragleap_physical/envelope.py`. Find:
 
-```
+```python
 if not lim["pos_min"] <= p.value <= lim["pos_max"]:
 ```
 
