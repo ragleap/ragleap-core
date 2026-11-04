@@ -486,6 +486,7 @@ RagLeap Core is bring-your-own-key only there is no system-provided key for any 
 | `ollama` | `OLLAMA_MODEL` (no API key needed) | Self-hosted; requires Ollama running locally |
 | `deepseek` | `DEEPSEEK_API_KEY`, `DEEPSEEK_MODEL` | |
 | `demonroute` | `DEMONROUTE_API_KEY`, `DEMONROUTE_MODEL` | Hosted open-weight models through a third-party gateway. DemonRoute states that it does not retain prompts, but it forwards them to the upstream host that serves the model, and its [privacy page](https://demonroute.com/privacy) does not describe that host's retention: avoid sensitive business data |
+| `cheaperinference` | `CHEAPERINFERENCE_API_KEY`, `CHEAPERINFERENCE_MODEL` | OpenAI-compatible gateway to models from several labs, through a third-party service that forwards prompts to the upstream provider |
 | `xai` | `XAI_API_KEY`, `XAI_MODEL` | |
 | `cohere` | `COHERE_API_KEY`, `COHERE_MODEL` | |
 | `perplexity` | `PERPLEXITY_API_KEY`, `PERPLEXITY_MODEL` | |

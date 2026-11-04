@@ -23,6 +23,7 @@ PROVIDER_BASE_URLS = {
     "ollama":     "http://localhost:11434/v1",
     "deepseek":   "https://api.deepseek.com/v1",
     "demonroute": "https://api.demonroute.com/v1",
+    "cheaperinference": "https://api.cheaperinference.com/v1",
     "xai":        "https://api.x.ai/v1",
     "cohere":     "https://api.cohere.ai/v1",
     "perplexity": "https://api.perplexity.ai",

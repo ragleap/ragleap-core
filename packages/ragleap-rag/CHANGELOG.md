@@ -6,6 +6,7 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- `cheaperinference` is now in the provider base-URL table (`https://api.cheaperinference.com/v1`).
 - Evaluation (`ragleap.evaluation`, `RagLeap.evaluate()`): ranking metrics for cases that list `relevant_documents` (hit@k, recall@k, precision@k, reciprocal rank and nDCG@k over the document-level ranking of the chunks sent to the model, read from `answer["citations"]` in chunk order (`answer["sources"]` is built from a set and has no stable order); `metric_ks` picks the cutoffs, default 1, 3, 5, 10), per-case latency and token usage, a `summary` with mean, min, p10, p50, p95 (nearest rank) and a fail rate below `fail_below`, an optional `support_checker(answer_text, citations)` callable for your own NLI model or LLM judge (its failures are recorded per case, not raised), and `compare_runs(baseline, candidate, tolerance)` to flag regressions between two runs. Existing `evaluate()` results keep all their keys; the new keys are additions. This is not an LLM-judge framework and no judge is bundled.
 
 ### Changed
