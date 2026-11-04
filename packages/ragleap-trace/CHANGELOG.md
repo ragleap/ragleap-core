@@ -9,14 +9,16 @@
 - `integration/` tests and `scripts/integration_break.py` (need ragleap-rag and Postgres; not in the wheel).
 - Limits: name 128, key 64, 32 attributes, strings cut at 256.
 - Content keys (prompt, answer, query, file names, credentials) never recorded.
+- A threat-model section in the README.
 
 ### Verified
 - Core: 34 tests and 24/24 deliberate breaks on the VPS (Python 3.10.12) and in CI on 3.10 and 3.12 (run 41292557648); the workflow goes red when a protection is broken (run 41293119373, 3.12 leg).
 - Adapter: 63 tests and 42/42 deliberate breaks on the VPS (Python 3.10.12) and in CI on 3.10 and 3.12 (run 41294125785).
-- Integration against a real RagLeap (ragleap-rag ee8f083, Postgres 16 + pgvector 0.8.0, fake embedder and generator): 9 tests and 12/12 deliberate breaks, in a sandbox only so far; CI pending.
+- Integration against a real RagLeap (ragleap-rag ee8f083, Postgres 16 + pgvector 0.8.0, fake embedder and generator): 9 tests and 12/12 deliberate breaks, in a sandbox and in CI on Python 3.11 (run 41374345874, VERDICT: PASS).
+- CI hygiene: the unit workflow's actions are pinned to commit SHAs (PR #1171; its own run 41609315806 shows 63 passed and 42/42 deliberate breaks caught on Python 3.10 and 3.12).
 
 ### Not verified
-- The integration tests in CI; real LLM providers (usage keys come from a fake shaped like the real providers); vector backends other than pgvector; spans handed between threads; Windows permissions.
+- The integration tests on Python versions other than 3.11; real LLM providers (usage keys come from a fake shaped like the real providers); vector backends other than pgvector; spans handed between threads; Windows permissions.
 
 ### Limitations
 - No retention or rotation; key denylist is not a guarantee; no opt-in content capture.

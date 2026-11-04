@@ -67,7 +67,27 @@ and every break must make the tests fail. These tests are not part of the wheel.
 - The key denylist is defense in depth, not a guarantee: a value under an innocent key is recorded as you gave it. Do not put secrets or personal data in attributes.
 - No retention or rotation in 0.1.0: the JSONL file grows until you remove it.
 - No opt-in content capture, no sampling, no network exporters, no multi-tenant tagging.
-- Verified in CI (3.10, 3.12): the core and the adapter's unit tests. Verified in a sandbox only so far: the adapter against a real RagLeap (see Integration tests). Not verified: real LLM providers (the usage keys in the tests come from a fake shaped like the real providers), vector backends other than pgvector, spans handed between threads, Windows file permissions.
+- Verified in CI (3.10, 3.12): the core and the adapter's unit tests. The adapter is also verified against a real RagLeap in CI (Python 3.11, Postgres 16 with pgvector, fake embedder and generator; see Integration tests). Not verified: real LLM providers (the usage keys in the tests come from a fake shaped like the real providers), vector backends other than pgvector, spans handed between threads, Windows file permissions.
+
+## Threat model (0.1.0)
+
+What ragleap-trace protects, against what, and what it does not. It is a local library: no network, no server, no stored credentials.
+
+**Assets:** the content that flows through your pipeline (prompts, answers, file names, user text), the availability of your application, and the trace file.
+
+**Trust boundary:** your application code and ragleap-rag are trusted callers, but they can pass sensitive data by accident. Anyone who can read the trace file or the process memory is outside what this library defends.
+
+| Threat | Mitigation in 0.1.0 | Evidence | Residual risk |
+|---|---|---|---|
+| Content recorded by accident | Denylisted keys are never recorded; the ragleap-rag adapter copies only an allow-list (counts, booleans, provider name, token numbers, lengths); only `str`, `int`, `float` and `bool` values are kept; exceptions are recorded by class name only | Unit and integration tests, each with a break proof | A value under an innocent key is recorded as given |
+| Tracing breaks your application | Exporter and handler errors are swallowed and counted in `tracer.dropped`; the caller's own exception always propagates unchanged | Tests and break proofs; real RagLeap integration tests | Exporters run in the caller's thread: a slow exporter slows the caller (no timeout, no background queue) |
+| Unbounded data per span | Name 128, key 64, 32 attributes, strings cut at 256 | Tests and break proofs | The JSONL file has no size limit or rotation |
+| Trace file readable by others | Created with mode 0600; an existing group- or world-readable file is refused | Tests and break proofs on POSIX | Windows permissions are not verified; no encryption at rest |
+| Events paired with the wrong query | Pairing is per thread and per asyncio task | Thread and asyncio tests; real RagLeap integration tests | Two streams interleaved in one thread or task can pair wrongly |
+| Silent data loss when ragleap-rag changes an event | Contract tests fail if an event key the adapter relies on disappears | Integration contract tests; breaks simulate renamed keys | Only the keys the adapter uses are checked |
+| Supply chain | No runtime dependencies (`dependencies = []`); the CI actions are pinned to commit SHAs | `pyproject.toml`; the two workflow files | Not published yet. Releasing through PyPI trusted publishing is planned, not done |
+
+**Out of scope in 0.1.0:** hostile code in the same process, multi-tenant separation (no tenant tagging), retention policies, network exporters, sampling, and opt-in content capture (which would need ragleap-security and fail closed).
 
 ## Development
 
