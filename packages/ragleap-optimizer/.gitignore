@@ -1,0 +1,40 @@
+# Environment
+.env
+*.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+venv/
+.venv/
+
+# Node
+node_modules/
+
+# Docker
+docker-compose.override.yml
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+.env
+
+# Package build artifacts
+dist/
+build/
+
+# RagLeap command
+.ragleap-ollama
+backups/
+
+# Folder grants are the owner's private choices
+grants/*
+!grants/README.txt
