@@ -70,9 +70,29 @@ def make_console(bridge: Bridge, tokens: Mapping[str, str], host: str = "127.0.0
         def log_message(self, *args: Any) -> None:  # never log bodies, tokens or headers
             pass
 
+        def _drain(self) -> None:
+            """Read and discard a small unread request body before a refusal, so the client gets the answer and not a connection reset
+            (Windows clients report WinError 10053 when a server closes a socket that still holds unread data)."""
+            if getattr(self, "_body_done", False):
+                return
+            self._body_done = True
+            try:
+                n = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                return
+            if 0 < n <= MAX_BODY:
+                try:
+                    self.rfile.read(n)
+                    self.server.drained_bytes = getattr(self.server, "drained_bytes", 0) + n
+                except Exception:
+                    pass
+
         def _send(self, status: int, body: Optional[Mapping[str, Any]] = None, extra: Optional[dict] = None) -> None:
+            if status >= 400:
+                self._drain()
             data = b"" if body is None else json.dumps(body, allow_nan=False).encode()
             self.send_response(status)
+            self.send_header("Connection", "close")
             if body is not None:
                 self.send_header("Content-Type", "application/json")
             for k, v in (extra or {}).items():
@@ -119,6 +139,7 @@ def make_console(bridge: Bridge, tokens: Mapping[str, str], host: str = "127.0.0
             if not (self.headers.get("Content-Type") or "").lower().startswith("application/json"):
                 self._err(415, "type", "content type must be application/json")
                 return None
+            self._body_done = True
             try:
                 obj = json.loads(self.rfile.read(length))
             except (ValueError, UnicodeDecodeError, RecursionError):
