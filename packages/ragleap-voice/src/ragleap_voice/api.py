@@ -31,7 +31,7 @@ _VERIFIED = {}  # (folder, lock files) -> fingerprint of the folder when it last
 
 
 def _fingerprint(d):
-    """Stat-only fingerprint of a model folder: path, mode, size, inode, mtime_ns and ctime_ns of every entry. None on error."""
+    """Stat-only fingerprint of a model folder: path, mode, size, inode, mtime_ns, ctime_ns and device of every entry. None on error."""
     base = str(d)
     out = []
     try:
@@ -39,9 +39,9 @@ def _fingerprint(d):
             for name in sorted(dirnames) + sorted(filenames):
                 full = os.path.join(dirpath, name)
                 st = os.lstat(full)
-                out.append((os.path.relpath(full, base), st.st_mode, st.st_size, st.st_ino, st.st_mtime_ns, st.st_ctime_ns))
+                out.append((os.path.relpath(full, base), st.st_mode, st.st_size, st.st_ino, st.st_mtime_ns, st.st_ctime_ns, st.st_dev))
         st = os.lstat(base)
-        out.append((".", st.st_mode, 0, st.st_ino, st.st_mtime_ns, st.st_ctime_ns))
+        out.append((".", st.st_mode, 0, st.st_ino, st.st_mtime_ns, st.st_ctime_ns, st.st_dev))
     except OSError:
         return None
     return tuple(sorted(out))

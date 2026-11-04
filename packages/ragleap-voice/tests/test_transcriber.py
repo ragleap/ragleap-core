@@ -125,3 +125,22 @@ def test_transcribe_stream_uses_the_transcriber():
             return Transcript("hi", "en", "whisper", "m", "unverified", (), ())
     ev = list(rv.transcribe_stream(iter([b"\x01\x00" * 800]), gate="off", transcriber=Fake(), language="en"))
     assert [e.type for e in ev] == ["stream.started", "transcript.final"] and seen[0]["timestamps"] is True
+
+
+def test_other_input_errors_keep_the_model(tr):
+    t, cache = tr
+    call(t, cache)
+    with pytest.raises(ValueError):
+        t.transcribe(wav_bytes(), language="", allow_unverified=True, cache_dir=cache)
+    with pytest.raises(rv.UnsupportedLanguageError):
+        t.transcribe(wav_bytes(), language="zz", allow_unverified=True, cache_dir=cache)
+    call(t, cache)
+    assert len(FakeModel.instances) == 1
+
+
+def test_closed_transcriber_cannot_be_entered_again(tr):
+    t, cache = tr
+    t.close()
+    with pytest.raises(RagleapVoiceError):
+        with t:
+            pass
