@@ -67,6 +67,8 @@ class Transcriber:
             self._engine.release()
 
     def __enter__(self):
+        if self._closed:
+            raise RagleapVoiceError("this Transcriber is closed.", hint="create a new Transcriber.")
         return self
 
     def __exit__(self, *exc):

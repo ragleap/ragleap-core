@@ -4,6 +4,8 @@ All notable changes to `ragleap-voice` are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
+### Changed
+- The model-folder fingerprint now includes the device id, and `Transcriber.__enter__` rejects a closed instance. New tests cover a write through a hard link and a swapped model folder. Known limitation, unchanged: the folder is verified before the engine opens it by path, so a change between verification and open is not detected (this was also true before the once-per-process cache); whether an already-open model can see later edits to its files is not established.
 
 ## [0.3.2] - 2026-11-02
 ### Status

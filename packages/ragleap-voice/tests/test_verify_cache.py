@@ -102,3 +102,32 @@ def test_freshly_written_folder_is_not_cached(tmp_path, counter, monkeypatch):
     assert api._verify_cached(lock, d) == []
     assert api._verify_cached(lock, d) == []
     assert len(counter) == 2 and not api._VERIFIED
+
+
+def test_fingerprint_includes_device(tmp_path):
+    lock, d = make(tmp_path)
+    fp = api._fingerprint(d)
+    assert fp and all(len(e) == 7 and e[6] == os.lstat(d).st_dev for e in fp)
+
+
+def test_write_through_a_hard_link_is_caught(tmp_path, counter):
+    lock, d = make(tmp_path)
+    other = tmp_path / "other-name"
+    os.link(d / "a.bin", other)
+    assert api._verify_cached(lock, d) == []
+    time.sleep(0.05)
+    with open(other, "r+b") as f:
+        f.write(b"MODEL bytes")
+    problems = api._verify_cached(lock, d)
+    assert len(counter) == 2 and any("sha256 mismatch" in p for p in problems)
+
+
+def test_swapped_parent_folder_is_caught(tmp_path, counter):
+    lock, d = make(tmp_path)
+    assert api._verify_cached(lock, d) == []
+    time.sleep(0.05)
+    os.rename(d, tmp_path / "old")
+    d.mkdir()
+    (d / "a.bin").write_bytes(b"MODEL bytes")
+    problems = api._verify_cached(lock, d)
+    assert len(counter) == 2 and any("sha256 mismatch" in p for p in problems)
