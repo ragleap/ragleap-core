@@ -36,11 +36,12 @@
 [![PyPI ragleap-security](https://img.shields.io/pypi/v/ragleap-security?label=ragleap-security)](https://pypi.org/project/ragleap-security/) [![Downloads](https://img.shields.io/pepy/dt/ragleap-security?label=downloads)](https://pypi.org/project/ragleap-security/)
 [![PyPI ragleap-physical](https://img.shields.io/pypi/v/ragleap-physical?label=ragleap-physical)](https://pypi.org/project/ragleap-physical/) [![Downloads](https://img.shields.io/pepy/dt/ragleap-physical?label=downloads)](https://pypi.org/project/ragleap-physical/)
 
-**DevOps libraries (Python; Java jars for terraform and ansible)**
+**DevOps libraries (Python; Java jars for terraform, ansible and observability)**
 
 [![PyPI ragleap-ops](https://img.shields.io/pypi/v/ragleap-ops?label=ragleap-ops)](https://pypi.org/project/ragleap-ops/) [![Downloads](https://img.shields.io/pepy/dt/ragleap-ops?label=downloads)](https://pypi.org/project/ragleap-ops/)
 [![PyPI ragleap-app-chart](https://img.shields.io/pypi/v/ragleap-app-chart?label=ragleap-app-chart)](https://pypi.org/project/ragleap-app-chart/) [![Downloads](https://img.shields.io/pepy/dt/ragleap-app-chart?label=downloads)](https://pypi.org/project/ragleap-app-chart/)
 [![PyPI ragleap-observability](https://img.shields.io/pypi/v/ragleap-observability?label=ragleap-observability)](https://pypi.org/project/ragleap-observability/) [![Downloads](https://img.shields.io/pepy/dt/ragleap-observability?label=downloads)](https://pypi.org/project/ragleap-observability/)
+[![Maven Central ragleap-observability (Java)](https://img.shields.io/maven-central/v/io.github.antonyrag/ragleap-observability?label=ragleap-observability%20(Java))](https://central.sonatype.com/artifact/io.github.antonyrag/ragleap-observability)
 [![PyPI ragleap-terraform](https://img.shields.io/pypi/v/ragleap-terraform?label=ragleap-terraform)](https://pypi.org/project/ragleap-terraform/) [![Downloads](https://img.shields.io/pepy/dt/ragleap-terraform?label=downloads)](https://pypi.org/project/ragleap-terraform/)
 [![Maven Central ragleap-terraform (Java)](https://img.shields.io/maven-central/v/io.github.antonyrag/ragleap-terraform?label=ragleap-terraform%20(Java))](https://central.sonatype.com/artifact/io.github.antonyrag/ragleap-terraform)
 [![PyPI ragleap-ansible](https://img.shields.io/pypi/v/ragleap-ansible?label=ragleap-ansible)](https://pypi.org/project/ragleap-ansible/) [![Downloads](https://img.shields.io/pepy/dt/ragleap-ansible?label=downloads)](https://pypi.org/project/ragleap-ansible/)
@@ -175,6 +176,8 @@ pip install ragleap-observability
 # or, with uv
 uv add ragleap-observability
 ```
+
+The same chart files are also on Maven Central as a jar, `io.github.antonyrag:ragleap-observability` (see the Maven Central badge in the list above for the current version). It is not a code port: it carries the files of the PyPI wheel, and a small class reads them from the classpath, for example `RagleapObservability.openHelm("ragleap-observability/Chart.yaml")`. Helm and Kubernetes are not included.
 
 Want your agents to call tools on remote MCP servers? `ragleap-integrations` is an MCP client that turns allowlisted tools on remote servers into `ragleap-tools` Tool objects (Streamable HTTP only, alpha):
 
@@ -382,7 +385,7 @@ ragleap-core/
 ├── skills/ragleap/        # Read-only skill for coding agents
 ├── .codex-plugin/         # Plugin manifest for that skill
 ├── packages/              # Standalone pip packages (ragleap-rag, -graph, -tools, ...)
-├── java/                  # Java ports of ragleap-rag, ragleap-graph and ragleap-vectorstores, plus jars of the ragleap-terraform and ragleap-ansible files
+├── java/                  # Java ports of ragleap-rag, ragleap-graph and ragleap-vectorstores, plus jars of the ragleap-terraform, ragleap-ansible and ragleap-observability files
 ├── .github/workflows/     # CI: compile check, Docker build, smoke tests
 ├── docker-compose.yml     # app + db + voice, plus optional neo4j, redis, worker, sandbox and ollama profiles
 └── Dockerfile
@@ -439,7 +442,7 @@ pip install ragleap-rag
 - **`ragleap-physical`** — a simulation-first, observe-first safety bridge between AI agents and simulators (pre-alpha, simulation only). The AI can only propose; a named person approves the exact change; limits are checked again when it is applied; the outcome is verified in the simulator. Four AI-facing tools and a small MCP server, an operator console for the human approval step, MuJoCo adapters (optional extra), workspace limits, two- and three-joint arms, an offline ROS 2 observe-only mock, a simulated machine tool, and observe-only energy and MTConnect mocks. Not built: MQTT, PLC or real-robot bridges; nothing here controls real hardware. Not independently audited. Install with `pip install ragleap-physical`.
 - **`ragleap-ops`** — Kubernetes deployment manifests for RagLeap Core, live-tested end-to-end on a real cluster. Install with `pip install ragleap-ops` or `uv add ragleap-ops`.
 - **`ragleap-app-chart`** — generic, reusable Helm chart for deploying arbitrary services to Kubernetes, not RagLeap-specific. Point it at your own app via a `services:` list. Install with `pip install ragleap-app-chart` or `uv add ragleap-app-chart`.
-- **`ragleap-observability`** — Prometheus, Grafana, Loki + Promtail for `ragleap-ops`, live-verified end-to-end against a real cluster (real connection confirmed, real non-zero metrics returned; 21+ real log streams with correct namespace/pod/container labels). AlertManager is wired to Prometheus with a first real alert rule, plus optional Slack/email receivers (off by default; delivery verified against a stand-in, real send not yet confirmed). Install with `pip install ragleap-observability` or `uv add ragleap-observability`.
+- **`ragleap-observability`** — Prometheus, Grafana, Loki + Promtail for `ragleap-ops`, live-verified end-to-end against a real cluster (real connection confirmed, real non-zero metrics returned; 21+ real log streams with correct namespace/pod/container labels). AlertManager is wired to Prometheus with a first real alert rule, plus optional Slack/email receivers (off by default; delivery verified against a stand-in, real send not yet confirmed). Install with `pip install ragleap-observability` or `uv add ragleap-observability`. The same chart files are also on Maven Central as a jar, `io.github.antonyrag:ragleap-observability` (not a code port).
 - **`ragleap-terraform`** — Terraform module that creates a local kind cluster and installs the RagLeap Helm charts, applied and destroyed on a real cluster (no cloud modules yet). Install with `pip install ragleap-terraform` or `uv add ragleap-terraform`. The same files are also on Maven Central as a jar, `io.github.antonyrag:ragleap-terraform` (not a code port).
 - **`ragleap-ansible`** — Ansible roles that prepare and harden a fresh Ubuntu server: deploy user, sudo, unattended upgrades, opt-in SSH hardening and an opt-in firewall (tested in a container; does not install k3s, Helm or the charts yet). Install with `pip install ragleap-ansible` or `uv add ragleap-ansible`. The same files are also on Maven Central as a jar, `io.github.antonyrag:ragleap-ansible` (not a code port).
 - **`ragleap-voice`** — pre-alpha, open and local (MIT). `transcribe()` and `synthesize()` with an optional Whisper large-v3 engine and an Indic Parler-TTS engine, on top of a licence-checked manifest and hash-verified model downloads. Every model is still unverified and none is a default; each engine has been tested on only a few clips. Install with `pip install ragleap-voice` or `uv add ragleap-voice` (engines are optional extras, e.g. `ragleap-voice[whisper]`).
