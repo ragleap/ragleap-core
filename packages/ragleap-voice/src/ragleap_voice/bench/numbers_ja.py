@@ -10,7 +10,9 @@ Standard standalone kanji cardinals are supported from 零 through the
 compositions such as 一億二千三百四十五万六千七百八十九. A token made only
 of unit characters is read digit by digit, like the English and Turkish unit
 runs ("一二三" -> "123", "二〇二六" -> "2026"). 零 is a positional zero
-marker and 〇 is the digit zero. Malformed or ambiguous sequences such as
+marker and 〇 is the digit zero; digit runs consist only of 〇 and unit digits, so a token
+such as 二零二六 follows the positional-zero rules instead. Malformed or
+ambiguous sequences such as
 十十, 万万, 一億万, or 一百零十 are preserved intact. A multi-character
 token starting with 零 (零一, 零零, 零一百) is malformed and kept whole; 〇,
 not 零, is the leading digit zero.
@@ -66,7 +68,7 @@ def _parse_chars(text):
     """Return [digits] for one valid number token, or None to keep it whole."""
     # As in the English and Turkish steps, a run of unit characters alone is
     # read digit by digit: 一二三 -> "123", 二〇二六 -> "2026", 一〇一 -> "101".
-    if len(text) > 1 and all(ch in _UNITS for ch in text):
+    if len(text) > 1 and all(ch in _UNITS and ch != _ZERO for ch in text):
         return ["".join(str(_UNITS[ch]) for ch in text)]
 
     total = section = 0

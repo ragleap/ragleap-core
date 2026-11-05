@@ -66,8 +66,9 @@ values other than booleans or strings raise TypeError.
   no word spaces, so a token made only of number characters is read as one
   number run and a token mixing numbers with prose is left unchanged.
   Standard kanji compositions through the 兆 (10**12) scale are supported; a
-  token made only of unit characters is read digit by digit ("一二三" ->
-  "123"), 零 is a positional zero marker, and 〇 is the digit zero. Malformed
+  token made only of unit characters and 〇 is read digit by digit ("一二三" ->
+  "123", "二〇二六" -> "2026"); 零 is a positional zero marker and never acts
+  as a digit. Malformed
   or ambiguous sequences (十十, 万万, 一億万, 一百零十) and double scales such
   as 万億 are preserved intact. A multi-character token starting with 零
   (零一, 零零, 零一百) is kept whole. Kana readings, 大字 forms, ordinals, dates,

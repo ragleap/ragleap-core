@@ -1298,6 +1298,7 @@ def test_japanese_malformed_and_ambiguous_forms_are_preserved():
         "万万", "億億", "兆兆", "一億万", "万億", "億万",
         "零一", "零零", "零五", "零百", "零一百",
         "零十", "一百零十", "一千零零三", "一万零万",
+        "二零二六", "一零一",
         "一百二三", "第一",
     ):
         assert normalize(phrase, numbers="ja") == phrase
