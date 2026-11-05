@@ -34,6 +34,9 @@
 
 [![PyPI ragleap-memory](https://img.shields.io/pypi/v/ragleap-memory?label=ragleap-memory)](https://pypi.org/project/ragleap-memory/) [![Downloads](https://img.shields.io/pepy/dt/ragleap-memory?label=downloads)](https://pypi.org/project/ragleap-memory/)
 [![PyPI ragleap-security](https://img.shields.io/pypi/v/ragleap-security?label=ragleap-security)](https://pypi.org/project/ragleap-security/) [![Downloads](https://img.shields.io/pepy/dt/ragleap-security?label=downloads)](https://pypi.org/project/ragleap-security/)
+
+**Physical AI (Python, simulation only)**
+
 [![PyPI ragleap-physical](https://img.shields.io/pypi/v/ragleap-physical?label=ragleap-physical)](https://pypi.org/project/ragleap-physical/) [![Downloads](https://img.shields.io/pepy/dt/ragleap-physical?label=downloads)](https://pypi.org/project/ragleap-physical/)
 
 **DevOps libraries (Python; Java jars for terraform, ansible and observability)**
