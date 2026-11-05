@@ -1245,3 +1245,142 @@ def test_malay_numbers_are_opt_in_versioned_and_wer_cer_equivalent():
     assert normalize("dua puluh satu", numbers="id") == "21"
     assert normalize("vinte e três", numbers="pt-BR") == "23"
     assert normalize("तेईस", numbers="hi") == "23"
+
+
+# Chinese (Mandarin) cardinals. Sources checked for the word tables and the
+# composition rules: Unicode CLDR Mandarin number system data
+# (https://github.com/unicode-org/cldr/blob/main/common/rbnf/zh.xml), CLDR's
+# number-formatting specification
+# (https://unicode.org/reports/tr35/tr35-numbers.html), and Chinese numeral
+# rules (https://zh.wikipedia.org/wiki/中文数字). Written Chinese has no word
+# spaces, so a token made only of number characters is one number run and a
+# token mixing numbers with prose is kept whole.
+def test_chinese_mandarin_cardinals_follow_cldr_rules():
+    cases = {
+        "零": "0",
+        "〇": "0",
+        "一": "1",
+        "两": "2",
+        "五": "5",
+        "九": "9",
+        "十": "10",
+        "十一": "11",
+        "十九": "19",
+        "二十": "20",
+        "九十九": "99",
+        "一百": "100",
+        "一百零三": "103",
+        "二百": "200",
+        "两百": "200",
+        "五百〇三": "503",
+        "千": "1000",
+        "一千": "1000",
+        "一千二百三十四": "1234",
+        "一万二千三百四十五": "12345",
+        "十万": "100000",
+        "十二万": "120000",
+        "一百万": "1000000",
+        "三百五十万": "3500000",
+        "一亿": "100000000",
+        "一亿零三": "100000003",
+        "一亿零三万": "100030000",
+        "一亿五千万": "150000000",
+        "一亿二千三百四十五万六千七百八十九": "123456789",
+        "百亿": "10000000000",
+        "万亿": "1000000000000",
+        "一万亿": "1000000000000",
+        "一二三": "123",            # digit by digit, as in the English mode
+        "二零二六": "2026",
+        "一零一": "101",
+    }
+    for words, expected in cases.items():
+        assert normalize(words, numbers="zh") == expected
+
+
+def test_chinese_malformed_and_ambiguous_forms_are_preserved():
+    for phrase in (
+        "十十", "十百", "百百", "九百百", "千千", "千百", "两百千",
+        "万万", "亿亿", "亿万", "一亿万", "一万万", "万万亿",
+        "零十", "一百零十", "一百零零三", "一万零万",
+        "一百二三", "三七二十一", "二兆", "第一",
+    ):
+        assert normalize(phrase, numbers="zh") == phrase
+
+
+def test_chinese_colloquial_truncations_read_formally():
+    # Informal short forms are read as their formal composition, not as the
+    # colloquial value (二百五 is slang for 250 but formally reads 205).
+    assert normalize("二百五", numbers="zh") == "205"
+    assert normalize("三百二", numbers="zh") == "302"
+    assert normalize("二万三", numbers="zh") == "20003"
+
+
+def test_chinese_mixed_prose_tokens_are_not_split():
+    cases = {
+        "我有一百二十三块钱。": "我有一百二十三块钱",
+        "第三名": "第三名",
+        "十二月": "十二月",
+        "星期一": "星期一",
+        "百分之三十": "百分之三十",
+        "三百元": "三百元",
+    }
+    for text, expected in cases.items():
+        assert normalize(text, numbers="zh") == expected
+
+
+def test_chinese_unicode_and_number_punctuation():
+    assert normalize("一百二十三！", numbers="zh") == "123"
+    assert normalize("　二千零二十　", numbers="zh") == "2020"
+    assert normalize("１２３４", numbers="zh") == "1234"
+    assert normalize("１,２３４", numbers="zh") == "1234"
+    assert normalize("1,234", numbers="zh") == "1234"
+    assert normalize("1.234", numbers="zh") == "1 234"
+
+
+def test_chinese_numbers_are_opt_in_versioned_and_wer_cer_equivalent():
+    words = "一千二百三十四"
+    numeric = "1234"
+    assert normalize(words) == words
+    assert normalize(words, numbers=False) == words
+    assert normalize(words, numbers=True) == words
+    assert normalizer_version(numbers="zh") == "1+numbers-zh.1"
+    assert normalizer_version() == "1"
+    assert normalizer_version(numbers="en") == "1+numbers-en.1"
+    assert normalizer_version(numbers="tr") == "1+numbers-tr.2"
+    assert normalizer_version(numbers="es") == "1+numbers-es.1"
+    assert normalizer_version(numbers="de") == "1+numbers-de.1"
+    assert normalizer_version(numbers="it") == "1+numbers-it.2"
+    assert normalizer_version(numbers="id") == "1+numbers-id.1"
+    assert normalizer_version(numbers="pt-BR") == "1+numbers-pt-BR.1"
+    assert normalizer_version(numbers="hi") == "1+numbers-hi.2"
+    assert normalizer_version(numbers="ms") == "1+numbers-ms.1"
+    assert normalize(words, numbers="zh") == normalize(numeric, numbers="zh")
+    assert wer(words, numeric, numbers="zh") == 0
+    assert cer(words, numeric, numbers="zh") == 0
+    # Opting into Chinese must leave the other published languages isolated.
+    assert normalize("twenty one", numbers="zh") == "twenty one"
+    assert normalize("dua puluh satu", numbers="zh") == "dua puluh satu"
+    assert normalize("तेईस", numbers="zh") == "तेईस"
+
+
+def test_run_stt_applies_chinese_and_records_version(tmp_path):
+    with wave.open(str(tmp_path / "a.wav"), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(16000)
+        w.writeframes(b"\x00\x00" * 16000)
+    manifest = tmp_path / "m.csv"
+    manifest.write_text(
+        "id,path,reference,language,license,source\n"
+        "a,a.wav,我有 一千二百三十四 块钱。,zh,MIT,author-written MIT test\n",
+        encoding="utf-8",
+    )
+    items, problems = load_manifest(manifest)
+    assert problems == []
+
+    rows = run_stt(lambda path, language: "我有 1234 块钱。", items, numbers="zh")
+    assert summarize(rows)["zh"]["wer"] == 0
+    assert summarize(rows)["zh"]["cer"] == 0
+    _, json_path = write_results(tmp_path / "out", "fake", rows, environment_info())
+    saved = json.loads(pathlib.Path(json_path).read_text(encoding="utf-8"))
+    assert saved["meta"]["normalizer_version"] == "1+numbers-zh.1"

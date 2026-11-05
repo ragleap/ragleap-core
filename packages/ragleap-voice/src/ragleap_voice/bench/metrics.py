@@ -15,7 +15,8 @@ normalization (version "1+numbers-de.1"), or numbers="it" for Italian cardinal
 normalization (version "1+numbers-it.2"), or numbers="id" for Indonesian
 cardinal normalization (version "1+numbers-id.1"); `numbers="pt-BR"` selects Brazilian
 Portuguese cardinals (version "1+numbers-pt-BR.1"), and `numbers="hi"` selects Hindi
-cardinals (version "1+numbers-hi.2"). Record normalizer_version(numbers)
+cardinals (version "1+numbers-hi.2"), and `numbers="zh"` selects Mandarin Chinese
+cardinals (version "1+numbers-zh.1"). Record normalizer_version(numbers)
 next to every result measured with any option. Decimal digits of any script
 become ASCII digits with all number options. Other language strings raise ValueError;
 values other than booleans or strings raise TypeError.
@@ -60,7 +61,18 @@ values other than booleans or strings raise TypeError.
   999,999,999,999,999,999 use the Malaysian short scale (bilion = 10**9,
   trilion = 10**12). Commas are removed only from complete three-digit groups;
   periods between digits remain decimal points.
-- English and Turkish drop a comma used as a thousands separator
+- Mandarin Chinese cardinal number words become digits: "一百二十三" -> "123"
+  and "一亿二千三百四十五万六千七百八十九" -> "123456789". Written Chinese
+  has no word spaces, so a token made only of number characters is read as one
+  number run and a token mixing numbers with prose is left unchanged. Standard
+  simplified-character compositions through the 万亿 (10**12) scale are
+  supported; a token made only of unit characters is read digit by digit
+  ("一二三" -> "123"), 两 is read as 2, 零 is a positional zero marker, and 〇
+  is the digit zero. Malformed or ambiguous sequences (十十, 万万, 一亿万,
+  一百零十, 一百二三) are preserved intact, and colloquial truncations are read
+  formally ("二百五" -> "205"). Ordinals (第一), dates, fractions, currency,
+  Traditional characters, and 兆 are outside scope.
+- English, Turkish, and Mandarin Chinese drop a comma used as a thousands separator
   ("1,200" -> "1200"). Spanish, German, Italian, Indonesian, and Brazilian
   Portuguese retain it between digits so a decimal comma ("1,234") cannot
   silently become the integer 1234; decimals are not otherwise interpreted.
@@ -87,6 +99,7 @@ NUMBERS_ID_VERSION = "numbers-id.1"
 NUMBERS_PT_BR_VERSION = "numbers-pt-BR.1"
 NUMBERS_HI_VERSION = "numbers-hi.2"
 NUMBERS_MS_VERSION = "numbers-ms.1"
+NUMBERS_ZH_VERSION = "numbers-zh.1"
 
 _APOSTROPHES = {"'", "\u2019", "\u02bc"}
 
@@ -123,12 +136,12 @@ def _number_mode(numbers):
         return None
     if numbers is True:
         return "en"
-    if numbers in ("en", "tr", "es", "de", "it", "id", "pt-BR", "hi", "ms"):
+    if numbers in ("en", "tr", "es", "de", "it", "id", "pt-BR", "hi", "ms", "zh"):
         return numbers
     if isinstance(numbers, str):
         raise ValueError(f"unsupported number-normalization language: {numbers!r}")  # noqa: TRY004
     raise TypeError(
-        "numbers must be False, True, 'en', 'tr', 'es', 'de', 'it', 'id', 'pt-BR', 'hi', or 'ms'"
+        "numbers must be False, True, 'en', 'tr', 'es', 'de', 'it', 'id', 'pt-BR', 'hi', 'ms', or 'zh'"
     )
 
 
@@ -141,7 +154,7 @@ def normalizer_version(numbers=False):
                "es": NUMBERS_ES_VERSION, "de": NUMBERS_DE_VERSION,
                "it": NUMBERS_IT_VERSION, "id": NUMBERS_ID_VERSION,
                "pt-BR": NUMBERS_PT_BR_VERSION, "hi": NUMBERS_HI_VERSION,
-               "ms": NUMBERS_MS_VERSION}[mode]
+               "ms": NUMBERS_MS_VERSION, "zh": NUMBERS_ZH_VERSION}[mode]
     return NORMALIZER_VERSION + "+" + version
 
 
@@ -257,6 +270,9 @@ def normalize(text, numbers=False):
         words = numbers_to_digits(words)
     elif mode == "ms":
         from .numbers_ms import numbers_to_digits
+        words = numbers_to_digits(words)
+    elif mode == "zh":
+        from .numbers_zh import numbers_to_digits
         words = numbers_to_digits(words)
     return " ".join(words)
 
