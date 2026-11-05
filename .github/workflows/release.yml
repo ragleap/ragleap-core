@@ -18,6 +18,7 @@ on:
       - 'ragleap-security-v*'
       - 'ragleap-memory-v*'
       - 'ragleap-optimizer-v*'
+      - 'ragleap-trace-v*'
       - 'ragleap-physical-v*'
   workflow_dispatch:
     inputs:
@@ -41,6 +42,7 @@ on:
           - ragleap-security
           - ragleap-memory
           - ragleap-optimizer
+          - ragleap-trace
           - ragleap-physical
       target:
         description: 'Publish target'
@@ -302,6 +304,42 @@ jobs:
         uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
         with:
           packages-dir: packages/ragleap-optimizer/dist/
+          skip-existing: true
+
+  publish-ragleap-trace:
+    if: |
+      startsWith(github.ref, 'refs/tags/ragleap-trace-v') ||
+      (github.event_name == 'workflow_dispatch' && inputs.package == 'ragleap-trace')
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.event_name == 'workflow_dispatch' && inputs.target || 'pypi' }}
+    permissions:
+      id-token: write
+    defaults:
+      run:
+        working-directory: packages/ragleap-trace
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.11'
+      - name: Install build tooling
+        run: pip install build
+      - name: Build
+        run: |
+          rm -rf dist/
+          python -m build
+      - name: Publish to TestPyPI
+        if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
+        with:
+          packages-dir: packages/ragleap-trace/dist/
+          repository-url: https://test.pypi.org/legacy/
+      - name: Publish to PyPI
+        if: github.event_name != 'workflow_dispatch' || inputs.target == 'pypi'
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
+        with:
+          packages-dir: packages/ragleap-trace/dist/
           skip-existing: true
 
   publish-ragleap-graph:
