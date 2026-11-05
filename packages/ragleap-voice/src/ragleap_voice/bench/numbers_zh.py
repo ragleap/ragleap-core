@@ -14,8 +14,9 @@ read digit by digit, like the English and Turkish unit runs ("一二三" ->
 "123", "二〇二六" -> "2026"). 两 is accepted as 2 before 百/千/万/亿 and as a
 standalone counting variant; 零 is a positional zero marker and 〇 is the
 digit zero. Malformed or ambiguous sequences such as 十十, 万万, 一亿万,
-一百零十, or 一百二三 are preserved intact, and colloquial truncations are
-read formally ("二百五" -> "205", "三百二" -> "302", "二万三" -> "20003").
+一百零十, or 一百二三 are preserved intact. A multi-character token starting
+with 零 (零一, 零零, 零一百) is malformed and kept whole; 〇, not 零, is the
+leading digit zero. Colloquial truncations are read formally ("二百五" -> "205", "三百二" -> "302", "二万三" -> "20003").
 
 Ordinals (第一...), dates, fractions, currency forms, spoken decimals,
 Traditional characters (萬/億), the ambiguous 兆, and negative forms are
@@ -54,8 +55,8 @@ def numbers_to_digits(words):
     """Replace tokens made only of Chinese number characters with digits."""
     out = []
     for word in words:
-        if _NUMBER_TOKEN.fullmatch(word):
-            parsed = _parse_chars(word)
+        if (_NUMBER_TOKEN.fullmatch(word)
+                and not (len(word) > 1 and word.startswith(_ZERO))):            parsed = _parse_chars(word)
             out.extend(parsed if parsed is not None else [word])
         else:
             out.append(word)

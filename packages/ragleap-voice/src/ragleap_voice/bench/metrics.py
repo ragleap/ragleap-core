@@ -69,7 +69,8 @@ values other than booleans or strings raise TypeError.
   supported; a token made only of unit characters is read digit by digit
   ("一二三" -> "123"), 两 is read as 2, 零 is a positional zero marker, and 〇
   is the digit zero. Malformed or ambiguous sequences (十十, 万万, 一亿万,
-  一百零十, 一百二三) are preserved intact, and colloquial truncations are read
+  一百零十, 一百二三) are preserved intact; a multi-character token starting
+  with 零 (零一, 零零, 零一百) is kept whole. Colloquial truncations are read
   formally ("二百五" -> "205"). Ordinals (第一), dates, fractions, currency,
   Traditional characters, and 兆 are outside scope.
 - English, Turkish, and Mandarin Chinese drop a comma used as a thousands separator
