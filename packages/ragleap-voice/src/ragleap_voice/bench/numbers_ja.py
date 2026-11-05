@@ -11,7 +11,9 @@ compositions such as 一億二千三百四十五万六千七百八十九. A toke
 of unit characters is read digit by digit, like the English and Turkish unit
 runs ("一二三" -> "123", "二〇二六" -> "2026"). 零 is a positional zero
 marker and 〇 is the digit zero. Malformed or ambiguous sequences such as
-十十, 万万, 一億万, or 一百零十 are preserved intact.
+十十, 万万, 一億万, or 一百零十 are preserved intact. A multi-character
+token starting with 零 (零一, 零零, 零一百) is malformed and kept whole; 〇,
+not 零, is the leading digit zero.
 
 Kana readings (にじゅうさん), kana/kanji mixtures inside one token, 大字
 forms (壱, 弐, 参, 拾, 萬), Traditional characters, decimal/分数 readings,
@@ -51,7 +53,8 @@ def numbers_to_digits(words):
     """Replace tokens made only of Japanese kanji number characters with digits."""
     out = []
     for word in words:
-        if _NUMBER_TOKEN.fullmatch(word):
+        if (_NUMBER_TOKEN.fullmatch(word)
+                and not (len(word) > 1 and word.startswith(_ZERO))):
             parsed = _parse_chars(word)
             out.extend(parsed if parsed is not None else [word])
         else:

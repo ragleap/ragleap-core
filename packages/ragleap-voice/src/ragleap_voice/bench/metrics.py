@@ -69,7 +69,8 @@ values other than booleans or strings raise TypeError.
   token made only of unit characters is read digit by digit ("一二三" ->
   "123"), 零 is a positional zero marker, and 〇 is the digit zero. Malformed
   or ambiguous sequences (十十, 万万, 一億万, 一百零十) and double scales such
-  as 万億 are preserved intact. Kana readings, 大字 forms, ordinals, dates,
+  as 万億 are preserved intact. A multi-character token starting with 零
+  (零一, 零零, 零一百) is kept whole. Kana readings, 大字 forms, ordinals, dates,
   fractions, and currency are outside scope.
 - English, Turkish, and Japanese drop a comma used as a thousands separator
   ("1,200" -> "1200"). Spanish, German, Italian, Indonesian, and Brazilian
