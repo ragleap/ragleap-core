@@ -789,6 +789,42 @@ public final class GraphIndex implements GraphSearch, AutoCloseable {
         return GraphBackfills.coOccursCompositeKey(runnerOrNull(), namespace, batchSize);
     }
 
+    // ---- communities (port of the Python community methods; the logic lives in CommunityStore) ----
+
+    /** Communities of the default namespace without writing anything (resolution 1.0, min size 2, at most 200000 edges). */
+    public List<Communities.Community> detectCommunities() {
+        return detectCommunities(null, null, 1.0, 2, false, 200_000);
+    }
+
+    /** Groups the entities of a namespace into communities without writing; IllegalArgumentException for bad arguments. */
+    public List<Communities.Community> detectCommunities(String namespace, String userId, double resolution, int minSize,
+                                                         boolean includeRelations, int maxEdges) {
+        return new CommunityStore(runner, audit).detect(namespace, userId, resolution, minSize, includeRelations, maxEdges);
+    }
+
+    public CommunityStore.Refresh refreshCommunities() {
+        return refreshCommunities(null, null, 1.0, 2, false, 200_000, null, false, 20);
+    }
+
+    /** Detects the communities and stores them as :Community nodes (see CommunityStore.refresh). */
+    public CommunityStore.Refresh refreshCommunities(String namespace, String userId, double resolution, int minSize,
+                                                     boolean includeRelations, int maxEdges,
+                                                     java.util.function.Function<Map<String, Object>, String> summarizer,
+                                                     boolean force, int maxSummaryItems) {
+        return new CommunityStore(runner, audit).refresh(namespace, userId, resolution, minSize, includeRelations,
+                maxEdges, summarizer, force, maxSummaryItems);
+    }
+
+    public List<CommunityStore.Hit> findCommunities(List<String> entityNames) {
+        return findCommunities(entityNames, null, null, 25, false);
+    }
+
+    /** Stored communities, optionally only those containing the given entities. */
+    public List<CommunityStore.Hit> findCommunities(List<String> entityNames, String namespace, String userId, int limit,
+                                                    boolean includeMembers) {
+        return new CommunityStore(runner, audit).find(entityNames, namespace, userId, limit, includeMembers);
+    }
+
     /** The connected runner, or null when the server could not be reached (used by MigrationRunner and tests). */
     CypherRunner runnerOrNull() {
         return isAvailable() ? runner : null;
