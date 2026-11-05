@@ -50,3 +50,14 @@ def test_harness_leaves_no_rows_behind(results):
     finally:
         conn.close()
     assert (runs, held) == (0, 0)
+
+
+def test_a_poisoned_document_is_held_for_approval_even_in_full_mode():
+    scenario = [s for s in so.SCENARIOS if s["id"] == "E1a"][0]
+    assert so.run_one(scenario, "full") == "held for approval (taint rule)"
+
+
+def test_the_document_taint_can_be_turned_off_on_purpose(monkeypatch):
+    monkeypatch.setenv("TAINT_RETRIEVED_DOCUMENTS", "false")
+    scenario = [s for s in so.SCENARIOS if s["id"] == "E1a"][0]
+    assert so.run_one(scenario, "full") == "EXECUTED"

@@ -253,9 +253,11 @@ def ask(
     if allow_actions and result.get("provider_used"):
         if trusted:
             if agent_loop.enabled():
-                action_outcome = agent_loop.run(query, result["answer"], generator, role)
+                action_outcome = agent_loop.run(query, result["answer"], generator, role,
+                                               tainted=agent_loop.taint_for_retrieval(chunks))
             else:
-                action_outcome = maybe_act(query, result["answer"], generator, role)
+                action_outcome = maybe_act(query, result["answer"], generator, role,
+                                           tainted=agent_loop.taint_for_retrieval(chunks))
         else:
             action_outcome = {"status": "skipped", "tool": None, "target": None,
                               "detail": "actions require a trusted caller"}

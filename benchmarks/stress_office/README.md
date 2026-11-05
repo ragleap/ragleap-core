@@ -40,6 +40,9 @@ It prints one table: each event, run under autonomy `off`, `semi` and `full`.
 - `skipped (autonomy off)`: nothing runs when autonomy is off.
 - The last column is the reference, true by construction: a loop with no checks at all executes whatever the model proposes. It is not a measurement.
 
+E1a and E1b model answers built from ingested documents, so those runs start as tainted unless
+`TAINT_RETRIEVED_DOCUMENTS=false` is set; E2 and E3 do not use documents.
+
 ## What this does not show
 
 - It does not show how any real model behaves. It tests the guardrails against a model that always obeys.

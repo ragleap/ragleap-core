@@ -364,12 +364,12 @@ def plan_action(query: str, answer: str, service) -> Optional[Dict]:
         return None
 
 
-def run_action(plan: Dict, role: Optional[str]) -> Dict:
+def run_action(plan: Dict, role: Optional[str], force_semi: bool = False) -> Dict:
     """Hand a validated plan to the autonomy gate. The gate decides whether it runs."""
     from core.autonomy import execute_or_request  # lazy: avoids a core.autonomy <-> core.employees import cycle
     res = execute_or_request(
         action_type=plan["tool"], channel=plan["channel"], target=plan["target"],
-        content=plan["content"], subject=plan["subject"], role=role,
+        content=plan["content"], subject=plan["subject"], role=role, force_semi=force_semi,
     )
     return {
         "tool": plan["tool"], "channel": plan["channel"], "target": plan["target"],
@@ -378,10 +378,13 @@ def run_action(plan: Dict, role: Optional[str]) -> Dict:
     }
 
 
-def maybe_act(query: str, answer: str, service, role: Optional[str]) -> Optional[Dict]:
+def maybe_act(query: str, answer: str, service, role: Optional[str], tainted: bool = False) -> Optional[Dict]:
     plan = plan_action(query, answer, service)
     if not plan:
         return None
+    from core.agent_loop import OUTBOUND_TOOLS  # lazy: agent_loop imports this module
+    if tainted and plan["tool"] in OUTBOUND_TOOLS:
+        return run_action(plan, role, force_semi=True)
     return run_action(plan, role)
 
 

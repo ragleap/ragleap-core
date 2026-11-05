@@ -319,15 +319,30 @@ def _drive(run: Dict, service, role: Optional[str]) -> Optional[Dict]:
                            f"Stopped: {obs or status}"[:200])
 
 
-def run(query: str, answer: str, service, role: Optional[str] = None) -> Optional[Dict]:
-    """Start a run. None means nothing was done. Never raises."""
+def taint_for_retrieval(chunks) -> bool:
+    """True when a run should start as tainted because its answer was built from retrieved documents.
+
+    An ingested document (an email attachment, a synced folder) can carry hidden instructions, so it counts
+    as untrusted content: outbound actions then need owner approval even in full autonomy mode.
+    Owners who knowingly want the old behaviour can set TAINT_RETRIEVED_DOCUMENTS=false.
+    """
+    if os.environ.get("TAINT_RETRIEVED_DOCUMENTS", "true").strip().lower() in ("false", "0", "no", "off"):
+        return False
+    return bool(chunks)
+
+
+def run(query: str, answer: str, service, role: Optional[str] = None, tainted: bool = False) -> Optional[Dict]:
+    """Start a run. None means nothing was done. Never raises.
+
+    tainted=True starts the run as if it had already read outside content (see taint_for_retrieval).
+    """
     try:
         if not enabled() or not (query or "").strip():
             return None
         if not actions.available_tools():
             return None                  # keeps plan_action()'s zero-tools shortcut: no model call
         state = {"id": None, "role": role, "query": query[:TEXT_CAP], "context_answer": (answer or "")[:TEXT_CAP],
-                 "status": "running", "steps": [], "tainted": False, "pending_action_id": None, "summary": ""}
+                 "status": "running", "steps": [], "tainted": bool(tainted), "pending_action_id": None, "summary": ""}
         return _drive(state, service, role)
     except Exception as e:
         logger.warning("Agent loop failed (non-fatal): %s", e)

@@ -390,3 +390,26 @@ def test_ask_no_action_proposed_leaves_answer_untouched():
     result, mock_act = _ask_with_actions(None, allow_actions=True, trusted=True)
     mock_act.assert_called_once()
     assert "action" not in result and result["answer"] == "base answer"
+
+
+def test_ask_marks_document_grounded_answers_as_untrusted_for_actions():
+    _result, mock_act = _ask_with_actions({"status": "pending_approval", "tool": "send_slack"},
+                                          allow_actions=True, trusted=True)
+    assert mock_act.call_args.kwargs["tainted"] is True
+
+
+def test_ask_document_taint_can_be_turned_off(monkeypatch):
+    monkeypatch.setenv("TAINT_RETRIEVED_DOCUMENTS", "false")
+    _result, mock_act = _ask_with_actions({"status": "executed", "tool": "send_slack"},
+                                          allow_actions=True, trusted=True)
+    assert mock_act.call_args.kwargs["tainted"] is False
+
+
+def test_ask_passes_the_document_taint_to_the_agent_loop(monkeypatch):
+    monkeypatch.setenv("AGENT_LOOP_ENABLED", "true")
+    with patch.object(chat, "_prepare", return_value=([{"document_name": "d"}], "en", False)), \
+         patch.object(chat, "GenerationService", _action_gen()), \
+         patch.object(chat.agent_loop, "run", return_value=None) as mock_run, \
+         patch.object(chat, "record_trace"):
+        chat.ask("q?", allow_actions=True, trusted=True)
+    assert mock_run.call_args.kwargs["tainted"] is True
