@@ -422,9 +422,11 @@ docker compose up --build -d
 
 Requirements: Docker, Docker Compose, and either a Gemini API key (the default) or a local Ollama setup with no key (use `ragleap launch --ollama`, or set `EMBEDDING_PROVIDER=ollama` for embeddings). For chat you can use Gemini or any of the 19 providers listed under [Supported LLM Providers](#supported-llm-providers-byok), including a local Ollama model and any OpenAI-compatible endpoint.
 
-**Try it in 30 seconds** — with the stack running, see [examples/](examples/) for two verified, runnable scripts:
-- `examples/01_ingest_and_query.py` — upload a document and ask a question via the API
+**Try it in 30 seconds** — with the stack running, see [examples/](examples/) for two runnable scripts:
+- `examples/01_ingest_and_query.py` — upload a document and ask a question via the API. The installer put an API key in your `.env` file: set it first as `RAGLEAP_API_KEY` (bash: `export RAGLEAP_API_KEY=...`, PowerShell: `$env:RAGLEAP_API_KEY = "..."`) and run `pip install requests`
 - `examples/02_test_channel_directly.py` — test the WhatsApp/Telegram/Discord answering logic without real bot credentials
+
+The AI Office dashboard has no chat screen yet. To ask a question without writing code, use `python3 skills/ragleap/scripts/ragleap_client.py ask "your question"` (see [Use RagLeap from a coding agent](#use-ragleap-from-a-coding-agent-read-only-plugin) for the settings it reads), or one of the chat channels.
 
 ## Just want the RAG engine as a Python library?
 
