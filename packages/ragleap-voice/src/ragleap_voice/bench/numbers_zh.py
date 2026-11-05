@@ -56,7 +56,8 @@ def numbers_to_digits(words):
     out = []
     for word in words:
         if (_NUMBER_TOKEN.fullmatch(word)
-                and not (len(word) > 1 and word.startswith(_ZERO))):            parsed = _parse_chars(word)
+                and not (len(word) > 1 and word.startswith(_ZERO))):
+            parsed = _parse_chars(word)
             out.extend(parsed if parsed is not None else [word])
         else:
             out.append(word)
