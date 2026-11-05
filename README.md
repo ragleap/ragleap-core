@@ -91,7 +91,7 @@ It asks which AI to use, builds and starts RagLeap, and opens the dashboard in y
 
 If port 8000 or 5433 is already used on your computer (for example by a local PostgreSQL), a fresh install picks the next free port and writes it to `.env` (`APP_PORT`, `DB_PORT` and so on). `ragleap key --rotate` replaces your API key and restarts the app; the old key stops working at once.
 
-Honest limits: the Windows installer has been run on one Windows machine so far, and its local Ollama option has not been tested on Windows.
+Honest limits: the Windows installer has been run on two Windows machines so far: the maintainer's, and one community tester's (Windows 11 with Docker Desktop and Ollama, see [#781](https://github.com/ragleap/ragleap-core/issues/781)). On that second machine the local Ollama option installed, answered a question about an uploaded PDF and named its source. Response times were not measured. macOS and Linux desktops have not been verified yet.
 
 [Quickstart](#quickstart) · [Docs](https://docs.ragleap.com) · [Website](https://ragleap.com) · [Packages](https://packages.ragleap.com/)
 
