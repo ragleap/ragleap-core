@@ -1245,3 +1245,119 @@ def test_malay_numbers_are_opt_in_versioned_and_wer_cer_equivalent():
     assert normalize("dua puluh satu", numbers="id") == "21"
     assert normalize("vinte e três", numbers="pt-BR") == "23"
     assert normalize("तेईस", numbers="hi") == "23"
+
+# Japanese (kanji) cardinals. Sources checked for the word tables and the
+# composition rules: Unicode CLDR Japanese number system data
+# (https://github.com/unicode-org/cldr/blob/main/common/rbnf/ja.xml), CLDR's
+# number-formatting specification
+# (https://unicode.org/reports/tr35/tr35-numbers.html), and Japanese numeral
+# rules (https://ja.wikipedia.org/wiki/漢数字). Written Japanese has no word
+# spaces, so a token made only of number characters is one number run and a
+# token mixing numbers with prose is kept whole; kana readings are outside
+# scope. Written and checked by the contributor against the sources; a fluent
+# Japanese speaker has not reviewed it.
+def test_japanese_kanji_cardinals_follow_cldr_rules():
+    cases = {
+        "零": "0",
+        "〇": "0",
+        "一": "1",
+        "四": "4",
+        "九": "9",
+        "十": "10",
+        "十一": "11",
+        "二十": "20",
+        "二十三": "23",
+        "九十九": "99",
+        "百": "100",
+        "二百": "200",
+        "二百五": "205",
+        "三百二": "302",
+        "千": "1000",
+        "一千": "1000",
+        "五千": "5000",
+        "一万": "10000",
+        "一万二千三百四十五": "12345",
+        "一億": "100000000",
+        "十億": "1000000000",
+        "一億二千三百四十五万六千七百八十九": "123456789",
+        "一兆": "1000000000000",
+        "五百兆": "500000000000000",
+        "二兆三": "2000000000003",
+        "一二三": "123",            # digit by digit, as in the English mode
+        "二〇二六": "2026",
+        "一〇一": "101",
+        "二千零二十": "2020",
+    }
+    for words, expected in cases.items():
+        assert normalize(words, numbers="ja") == expected
+
+
+def test_japanese_malformed_and_ambiguous_forms_are_preserved():
+    for phrase in (
+        "十十", "十百", "百百", "千千",
+        "万万", "億億", "兆兆", "一億万", "万億", "億万",
+        "零十", "一百零十", "一千零零三", "一万零万",
+        "一百二三", "第一",
+    ):
+        assert normalize(phrase, numbers="ja") == phrase
+
+
+def test_japanese_kana_and_mixed_tokens_are_not_normalized():
+    for phrase in (
+        "にじゅうさん", "さんじゅう", "ろく", "二十さん", "に十",
+        "二十三歳", "第三", "五兆円", "明治二十三年",
+    ):
+        assert normalize(phrase, numbers="ja") == phrase
+
+
+def test_japanese_unicode_and_number_punctuation():
+    assert normalize("二十三！", numbers="ja") == "23"
+    assert normalize("　二十　", numbers="ja") == "20"
+    assert normalize("１２３４", numbers="ja") == "1234"
+    assert normalize("１,２３４", numbers="ja") == "1234"
+    assert normalize("1,234", numbers="ja") == "1234"
+    assert normalize("1.234", numbers="ja") == "1 234"
+    assert normalize("二〇二六年", numbers="ja") == "二〇二六年"  # mixed stays whole
+
+
+def test_japanese_numbers_are_opt_in_versioned_and_wer_cer_equivalent():
+    words = "一万二千三百四十五"
+    numeric = "12345"
+    assert normalize(words) == words
+    assert normalize(words, numbers=False) == words
+    assert normalize(words, numbers=True) == words
+    assert normalizer_version(numbers="ja") == "1+numbers-ja.1"
+    assert normalizer_version() == "1"
+    assert normalizer_version(numbers="en") == "1+numbers-en.1"
+    assert normalizer_version(numbers="tr") == "1+numbers-tr.2"
+    assert normalizer_version(numbers="ms") == "1+numbers-ms.1"
+    assert normalize(words, numbers="ja") == normalize(numeric, numbers="ja")
+    assert wer(words, numeric, numbers="ja") == 0
+    assert cer(words, numeric, numbers="ja") == 0
+    # ja is isolated from the other languages
+    assert normalize("twenty one", numbers="ja") == "twenty one"
+    assert normalize("dua puluh satu", numbers="ja") == "dua puluh satu"
+    assert normalize("两百", numbers="ja") == "两百"
+
+
+def test_run_stt_applies_japanese_and_records_version(tmp_path):
+    with wave.open(str(tmp_path / "a.wav"), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(16000)
+        w.writeframes(b"\x00\x00" * 16000)
+    manifest = tmp_path / "m.csv"
+    manifest.write_text(
+        "id,path,reference,language,license,source\n"
+        "a,a.wav,私は 二十三 歳です。,ja,MIT,author-written MIT test\n",
+        encoding="utf-8",
+    )
+    items, problems = load_manifest(manifest)
+    assert problems == []
+
+    rows = run_stt(lambda path, language: "私は 23 歳です。", items, numbers="ja")
+    assert summarize(rows)["ja"]["wer"] == 0
+    assert summarize(rows)["ja"]["cer"] == 0
+    _, json_path = write_results(tmp_path / "out", "fake", rows, environment_info())
+    saved = json.loads(pathlib.Path(json_path).read_text(encoding="utf-8"))
+    assert saved["meta"]["normalizer_version"] == "1+numbers-ja.1"
