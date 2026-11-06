@@ -46,7 +46,7 @@ def handle_message(tools: PhysicalTools, msg: Any) -> Optional[dict]:
         version = asked if asked in SUPPORTED_PROTOCOLS else SUPPORTED_PROTOCOLS[0]
         return {"jsonrpc": "2.0", "id": msg_id, "result": {
             "protocolVersion": version, "capabilities": {"tools": {"listChanged": False}},
-            "serverInfo": {"name": SERVER_NAME, "version": "0.0.3"}}}
+            "serverInfo": {"name": SERVER_NAME, "version": "0.0.4"}}}
     if method == "ping":
         return {"jsonrpc": "2.0", "id": msg_id, "result": {}}
     if method == "tools/list":

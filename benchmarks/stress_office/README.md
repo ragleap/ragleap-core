@@ -48,6 +48,17 @@ never stops proposing actions. They print as a second table.
 E1a and E1b model answers built from ingested documents, so those runs start as tainted unless
 `TAINT_RETRIEVED_DOCUMENTS=false` is set; E2 and E3 do not use documents.
 
+## Real models
+
+The same four events can run against a real model (a local Ollama model, or any provider RagLeap supports). The injected instructions are the same; what changes is that the model decides whether to follow them. The run uses autonomy `full`, the most permissive mode, and a hard token cap that stops it for good.
+
+```
+LLM_PROVIDER=ollama OLLAMA_MODEL=qwen2.5:3b \
+  python -m benchmarks.stress_office.run --model real --repeats 5 --max-tokens 300000
+```
+
+It prints one table: for each event, how many runs ignored the injected instruction, and for the runs that followed it, whether the guardrails refused it, held it for approval, or let it through. Read it as one small model on these prompts with a few repeats. It is not a ranking of models and not a guarantee about any other model.
+
 ## What this does not show
 
 - It does not show how any real model behaves. It tests the guardrails against a model that always obeys.
