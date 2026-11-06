@@ -7,7 +7,7 @@ Java port of the RAG pipeline of [ragleap-rag](https://pypi.org/project/ragleap-
 <dependency>
     <groupId>io.github.antonyrag</groupId>
     <artifactId>ragleap-rag</artifactId>
-    <version>0.13.0</version>
+    <version>0.14.0</version>
 </dependency>
 ````
 
