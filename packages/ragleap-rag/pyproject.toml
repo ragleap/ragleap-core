@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ragleap-rag"
-version = "0.14.0"
+version = "0.15.0"
 description = "Self-hosted RAG engine: hybrid dense+sparse retrieval, 28-format ingestion (docs, URLs, images, audio, video), 6 vector backends, 8 embedding providers, 12+ generation providers with automatic fallback, query rewriting (HyDE/contextual/multi-query), structured JSON output, real per-call cost tracking, and standalone retrieval via retrieve(). Composable with the optional ragleap-graph package for knowledge-graph-augmented retrieval. BYOK, no vendor lock-in, no hardcoded model defaults."
 readme = "README.md"
 license = "MIT"
