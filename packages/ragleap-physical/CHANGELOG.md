@@ -2,6 +2,19 @@
 
 All notable changes are listed here. Format: Keep a Changelog.
 
+## [Unreleased]
+
+### Added
+- Adapter conformance tests (`tests/test_adapter_conformance.py`): one contract that every adapter must pass (observation shape, stop and
+  clear-stop, stable entities, a pure dry run, refusals that change nothing, a Bridge that can stop and clear). The refusal contract is
+  written in the `Adapter` docstring.
+
+### Fixed
+- One-joint and two-link stand-in arms, and the simulated machine tool: `apply()` and `dry_run()` refuse NaN, infinity, text, booleans and
+  `None` with `ValueError` and change nothing. Values are now stored as floats. (The Bridge already rejected these values, so this
+  matters only when an adapter is called directly.)
+- The offline ROS 2 mock: `clear_stop()` no longer raises, so a Bridge over it can be stopped and then cleared.
+
 ## [0.0.4] - 2026-11-06
 
 ### Added

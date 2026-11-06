@@ -18,6 +18,17 @@ def _clamp(x: float, lim: float) -> float:
     return max(-lim, min(lim, x))
 
 
+def _finite_value(value) -> float:
+    """A command value must be a real, finite number: not a boolean, text, None, NaN or infinity."""
+    try:
+        valid = not isinstance(value, bool) and isinstance(value, (int, float)) and math.isfinite(value)
+    except (OverflowError, TypeError, ValueError):
+        valid = False
+    if not valid:
+        raise ValueError("value must be a finite number")
+    return float(value)
+
+
 class FakeJointAdapter(Adapter):
     """One hinge joint 'joint_1' driven by a limited PD controller."""
 
@@ -53,6 +64,9 @@ class FakeJointAdapter(Adapter):
         return pos, vel, step + 1, acc
 
     def dry_run(self, target: str, command: str, value: float, until_sim_time_s: float, max_steps: int) -> DryRun:
+        if target != "joint_1" or command != "set_position_target":
+            raise ValueError("unsupported target or command")
+        value = _finite_value(value)
         pos, vel, step = self.pos, self.vel, self.step
         max_vel = max_force = 0.0
         n = 0
@@ -64,6 +78,7 @@ class FakeJointAdapter(Adapter):
     def apply(self, target: str, command: str, value: float) -> None:
         if target != "joint_1" or command != "set_position_target":
             raise ValueError("unsupported target or command")
+        value = _finite_value(value)
         self.target = value
         self.applied.append((target, command, value))
 
@@ -132,6 +147,9 @@ class FakeArmAdapter(Adapter):
         return accs
 
     def dry_run(self, target: str, command: str, value: float, until_sim_time_s: float, max_steps: int) -> DryRun:
+        if target not in self.NAMES or command != "set_position_target":
+            raise ValueError("unsupported target or command")
+        value = _finite_value(value)
         idx = self.NAMES.index(target)
         pos, vel, goal, step = list(self.pos), list(self.vel), list(self.target), self.step
         goal[idx] = value
@@ -154,6 +172,7 @@ class FakeArmAdapter(Adapter):
     def apply(self, target: str, command: str, value: float) -> None:
         if target not in self.NAMES or command != "set_position_target":
             raise ValueError("unsupported target or command")
+        value = _finite_value(value)
         self.target[self.NAMES.index(target)] = value
         self.applied.append((target, command, value))
 
