@@ -2,9 +2,26 @@
 
 All notable changes are listed here. Format: Keep a Changelog.
 
-## [Unreleased]
+## [0.0.4] - unreleased (the date is set on release day)
 
-## [0.0.3] - 2026-11-03
+### Added
+- `Item` (the MTConnect item description) can be imported from `ragleap_physical.adapters`; an import test covers it
+  (reported by a reviewer on a clean install of 0.0.3).
+- Six review tests for the energy-site adapter, kept as regression tests (`tests/test_energy_adapter_review.py`).
+- Review tests for the three-joint arm and the MuJoCo servo adapter (`tests/test_arm3_review.py`, `tests/test_arm3_mujoco_review.py`,
+  `examples/robots/test_arm3_hardening.py`).
+- PowerShell steps in `docs/first-hour.md` (#1177, by @Anurag07-crypto, whose Windows run showed the gap).
+
+### Fixed
+- Three-joint arm (`FakeArm3Adapter`): after a stop the arm can be observed again (the stop used to reset the velocities to two numbers, so
+  `observe_raw()` raised `IndexError`); `apply()` and `dry_run()` refuse NaN, infinity, text, booleans and `None`; time and step inputs and
+  constructor parameters are validated; the model fingerprint now depends on the parameters.
+- MuJoCo servo adapter: a target outside the actuator range is refused with `ValueError` and is no longer silently clamped by MuJoCo; NaN, infinity,
+  text, booleans and `None` are refused. `examples/robots/arm3.xml` actuator ranges are now -3.1 to 3.1 rad, like the other models.
+  Not yet run on a real MuJoCo install at the time of writing.
+- The date of 0.0.3 in this file was 2026-11-03; the upload was on 2026-11-04.
+
+## [0.0.3] - 2026-11-04
 
 ### Added
 - A second runnable demo, `examples/two_link_workspace_demo.py`: a two-link arm with one accepted and one refused workspace move
