@@ -670,7 +670,8 @@ Reply with ONLY the number of the best answer."""
             temperature=temperature,
             max_tokens=max_tokens,
         )
-        text = response.choices[0].message.content.strip() if response.choices else "No answer generated."
+        content = response.choices[0].message.content if response.choices else None
+        text = content.strip() if content else "No answer generated."   # same fallback as the Gemini and Anthropic paths
         usage = None
         if getattr(response, "usage", None):
             usage = {
