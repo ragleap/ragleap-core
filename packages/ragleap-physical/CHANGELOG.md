@@ -2,7 +2,7 @@
 
 All notable changes are listed here. Format: Keep a Changelog.
 
-## [0.0.4] - unreleased (the date is set on release day)
+## [0.0.4] - 2026-11-06
 
 ### Added
 - `Item` (the MTConnect item description) can be imported from `ragleap_physical.adapters`; an import test covers it
