@@ -35,6 +35,9 @@ stripe>=8.0.0
 fast-langdetect>=1.0.1
 pytest-asyncio
 
+# fastapi.testclient (used by the root tests) needs httpx; list it explicitly instead of relying on another package pulling it in.
+httpx>=0.27
+
 # More document formats (xlsx, pptx, csv, html, epub, ...) and adding web pages by address.
 # The app still starts without it, with the three basic formats only.
 ragleap-rag[formats,web]>=0.13.0
