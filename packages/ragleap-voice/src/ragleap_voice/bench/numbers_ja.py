@@ -47,6 +47,7 @@ _UNITS = {
 }
 _ZERO = "零"
 _MULTIPLIERS = {"十": 10, "百": 100, "千": 1000}
+_MULT_RANK = {"十": 1, "百": 2, "千": 3}
 _SCALES = {"万": 10 ** 4, "億": 10 ** 8, "兆": 10 ** 12}
 _NUMBER_TOKEN = re.compile("[零〇一二三四五六七八九十百千万億兆]+")
 
@@ -75,6 +76,7 @@ def _parse_chars(text):
     last_unit = None   # value of the unit digit most recently added, if any
     last_kind = None   # "unit", "zero", "mult", or "scale"
     last_scale = None
+    last_mult = None   # rank of the most recent 十/百/千 in this section
 
     for ch in text:
         if ch == _ZERO:
@@ -90,6 +92,9 @@ def _parse_chars(text):
         elif ch in _MULTIPLIERS:
             if last_kind in ("zero", "mult") or last_unit == 0:
                 return None  # 零十 / 十十 / 百十 and the like
+            rank = _MULT_RANK[ch]
+            if last_mult is not None and rank >= last_mult:
+                return None  # 二十三百 / 三千二千 / 十二百 are malformed
             multiplier = _MULTIPLIERS[ch]
             if last_unit:
                 section += last_unit * (multiplier - 1)
@@ -97,6 +102,7 @@ def _parse_chars(text):
             else:
                 section += multiplier
             last_kind = "mult"
+            last_mult = rank
         else:
             if last_kind == "zero":
                 return None  # 一万零万-style misplaced scale
@@ -108,6 +114,7 @@ def _parse_chars(text):
             total += (section or 1) * scale
             section = 0
             last_unit = None
+            last_mult = None
             last_scale = scale
             last_kind = "scale"
 
