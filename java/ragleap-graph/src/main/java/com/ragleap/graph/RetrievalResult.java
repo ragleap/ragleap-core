@@ -11,7 +11,12 @@ public record RetrievalResult(List<Map<String, Object>> chunks, List<String> que
         List<Citation> citations, String retrievalMethod) {
 
     /** Documents and entities found through the graph. */
-    public record GraphContext(List<RelatedDocument> relatedDocuments, List<RelatedEntity> relatedEntities) {
+    public record GraphContext(List<RelatedDocument> relatedDocuments, List<RelatedEntity> relatedEntities,
+            List<CommunityStore.Hit> communities) {
+        /** Without a community lookup (communities is null). */
+        public GraphContext(List<RelatedDocument> relatedDocuments, List<RelatedEntity> relatedEntities) {
+            this(relatedDocuments, relatedEntities, null);
+        }
     }
 
     /**
@@ -22,7 +27,7 @@ public record RetrievalResult(List<Map<String, Object>> chunks, List<String> que
     }
 
     /** A citation of either kind. */
-    public sealed interface Citation permits ChunkCitation, GraphPathCitation {
+    public sealed interface Citation permits ChunkCitation, GraphPathCitation, CommunityCitation {
     }
 
     /** Points at a retrieved chunk. documentName is "unknown document" only when the chunk had no such key. */
@@ -32,5 +37,10 @@ public record RetrievalResult(List<Map<String, Object>> chunks, List<String> que
 
     /** Points at an entity reached by graph traversal. */
     public record GraphPathCitation(String entityName, String relationship, int depth) implements Citation {
+    }
+
+    /** Points at a stored community; summaryPreview is null until the community was summarized. */
+    public record CommunityCitation(String communityId, int size, String summaryPreview, int matchedEntities)
+            implements Citation {
     }
 }
