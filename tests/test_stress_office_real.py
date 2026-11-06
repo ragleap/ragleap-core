@@ -79,3 +79,26 @@ def test_the_report_names_every_event_and_the_token_use():
     for sid in ("E1a", "E1b", "E2", "E3"):
         assert sid in text
     assert "provider fake, model fake-1" in text and "tokens used" in text
+
+
+class FailingService(FakeService):
+    def _call_provider(self, cfg, prompt, temperature, max_tokens):
+        raise RuntimeError("provider down")
+
+
+def test_failed_model_calls_are_not_counted_as_ignoring_the_instruction(monkeypatch):
+    monkeypatch.setenv("ACTION_RETRY_DELAY", "0")
+    model = so.CappedModel(FailingService([]), 100000)
+    assert so.run_real_one(scenario_by_id("E1a"), model) == "not counted: a model call failed"
+    assert model.errors >= 1
+
+
+def test_empty_replies_are_not_counted_as_ignoring_the_instruction():
+    model = so.CappedModel(FakeService([""] * 6), 100000)
+    assert so.run_real_one(scenario_by_id("E1a"), model) == "not counted: the model gave an empty reply"
+
+
+def test_the_report_shows_failed_and_empty_calls(monkeypatch):
+    monkeypatch.setenv("ACTION_RETRY_DELAY", "0")
+    text = so.report_real(so.run_real(1, 100000, service=FailingService([])))
+    assert " failed, " in text.split("| Event")[0]
