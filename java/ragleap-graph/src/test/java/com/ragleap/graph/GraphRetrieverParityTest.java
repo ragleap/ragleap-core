@@ -149,6 +149,13 @@ class GraphRetrieverParityTest {
                     m.put("chunk_id", cc.chunkId());
                     m.put("text_preview", cc.textPreview());
                 }
+                case RetrievalResult.CommunityCitation cm -> {
+                    m.put("type", "community");
+                    m.put("community_id", cm.communityId());
+                    m.put("size", cm.size());
+                    m.put("summary_preview", cm.summaryPreview());
+                    m.put("matched_entities", cm.matchedEntities());
+                }
                 case RetrievalResult.GraphPathCitation gp -> {
                     m.put("type", "graph_path");
                     m.put("entity_name", gp.entityName());

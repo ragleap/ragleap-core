@@ -43,6 +43,7 @@ public final class GraphRetriever {
 
         List<DocumentHit> docs;
         List<RelatedEntity> related;
+        List<CommunityStore.Hit> communities = config.includeCommunities() ? List.of() : null;
         if (queryEntities == null || queryEntities.isEmpty()) {
             docs = List.of();
             related = List.of();
@@ -50,6 +51,9 @@ public final class GraphRetriever {
             docs = graph.findDocumentsByEntities(queryEntities, namespace, null, config.maxGraphResults());
             related = graph.searchRelatedEntities(queryEntities, namespace, null, config.graphExpandDepth(),
                     config.maxGraphResults());
+            if (config.includeCommunities()) {
+                communities = graph.findCommunities(queryEntities, namespace, null, config.maxCommunities());
+            }
         }
 
         List<Map<String, Object>> chunks;
@@ -78,13 +82,13 @@ public final class GraphRetriever {
                     h.documentId() != null && chunkDocumentIds.contains(h.documentId())));
         }
 
-        List<RetrievalResult.Citation> citations = citations(chunks, related);
-        return new RetrievalResult(chunks, queryEntities, new RetrievalResult.GraphContext(relatedDocuments, related),
+        List<RetrievalResult.Citation> citations = citations(chunks, related, communities);
+        return new RetrievalResult(chunks, queryEntities, new RetrievalResult.GraphContext(relatedDocuments, related, communities),
                 citations, method);
     }
 
     private static List<RetrievalResult.Citation> citations(List<Map<String, Object>> chunks,
-            List<RelatedEntity> related) {
+            List<RelatedEntity> related, List<CommunityStore.Hit> communities) {
         List<RetrievalResult.Citation> out = new ArrayList<>();
         int number = 1;
         for (Map<String, Object> chunk : chunks) {
@@ -102,6 +106,18 @@ public final class GraphRetriever {
         }
         for (RelatedEntity e : related) {
             out.add(new RetrievalResult.GraphPathCitation(e.entityName(), e.relationship(), e.depth()));
+        }
+        if (communities != null) {
+            for (CommunityStore.Hit h : communities) {
+                String summary = h.summary();
+                String preview = null;
+                if (summary != null) {
+                    int cps = summary.codePointCount(0, summary.length());
+                    preview = PyText.truncateCodePoints(summary, PREVIEW_CODE_POINTS)
+                            + (cps > PREVIEW_CODE_POINTS ? "..." : "");
+                }
+                out.add(new RetrievalResult.CommunityCitation(h.communityId(), h.size(), preview, h.matchedEntities()));
+            }
         }
         return out;
     }

@@ -25,6 +25,8 @@ public final class GraphRetrievalConfig {
     private final int maxGraphResults;
     private final List<String> domainTerms;
     private final int maxQueryEntities;
+    private final boolean includeCommunities;
+    private final int maxCommunities;
 
     private GraphRetrievalConfig(Builder b) {
         Mode resolved = null;
@@ -46,12 +48,17 @@ public final class GraphRetrievalConfig {
         if (b.maxQueryEntities < 1) {
             throw new IllegalArgumentException("max_query_entities must be >= 1");
         }
+        if (b.maxCommunities < 1) {
+            throw new IllegalArgumentException("max_communities must be >= 1");
+        }
         this.mode = resolved;
         this.graphExpandDepth = b.graphExpandDepth;
         this.maxGraphResults = b.maxGraphResults;
         this.domainTerms = b.domainTerms == null ? null
                 : Collections.unmodifiableList(new ArrayList<>(b.domainTerms));
         this.maxQueryEntities = b.maxQueryEntities;
+        this.includeCommunities = b.includeCommunities;
+        this.maxCommunities = b.maxCommunities;
     }
 
     public static Builder builder() {
@@ -88,12 +95,24 @@ public final class GraphRetrievalConfig {
         return maxQueryEntities;
     }
 
+    /** Opt-in (default false): also look up the stored communities that contain the query entities. */
+    public boolean includeCommunities() {
+        return includeCommunities;
+    }
+
+    /** Limit for the community lookup (default 3, at least 1); only used when includeCommunities is on. */
+    public int maxCommunities() {
+        return maxCommunities;
+    }
+
     public static final class Builder {
         private String mode = "hybrid";
         private int graphExpandDepth = 2;
         private int maxGraphResults = 10;
         private List<String> domainTerms;
         private int maxQueryEntities = 10;
+        private boolean includeCommunities = false;
+        private int maxCommunities = 3;
 
         public Builder mode(Mode m) {
             this.mode = m.label;
@@ -123,6 +142,16 @@ public final class GraphRetrievalConfig {
 
         public Builder maxQueryEntities(int v) {
             this.maxQueryEntities = v;
+            return this;
+        }
+
+        public Builder includeCommunities(boolean v) {
+            this.includeCommunities = v;
+            return this;
+        }
+
+        public Builder maxCommunities(int v) {
+            this.maxCommunities = v;
             return this;
         }
 

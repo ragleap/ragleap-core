@@ -815,6 +815,13 @@ public final class GraphIndex implements GraphSearch, AutoCloseable {
                 maxEdges, summarizer, force, maxSummaryItems);
     }
 
+    /** GraphSearch hook used by GraphRetriever (no member names). */
+    @Override
+    public List<CommunityStore.Hit> findCommunities(List<String> entityNames, String namespace, String userId,
+                                                    int limit) {
+        return findCommunities(entityNames, namespace, userId, limit, false);
+    }
+
     public List<CommunityStore.Hit> findCommunities(List<String> entityNames) {
         return findCommunities(entityNames, null, null, 25, false);
     }
