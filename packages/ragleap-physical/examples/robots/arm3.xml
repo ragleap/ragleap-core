@@ -16,8 +16,8 @@
     </body>
   </worldbody>
   <actuator>
-    <position name="act_joint_1" joint="joint_1" kp="10" kv="4" ctrllimited="true" ctrlrange="-1.2 1.2"/>
-    <position name="act_joint_2" joint="joint_2" kp="7" kv="2" ctrllimited="true" ctrlrange="-1.2 1.2"/>
-    <position name="act_joint_3" joint="joint_3" kp="5" kv="1.5" ctrllimited="true" ctrlrange="-1.2 1.2"/>
+    <position name="act_joint_1" joint="joint_1" kp="10" kv="4" ctrllimited="true" ctrlrange="-3.1 3.1"/>
+    <position name="act_joint_2" joint="joint_2" kp="7" kv="2" ctrllimited="true" ctrlrange="-3.1 3.1"/>
+    <position name="act_joint_3" joint="joint_3" kp="5" kv="1.5" ctrllimited="true" ctrlrange="-3.1 3.1"/>
   </actuator>
 </mujoco>

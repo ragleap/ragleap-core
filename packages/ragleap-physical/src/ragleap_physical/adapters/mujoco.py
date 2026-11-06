@@ -7,6 +7,7 @@ here). Only hinge and slide joints are reported; other joint types are skipped f
 from __future__ import annotations
 
 import hashlib
+import math
 from typing import Any, Mapping, Optional
 
 from .base import Adapter, DryRun
@@ -157,20 +158,32 @@ class MujocoServoAdapter(MujocoAdapter):
         for a, jid in self._act.values():
             self._d.ctrl[a] = self._d.qpos[self._m.jnt_qposadr[jid]]
 
-    def _need(self, target: str, command: str):
+    def _need(self, target: str, command: str, value):
         if command != "set_position_target" or target not in self._act:
             raise ValueError("unsupported target or command")
-        return self._act[target]
+        try:
+            valid_number = (not isinstance(value, bool) and isinstance(value, (int, float))
+                            and math.isfinite(value))
+        except (OverflowError, TypeError, ValueError):
+            valid_number = False
+        if not valid_number:
+            raise ValueError("value must be a finite number")
+        act, jid = self._act[target]
+        if self._m.actuator_ctrllimited[act]:
+            lo, hi = self._m.actuator_ctrlrange[act]
+            if value < lo or value > hi:
+                raise ValueError(f"value outside actuator ctrlrange [{lo}, {hi}]")
+        return act, jid, float(value)
 
     def targets(self) -> list:
         return list(self._act)
 
     def dry_run(self, target: str, command: str, value: float, until_sim_time_s: float, max_steps: int) -> DryRun:
-        a, jid = self._need(target, command)
+        a, jid, value = self._need(target, command, value)
         mj, m = self._mj, self._m
         copy = mj.MjData(m)
         mj.mj_copyData(copy, m, self._d)  # the real state is never touched
-        copy.ctrl[a] = float(value)
+        copy.ctrl[a] = value
         per = {name: [0.0, 0.0] for name in self._act}
         box = {"lo": None, "hi": None}
 
@@ -196,8 +209,8 @@ class MujocoServoAdapter(MujocoAdapter):
                       site_min=tuple(box["lo"]) if box["lo"] else None, site_max=tuple(box["hi"]) if box["hi"] else None)
 
     def apply(self, target: str, command: str, value: float) -> None:
-        a, _ = self._need(target, command)
-        self._d.ctrl[a] = float(value)
+        a, _, value = self._need(target, command, value)
+        self._d.ctrl[a] = value
 
     def stop(self) -> None:
         super().stop()
