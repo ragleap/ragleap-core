@@ -5,6 +5,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-06
+
 ### Added
 - `ragleap_graph.communities`: deterministic community detection for the entity graph. `detect_communities(edges, resolution=1.0, min_size=2)` runs Louvain modularity optimisation on weighted undirected edges, then splits every community into its connected parts, and returns members, size, internal weight and a members hash per community. `modularity()` scores any partition. No random numbers, so the same edges always give the same communities. It is not Leiden and gives one flat level; modularity has a resolution limit. Neo4j Community has no Graph Data Science plugin, which is why this runs in the library.
 - `GraphIndex.detect_communities()`, `refresh_communities()` and `find_communities()`: community detection on the stored co-occurrence graph (optionally including typed relations), storage as `:Community` nodes with `:IN_COMMUNITY` edges (the uniqueness constraint is created the first time `refresh_communities()` runs), and lookup by entity. `refresh_communities()` replaces communities whose members changed and keeps the others; summaries come from a function you pass in (`summarizer(info) -> str`), are written only for new communities, communities without a summary, or with `force=True`, and a failing summarizer is counted in the result instead of raised. Summaries are capped at 20000 characters; no model is bundled. Do not refresh the same namespace from two places at once.
