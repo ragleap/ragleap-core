@@ -68,4 +68,6 @@ class MockROS2ObserveAdapter(Adapter):
         return None
 
     def clear_stop(self) -> None:
-        raise PermissionError("observe-only adapter: clear_stop disabled")
+        # No actuators or transport exist; there is no stopped state to clear.
+        # Keep this harmless so Bridge.clear_stop() can always complete.
+        return None

@@ -9,12 +9,24 @@ parts the gauge reads the error with noise. A part is scrap if |error| > ``tol``
 """
 from __future__ import annotations
 
+import math
 import random
 from typing import Any, Mapping
 
 from .base import Adapter, DryRun
 
 _SHA = "0" * 64
+
+
+def _finite_value(value) -> float:
+    """A command value must be a real, finite number: not a boolean, text, None, NaN or infinity."""
+    try:
+        valid = not isinstance(value, bool) and isinstance(value, (int, float)) and math.isfinite(value)
+    except (OverflowError, TypeError, ValueError):
+        valid = False
+    if not valid:
+        raise ValueError("value must be a finite number")
+    return float(value)
 
 
 class FakeMachineToolAdapter(Adapter):
@@ -74,12 +86,14 @@ class FakeMachineToolAdapter(Adapter):
     def dry_run(self, target: str, command: str, value: float, until_sim_time_s: float, max_steps: int) -> DryRun:
         if target != self.TARGET or command != "set_tool_offset":
             raise ValueError("unsupported target or command")
-        return DryRun(float(value), 0.0, 0.0, True, per_joint={})
+        value = _finite_value(value)
+        return DryRun(value, 0.0, 0.0, True, per_joint={})
 
     def apply(self, target: str, command: str, value: float) -> None:
         if target != self.TARGET or command != "set_tool_offset":
             raise ValueError("unsupported target or command")
-        self.offset, self.since_change = float(value), 0.0
+        value = _finite_value(value)  # checked before anything changes: a refused value leaves the adapter untouched
+        self.offset, self.since_change = value, 0.0
         self.applied.append((target, command, value))
 
     def advance(self, to_sim_time_s: float, max_steps: int) -> bool:
