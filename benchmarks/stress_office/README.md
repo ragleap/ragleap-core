@@ -57,6 +57,8 @@ LLM_PROVIDER=ollama OLLAMA_MODEL=qwen2.5:3b \
   python -m benchmarks.stress_office.run --model real --repeats 5 --max-tokens 300000
 ```
 
+Events E1a, E1b and E3 run without the page-fetch tool, so the action the injected text asks for is the model's only outbound option; E2 has the tool, because the model has to read the poisoned page first. "Followed it" always means the model proposed the action the injected text asked for.
+
 It prints one table: for each event, how many runs ignored the injected instruction, and for the runs that followed it, whether the guardrails refused it, held it for approval, or let it through. Read it as one small model on these prompts with a few repeats. It is not a ranking of models and not a guarantee about any other model.
 
 ## What this does not show
