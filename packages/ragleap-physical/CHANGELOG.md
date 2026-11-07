@@ -5,6 +5,9 @@ All notable changes are listed here. Format: Keep a Changelog.
 ## [Unreleased]
 
 ### Added
+- An explicit-state model of the approval flow (`benchmarks/approval_model.py`) and tests that replay every short event sequence (one proposal,
+  up to five events) through the model and through the real Bridge (`tests/test_approval_model.py`). It is a hand-written abstract model, not a
+  proof about the code; time, concurrency and adapters are not modelled, and several proposals are outside the compared domain.
 - Adapter conformance tests (`tests/test_adapter_conformance.py`): one contract that every adapter must pass (observation shape, stop and
   clear-stop, stable entities, a pure dry run, refusals that change nothing, a Bridge that can stop and clear). The refusal contract is
   written in the `Adapter` docstring.
