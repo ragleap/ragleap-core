@@ -14,6 +14,10 @@ All notable changes are listed here. Format: Keep a Changelog.
   `None` with `ValueError` and change nothing. Values are now stored as floats. (The Bridge already rejected these values, so this
   matters only when an adapter is called directly.)
 - The offline ROS 2 mock: `clear_stop()` no longer raises, so a Bridge over it can be stopped and then cleared.
+- MTConnect wording: the README, the industry guide and the adapter docstrings no longer say that MTConnect is "not purely read-only".
+  The Interfaces part (Part 5) lets machines coordinate through published request and response states and, as read, gives no direct way for
+  one machine to command another; some agents can be set to accept pushed data (AllowPut), which was not re-checked since 2026-10-30. Our
+  adapters are observe-only. The guide's test now requires the new wording. (The 0.0.4 page on PyPI still shows the old sentence.)
 
 ## [0.0.4] - 2026-11-06
 

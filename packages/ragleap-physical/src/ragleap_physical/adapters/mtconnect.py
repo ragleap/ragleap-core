@@ -2,9 +2,11 @@
 observations.
 
 It never connects to anything. There is no network code, no URL and no command: the documents are given to the
-constructor as bytes or text. This mock only reads. MTConnect itself is NOT purely read-only: its Interfaces part
-defines request and response coordination between equipment, and the reference agent can be configured to accept
-PUT or POST of data (AllowPut, default false). The XML is treated as untrusted device data:
+constructor as bytes or text. This mock is observe-only: it only reads and sends nothing. (MTConnect Part 5, Interfaces,
+v1.6.0: machines coordinate by each publishing request and response states that the other reads; the standard gives no
+direct way for one machine to command another. Some agents can be set to accept pushed data, for example the reference
+agent's AllowPut, default false, not re-checked since 2026-10-30; that is an agent setting, not a command to a machine.)
+The XML is treated as untrusted device data:
 
 * only UTF-8, at most ``max_bytes``, at most ``MAX_ELEMENTS`` elements;
 * any ``<!`` markup other than a comment or CDATA is refused (so no DTD and no entity), before the parser sees it;
