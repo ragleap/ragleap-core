@@ -4,6 +4,8 @@ All notable changes to `ragleap-voice` are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
+### Fixed
+- `numbers="zh"`: a 十/百/千 that is not smaller than the previous one in the same section (二十三百, 三千二千, 十二百) is now preserved as malformed instead of being converted (it previously gave 320, 5000, 210). Valid forms are unchanged. Found by an outside contributor while fixing the same issue in the Japanese mode.
 
 ## [0.3.3] - 2026-11-06
 ### Status
