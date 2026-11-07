@@ -10,6 +10,7 @@ import com.ragleap.rag.evaluation.CaseResult;
 import com.ragleap.rag.evaluation.EvalCase;
 import com.ragleap.rag.evaluation.EvalScorer;
 import com.ragleap.rag.evaluation.EvaluationResult;
+import com.ragleap.rag.evaluation.Evaluator;
 import com.ragleap.rag.evaluation.RagAnswer;
 import com.ragleap.rag.generation.GenerationResult;
 import com.ragleap.rag.generation.GenerationService;
@@ -480,6 +481,19 @@ public final class RagLeap implements AutoCloseable {
                 + summary.retrievalHitRate() + ", keywordCoverageRate=" + summary.keywordCoverageRate()
                 + ", groundednessRate=" + summary.groundednessRate());
         return summary;
+    }
+
+    /**
+     * Evaluation 2.0: like {@link #evaluate} and also ranking metrics (from the citations), latency and token usage per
+     * case, an optional support checker of your own (no judge is bundled) and a mean-and-tail summary. Compare two runs
+     * with EvalCompare.compareRuns(run.toScores(), other.toScores()).
+     */
+    public Evaluator.Run evaluateV2(List<Evaluator.Case> testCases, AskOptions options, List<Integer> metricKs,
+                                    Evaluator.SupportChecker supportChecker, double failBelow) throws SQLException {
+        return Evaluator.evaluate(q -> {
+            AskResult a = ask(q, options);
+            return new Evaluator.AnswerView(a.answer(), a.sources(), a.citations(), a.usage());
+        }, testCases, metricKs, supportChecker, failBelow, null);
     }
 
     // ------------------------------------------------------------ documents

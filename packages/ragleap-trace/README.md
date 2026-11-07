@@ -85,7 +85,7 @@ What ragleap-trace protects, against what, and what it does not. It is a local l
 | Trace file readable by others | Created with mode 0600; an existing group- or world-readable file is refused | Tests and break proofs on POSIX | Windows permissions are not verified; no encryption at rest |
 | Events paired with the wrong query | Pairing is per thread and per asyncio task | Thread and asyncio tests; real RagLeap integration tests | Two streams interleaved in one thread or task can pair wrongly |
 | Silent data loss when ragleap-rag changes an event | Contract tests fail if an event key the adapter relies on disappears | Integration contract tests; breaks simulate renamed keys | Only the keys the adapter uses are checked |
-| Supply chain | No runtime dependencies (`dependencies = []`); the CI actions are pinned to commit SHAs | `pyproject.toml`; the two workflow files | Not published yet. Releasing through PyPI trusted publishing is planned, not done |
+| Supply chain | No runtime dependencies (`dependencies = []`); the CI actions are pinned to commit SHAs; releases are published from the release workflow through PyPI trusted publishing (no stored token) | `pyproject.toml`; the workflow files; the TestPyPI dry run published through trusted publishing, and its files carry a provenance record naming the repository, workflow and environment | You still trust the PyPI account and the GitHub repository; there is no signature beyond that provenance record |
 
 **Out of scope in 0.1.0:** hostile code in the same process, multi-tenant separation (no tenant tagging), retention policies, network exporters, sampling, and opt-in content capture (which would need ragleap-security and fail closed).
 

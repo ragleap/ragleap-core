@@ -5,6 +5,9 @@ It is NOT a physics engine. It shows the bridge works without any heavy dependen
 from __future__ import annotations
 
 from typing import Any, Mapping
+import hashlib
+import json
+import math
 
 from .base import Adapter, DryRun
 
@@ -13,6 +16,17 @@ _SHA = "0" * 64
 
 def _clamp(x: float, lim: float) -> float:
     return max(-lim, min(lim, x))
+
+
+def _finite_value(value) -> float:
+    """A command value must be a real, finite number: not a boolean, text, None, NaN or infinity."""
+    try:
+        valid = not isinstance(value, bool) and isinstance(value, (int, float)) and math.isfinite(value)
+    except (OverflowError, TypeError, ValueError):
+        valid = False
+    if not valid:
+        raise ValueError("value must be a finite number")
+    return float(value)
 
 
 class FakeJointAdapter(Adapter):
@@ -50,6 +64,9 @@ class FakeJointAdapter(Adapter):
         return pos, vel, step + 1, acc
 
     def dry_run(self, target: str, command: str, value: float, until_sim_time_s: float, max_steps: int) -> DryRun:
+        if target != "joint_1" or command != "set_position_target":
+            raise ValueError("unsupported target or command")
+        value = _finite_value(value)
         pos, vel, step = self.pos, self.vel, self.step
         max_vel = max_force = 0.0
         n = 0
@@ -61,6 +78,7 @@ class FakeJointAdapter(Adapter):
     def apply(self, target: str, command: str, value: float) -> None:
         if target != "joint_1" or command != "set_position_target":
             raise ValueError("unsupported target or command")
+        value = _finite_value(value)
         self.target = value
         self.applied.append((target, command, value))
 
@@ -129,6 +147,9 @@ class FakeArmAdapter(Adapter):
         return accs
 
     def dry_run(self, target: str, command: str, value: float, until_sim_time_s: float, max_steps: int) -> DryRun:
+        if target not in self.NAMES or command != "set_position_target":
+            raise ValueError("unsupported target or command")
+        value = _finite_value(value)
         idx = self.NAMES.index(target)
         pos, vel, goal, step = list(self.pos), list(self.vel), list(self.target), self.step
         goal[idx] = value
@@ -151,6 +172,7 @@ class FakeArmAdapter(Adapter):
     def apply(self, target: str, command: str, value: float) -> None:
         if target not in self.NAMES or command != "set_position_target":
             raise ValueError("unsupported target or command")
+        value = _finite_value(value)
         self.target[self.NAMES.index(target)] = value
         self.applied.append((target, command, value))
 
@@ -177,11 +199,58 @@ class FakeArm3Adapter(FakeArmAdapter):
     LENGTHS = (0.4, 0.3, 0.2)
     NAMES = ("joint_1", "joint_2", "joint_3")
 
-    def __init__(self, *, seed: int = 0, pos=(0.0, 0.0, 0.0), **kwargs) -> None:
-        if len(pos) != 3:
+    def __init__(self, *, seed: int = 0, pos=(0.0, 0.0, 0.0), dt: float = 0.01,
+                 kp: float = 4.0, kd: float = 3.0, amax: float = 4.0,
+                 inertia: float = 1.0) -> None:
+        try:
+            values = tuple(pos)
+        except (TypeError, ValueError):
+            raise ValueError("three finite joint positions required") from None
+        if len(values) != 3:
             raise ValueError("three joint positions required")
-        super().__init__(seed=seed, pos=pos, **kwargs)
+        numeric_pos = tuple(self._finite_number(v, "position") for v in values)
+        dt = self._finite_number(dt, "dt")
+        kp = self._finite_number(kp, "kp")
+        kd = self._finite_number(kd, "kd")
+        amax = self._finite_number(amax, "amax")
+        inertia = self._finite_number(inertia, "inertia")
+        if dt <= 0 or kp < 0 or kd < 0 or amax <= 0 or inertia <= 0:
+            raise ValueError("dt, amax and inertia must be positive; gains must be non-negative")
+        super().__init__(seed=seed, pos=numeric_pos, dt=dt, kp=kp, kd=kd, amax=amax, inertia=inertia)
         self.vel = [0.0, 0.0, 0.0]
+
+    @staticmethod
+    def _finite_number(value, name: str) -> float:
+        try:
+            valid = not isinstance(value, bool) and isinstance(value, (int, float)) and math.isfinite(value)
+        except (OverflowError, TypeError, ValueError):
+            valid = False
+        if not valid:
+            raise ValueError(f"{name} must be a finite number")
+        return float(value)
+
+    @staticmethod
+    def _time_target(value, name: str) -> float:
+        try:
+            valid = (not isinstance(value, bool) and isinstance(value, (int, float))
+                     and math.isfinite(value) and value >= 0)
+        except (OverflowError, TypeError, ValueError):
+            valid = False
+        if not valid:
+            raise ValueError(f"{name} must be a finite non-negative number")
+        return float(value)
+
+    @staticmethod
+    def _step_limit(value) -> int:
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise ValueError("max_steps must be a non-negative integer")
+        return value
+
+    def _validated_command(self, target: str, command: str, value) -> tuple[int, float]:
+        if target not in self.NAMES or command != "set_position_target":
+            raise ValueError("unsupported target or command")
+        numeric = self._finite_number(value, "value")
+        return self.NAMES.index(target), numeric
 
     def _site(self, pos):
         import math
@@ -203,11 +272,11 @@ class FakeArm3Adapter(FakeArmAdapter):
         return accs
 
     def dry_run(self, target: str, command: str, value: float, until_sim_time_s: float, max_steps: int) -> DryRun:
-        if target not in self.NAMES or command != "set_position_target":
-            raise ValueError("unsupported target or command")
-        idx = self.NAMES.index(target)
+        idx, value = self._validated_command(target, command, value)
+        until_sim_time_s = self._time_target(until_sim_time_s, "until_sim_time_s")
+        max_steps = self._step_limit(max_steps)
         pos, vel, goal, step = list(self.pos), list(self.vel), list(self.target), self.step
-        goal[idx] = float(value)
+        goal[idx] = value
         lo = list(self._site(pos))
         hi = list(lo)
         max_v, max_f = [0.0] * 3, [0.0] * 3
@@ -226,7 +295,29 @@ class FakeArm3Adapter(FakeArmAdapter):
                       per_joint={name: (max_v[i], max_f[i]) for i, name in enumerate(self.NAMES)},
                       site_min=tuple(lo), site_max=tuple(hi))
 
+    def apply(self, target: str, command: str, value: float) -> None:
+        idx, numeric = self._validated_command(target, command, value)
+        self.target[idx] = numeric
+        self.applied.append((target, command, numeric))
+
+    def advance(self, to_sim_time_s: float, max_steps: int) -> bool:
+        to_sim_time_s = self._time_target(to_sim_time_s, "to_sim_time_s")
+        max_steps = self._step_limit(max_steps)
+        n = 0
+        while self.step * self.dt < to_sim_time_s - 1e-9 and n < max_steps and not self.stopped:
+            self._tick(self.pos, self.vel, self.target)
+            self.step, n = self.step + 1, n + 1
+            self.t = self.step * self.dt
+        return self.step * self.dt >= to_sim_time_s - 1e-9
+
+    def stop(self) -> None:
+        self.stopped, self.target, self.vel = True, list(self.pos), [0.0, 0.0, 0.0]
+
     def observe_raw(self) -> Mapping[str, Any]:
         raw = dict(super().observe_raw())
-        raw["source"] = {**raw["source"], "model_id": "arm3_pd"}
+        params = {"model_id": "arm3_pd", "lengths": self.LENGTHS, "base_z": self.BASE_Z,
+                  "dt": self.dt, "kp": self.kp, "kd": self.kd, "amax": self.amax,
+                  "inertia": self.inertia}
+        digest = hashlib.sha256(json.dumps(params, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+        raw["source"] = {**raw["source"], "model_id": "arm3_pd", "model_sha256": digest}
         return raw

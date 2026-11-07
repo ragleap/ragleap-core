@@ -91,7 +91,7 @@ It asks which AI to use, builds and starts RagLeap, and opens the dashboard in y
 
 If port 8000 or 5433 is already used on your computer (for example by a local PostgreSQL), a fresh install picks the next free port and writes it to `.env` (`APP_PORT`, `DB_PORT` and so on). `ragleap key --rotate` replaces your API key and restarts the app; the old key stops working at once.
 
-Honest limits: the Windows installer has been run on one Windows machine so far, and its local Ollama option has not been tested on Windows.
+Honest limits: the Windows installer has been run on two Windows machines so far: the maintainer's, and one community tester's (Windows 11 with Docker Desktop and Ollama, see [#781](https://github.com/ragleap/ragleap-core/issues/781)). On that second machine the local Ollama option installed, answered a question about an uploaded PDF and named its source. Response times were not measured. macOS and Linux desktops have not been verified yet.
 
 [Quickstart](#quickstart) · [Docs](https://docs.ragleap.com) · [Website](https://ragleap.com) · [Packages](https://packages.ragleap.com/)
 
@@ -112,7 +112,7 @@ Prefer Java? `ragleap-rag` is also on Maven Central:
 <dependency>
     <groupId>io.github.antonyrag</groupId>
     <artifactId>ragleap-rag</artifactId>
-    <version>0.13.0</version>
+    <version>0.14.0</version>
 </dependency>
 ```
 Independently versioned from the Python package above — see [`java/ragleap-rag`](java/ragleap-rag) for current scope.
@@ -122,7 +122,7 @@ The Neo4j graph index has a Java port too, over the HTTP Query API (regex or, op
 <dependency>
     <groupId>io.github.antonyrag</groupId>
     <artifactId>ragleap-graph</artifactId>
-    <version>0.3.0</version>
+    <version>0.4.0</version>
 </dependency>
 ```
 See [`java/ragleap-graph`](java/ragleap-graph) for current scope.
@@ -422,9 +422,11 @@ docker compose up --build -d
 
 Requirements: Docker, Docker Compose, and either a Gemini API key (the default) or a local Ollama setup with no key (use `ragleap launch --ollama`, or set `EMBEDDING_PROVIDER=ollama` for embeddings). For chat you can use Gemini or any of the 19 providers listed under [Supported LLM Providers](#supported-llm-providers-byok), including a local Ollama model and any OpenAI-compatible endpoint.
 
-**Try it in 30 seconds** — with the stack running, see [examples/](examples/) for two verified, runnable scripts:
-- `examples/01_ingest_and_query.py` — upload a document and ask a question via the API
+**Try it in 30 seconds** — with the stack running, see [examples/](examples/) for two runnable scripts:
+- `examples/01_ingest_and_query.py` — upload a document and ask a question via the API. The installer put an API key in your `.env` file: set it first as `RAGLEAP_API_KEY` (bash: `export RAGLEAP_API_KEY=...`, PowerShell: `$env:RAGLEAP_API_KEY = "..."`) and run `pip install requests`
 - `examples/02_test_channel_directly.py` — test the WhatsApp/Telegram/Discord answering logic without real bot credentials
+
+The AI Office dashboard has no chat screen yet. To ask a question without writing code, use `python3 skills/ragleap/scripts/ragleap_client.py ask "your question"` (see [Use RagLeap from a coding agent](#use-ragleap-from-a-coding-agent-read-only-plugin) for the settings it reads), or one of the chat channels.
 
 ## Just want the RAG engine as a Python library?
 
@@ -442,6 +444,7 @@ pip install ragleap-rag
 - **`ragleap-agents`** — a small act-observe agent loop over `ragleap-tools` Tool objects, one proposed action at a time: schema-checked actions, untrusted tool results, a taint rule that forces approval for outbound actions after untrusted content, pause and resume, and (from 0.5.0) sub-agents through a delegate tool. Standard library plus `ragleap-tools`; alpha; live results with real models are limited (see its release notes). Install with `pip install ragleap-agents`.
 - **`ragleap-security`** — small, auditable security primitives: immutable tenant scopes, a hash-chained audit log (tamper-evident, not tamper-proof), secrets that do not print themselves with a heuristic redactor, and hard input limits. Standard library only; alpha; not independently audited. Install with `pip install ragleap-security`.
 - **`ragleap-memory`** — durable, tenant-scoped long-term memory in one SQLite file: FTS5 keyword search, typed entries with trust labels (new entries default to untrusted), supersede, forget, export, and erase that removes the text from the file. Version 0.2.0 adds a token budget on search (`max_tokens`), usage counters and per-tenant quotas, `ShardedStore` (one file per tenant) and download/upload of a memory as a file. Needs `ragleap-security`; alpha; retrieval quality not benchmarked; not independently audited. Install with `pip install ragleap-memory`.
+- **`ragleap-optimizer`** — a measure-first layer that reduces the token use of LLM requests: exact repeated-context removal, whitespace and JSON minifying, a stable prompt prefix, bounded tool-output trimming (it reports when it loses information), a tenant-scoped exact cache, retries and fallback, and an evaluation harness that compares quality before and after on your own cases. No savings figure is claimed; alpha; not independently audited. Install with `pip install ragleap-optimizer`.
 - **`ragleap-physical`** — a simulation-first, observe-first safety bridge between AI agents and simulators (pre-alpha, simulation only). The AI can only propose; a named person approves the exact change; limits are checked again when it is applied; the outcome is verified in the simulator. Four AI-facing tools and a small MCP server, an operator console for the human approval step, MuJoCo adapters (optional extra), workspace limits, two- and three-joint arms, an offline ROS 2 observe-only mock, a simulated machine tool, and observe-only energy and MTConnect mocks. Not built: MQTT, PLC or real-robot bridges; nothing here controls real hardware. Not independently audited. Install with `pip install ragleap-physical`.
 - **`ragleap-ops`** — Kubernetes deployment manifests for RagLeap Core, live-tested end-to-end on a real cluster. Install with `pip install ragleap-ops` or `uv add ragleap-ops`.
 - **`ragleap-app-chart`** — generic, reusable Helm chart for deploying arbitrary services to Kubernetes, not RagLeap-specific. Point it at your own app via a `services:` list. Install with `pip install ragleap-app-chart` or `uv add ragleap-app-chart`.
@@ -450,7 +453,7 @@ pip install ragleap-rag
 - **`ragleap-ansible`** — Ansible roles that prepare and harden a fresh Ubuntu server: deploy user, sudo, unattended upgrades, opt-in SSH hardening and an opt-in firewall (tested in a container; does not install k3s, Helm or the charts yet). Install with `pip install ragleap-ansible` or `uv add ragleap-ansible`. The same files are also on Maven Central as a jar, `io.github.antonyrag:ragleap-ansible` (not a code port).
 - **`ragleap-voice`** — pre-alpha, open and local (MIT). `transcribe()` and `synthesize()` with an optional Whisper large-v3 engine and an Indic Parler-TTS engine, on top of a licence-checked manifest and hash-verified model downloads. Every model is still unverified and none is a default; each engine has been tested on only a few clips. Install with `pip install ragleap-voice` or `uv add ragleap-voice` (engines are optional extras, e.g. `ragleap-voice[whisper]`).
 
-All fourteen are MIT licensed. Browse the full package index at [packages.ragleap.com](https://packages.ragleap.com).
+All sixteen are MIT licensed. Browse the full package index at [packages.ragleap.com](https://packages.ragleap.com).
 
 ## Use RagLeap from a coding agent (read-only plugin)
 

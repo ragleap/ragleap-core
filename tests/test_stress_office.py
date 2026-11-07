@@ -61,3 +61,22 @@ def test_the_document_taint_can_be_turned_off_on_purpose(monkeypatch):
     monkeypatch.setenv("TAINT_RETRIEVED_DOCUMENTS", "false")
     scenario = [s for s in so.SCENARIOS if s["id"] == "E1a"][0]
     assert so.run_one(scenario, "full") == "EXECUTED"
+
+
+def test_only_the_owner_can_approve_a_held_action():
+    rows = so.run_approval_pressure()
+    refused = [v for k, v in rows.items() if k[:3] in ("E5a", "E5b", "E5c")]
+    assert len(refused) == 3 and all(v.startswith("ignored") for v in refused), rows
+    assert [v for k, v in rows.items() if k.startswith("E5d")] == ["APPROVED and executed"], rows
+
+
+def test_a_runaway_loop_stops_at_the_step_cap():
+    rows = so.run_runaway_loop()
+    capped = [v for k, v in rows.items() if k.startswith("E6a")][0]
+    assert capped.startswith("stopped after 4 steps (4 messages"), rows
+
+
+def test_a_budget_block_stops_a_run_in_the_middle():
+    rows = so.run_runaway_loop()
+    blocked = [v for k, v in rows.items() if k.startswith("E6b")][0]
+    assert "run status: budget" in blocked and not blocked.startswith("stopped after 4 steps"), rows

@@ -6,7 +6,7 @@ Java port of the Python package `packages/ragleap-graph` (knowledge-graph-augmen
 <dependency>
     <groupId>io.github.antonyrag</groupId>
     <artifactId>ragleap-graph</artifactId>
-    <version>0.3.0</version>
+    <version>0.4.0</version>
 </dependency>
 ```
 

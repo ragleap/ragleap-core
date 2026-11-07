@@ -1,5 +1,5 @@
 """A-law check against ITU-T G.711 (1988) Tables 1a/1b (printed pages 3 and 4). Tests every convention below, picks none.
-Table values hard-coded from the PDF page images; no G.191 code. Not a conformance claim."""
+Table values are generated from the step widths and checked against checkpoint values hard-coded from the PDF page images; no G.191 code. Tie labels: tie-to-upper sends an exact decision value to the interval of larger magnitude, tie-to-lower to the smaller one (for negative inputs this is the lower signed value). Not a conformance claim."""
 import array, sys
 try:
     import audioop
@@ -25,7 +25,7 @@ CONV = {"sym_trunc": (lambda s: abs(s) // 8, 1), "signed_floor": (lambda s: abs(
         "round": (lambda s: (abs(s) + 4) // 8, 1), "exact": (lambda s: abs(s), 8)}
 def enc(s, conv, tie):
     f, k = CONV[conv]; xs = [k * x for x in X]; m = f(s)
-    i = (bisect_right(xs, m) if tie == "up" else bisect_left(xs, m)) - 1
+    i = (bisect_right(xs, m) if tie == "tie-to-upper" else bisect_left(xs, m)) - 1
     i = max(0, min(127, i))
     return (i if s < 0 else 128 + i) ^ 0x55
 S = range(-32768, 32768)
@@ -40,16 +40,18 @@ else:
 tabs = {}
 print("\nconvention              audioop_mismatch")
 for conv in CONV:
-    for tie in ("up", "down"):
+    for tie in ("tie-to-upper", "tie-to-lower"):
         t = [enc(s, conv, tie) for s in S]; tabs[(conv, tie)] = t
         print("%-22s %9s" % (conv + "/" + tie, sum(x != y for x, y in zip(t, a_enc)) if a_enc is not None else "skipped"))
-d1, d2 = tabs[("sym_trunc", "up")], tabs[("ones_compl", "up")]
+d1, d2 = tabs[("sym_trunc", "tie-to-upper")], tabs[("ones_compl", "tie-to-upper")]
 diff = [s for s, x, y in zip(S, d1, d2) if x != y]
 want = [-8 * X[n] for n in range(1, 128)]
-print("\nsym_trunc/up vs ones_compl/up differ on", len(diff), "inputs; all negative decision values 8*x_n:", sorted(diff) == sorted(want))
-print("sym_trunc/up == exact/up:", tabs[("sym_trunc", "up")] == tabs[("exact", "up")])
-print("round trip enc(dec(c))==c for all 256 codes (sym_trunc/up):", all(enc(dec(c), "sym_trunc", "up") == c for c in range(256)))
+print("\nsym_trunc/tie-to-upper vs ones_compl/tie-to-upper differ on", len(diff), "inputs; all negative decision values 8*x_n:", sorted(diff) == sorted(want))
+print("sym_trunc/tie-to-upper == exact/tie-to-upper:", tabs[("sym_trunc", "tie-to-upper")] == tabs[("exact", "tie-to-upper")])
+print("round trip enc(dec(c))==c for all 256 codes (sym_trunc/tie-to-upper):", all(enc(dec(c), "sym_trunc", "tie-to-upper") == c for c in range(256)))
 shipped = alaw_encode(S)
-print("shipped alaw_encode vs exact/up table: mismatches", sum(x != y for x, y in zip(shipped, tabs[("exact", "up")])))
+print("shipped alaw_encode vs exact/tie-to-upper table: mismatches", sum(x != y for x, y in zip(shipped, tabs[("exact", "tie-to-upper")])))
 shipped_dec = alaw_decode(bytes(range(256)))
 print("shipped alaw_decode vs table (x8): mismatches", sum(shipped_dec[c] != dec(c) for c in range(256)))
+print()
+print("A zero count means: matches this convention on this formula-extended table. It is not a conformance statement.")

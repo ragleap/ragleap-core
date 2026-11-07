@@ -20,7 +20,13 @@ class DryRun:
 
 
 class Adapter(ABC):
-    """Small abstract class every simulator adapter implements."""
+    """Small abstract class every simulator adapter implements.
+
+    Refusal contract (checked by tests/test_adapter_conformance.py). A control adapter raises ``ValueError`` for a value that is
+    not a finite number, and for an unknown target or command, and changes nothing. An observe-only adapter raises
+    ``ValueError``, ``PermissionError`` or ``NotImplementedError`` from ``apply()`` and ``dry_run()`` and never returns.
+    ``stop()`` and ``clear_stop()`` never raise, and the observation keeps the same entities after both.
+    """
 
     @property
     @abstractmethod

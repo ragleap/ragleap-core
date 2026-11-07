@@ -4,7 +4,37 @@ All notable changes are listed here. Format: Keep a Changelog.
 
 ## [Unreleased]
 
-## [0.0.3] - 2026-11-03
+### Added
+- Adapter conformance tests (`tests/test_adapter_conformance.py`): one contract that every adapter must pass (observation shape, stop and
+  clear-stop, stable entities, a pure dry run, refusals that change nothing, a Bridge that can stop and clear). The refusal contract is
+  written in the `Adapter` docstring.
+
+### Fixed
+- One-joint and two-link stand-in arms, and the simulated machine tool: `apply()` and `dry_run()` refuse NaN, infinity, text, booleans and
+  `None` with `ValueError` and change nothing. Values are now stored as floats. (The Bridge already rejected these values, so this
+  matters only when an adapter is called directly.)
+- The offline ROS 2 mock: `clear_stop()` no longer raises, so a Bridge over it can be stopped and then cleared.
+
+## [0.0.4] - 2026-11-06
+
+### Added
+- `Item` (the MTConnect item description) can be imported from `ragleap_physical.adapters`; an import test covers it
+  (reported by a reviewer on a clean install of 0.0.3).
+- Six review tests for the energy-site adapter, kept as regression tests (`tests/test_energy_adapter_review.py`).
+- Review tests for the three-joint arm and the MuJoCo servo adapter (`tests/test_arm3_review.py`, `tests/test_arm3_mujoco_review.py`,
+  `examples/robots/test_arm3_hardening.py`).
+- PowerShell steps in `docs/first-hour.md` (#1177, by @Anurag07-crypto, whose Windows run showed the gap).
+
+### Fixed
+- Three-joint arm (`FakeArm3Adapter`): after a stop the arm can be observed again (the stop used to reset the velocities to two numbers, so
+  `observe_raw()` raised `IndexError`); `apply()` and `dry_run()` refuse NaN, infinity, text, booleans and `None`; time and step inputs and
+  constructor parameters are validated; the model fingerprint now depends on the parameters.
+- MuJoCo servo adapter: a target outside the actuator range is refused with `ValueError` and is no longer silently clamped by MuJoCo; NaN, infinity,
+  text, booleans and `None` are refused. `examples/robots/arm3.xml` actuator ranges are now -3.1 to 3.1 rad, like the other models.
+  Not yet run on a real MuJoCo install at the time of writing.
+- The date of 0.0.3 in this file was 2026-11-03; the upload was on 2026-11-04.
+
+## [0.0.3] - 2026-11-04
 
 ### Added
 - A second runnable demo, `examples/two_link_workspace_demo.py`: a two-link arm with one accepted and one refused workspace move

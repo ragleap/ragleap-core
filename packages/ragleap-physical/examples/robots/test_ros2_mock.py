@@ -17,7 +17,6 @@ def test_fixture_observation_sanitizes():
     ("apply", ("joint_1", "set_position_target", 1.0)),
     ("dry_run", ("joint_1", "set_position_target", 1.0, 1.0, 10)),
     ("advance", (1.0, 10)),
-    ("clear_stop", ()),
 ])
 def test_no_motion_interface(method, args):
     adapter = MockROS2ObserveAdapter()
@@ -35,6 +34,14 @@ def test_bad_fixture_does_not_change_state():
     before = adapter.observe_raw()
     with pytest.raises(ValueError):
         adapter.ingest_fixture(position=0.3, sim_time_s=0.1, step=3)
+    assert adapter.observe_raw() == before
+
+
+def test_clear_stop_is_harmless_noop():
+    adapter = MockROS2ObserveAdapter()
+    before = adapter.observe_raw()
+    result = adapter.clear_stop()
+    assert result is None
     assert adapter.observe_raw() == before
 
 
