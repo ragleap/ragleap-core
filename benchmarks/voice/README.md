@@ -443,3 +443,7 @@ GPU check (`colab_gpu_check.py`, same setup: Tesla T4, Google Colab, 2026-11-07,
 | `auto` | 109, 3223 | 87.7% and 98% | 2.26 s |
 
 `auto` behaved like `cuda` here (same memory growth, same peak of 3479 MiB, high utilisation), so the timing table above was measured on the GPU, and `cpu` showed no GPU use. GPU memory returned to 109 MiB after the `Transcriber` closed. Limits: one run, 17 samples for each GPU run, memory and utilisation are `nvidia-smi` samples and not a profiler, and `auto` picking the GPU is observed on this setup only.
+
+## Phone-line codec benchmark script (added, not yet run)
+
+`colab_phone_line_benchmark.py` compares Whisper large-v3 word error on clean FLEURS clips (English, Spanish, Russian, the first 30 each) with the same clips after three 8 kHz telephone-style paths: ffmpeg mu-law (as in the noise pilot), and ragleap's own `down2`, mu-law or A-law encode and decode, `up2`. It first checks that each codec round-trips, then reports word error with 95% bootstrap intervals, the change against clean, and the change of ragleap mu-law against ffmpeg mu-law. No results from this script are published yet. When they are, they will cover a resample and a codec only: no added noise, no packet loss or carrier processing, one run, wide intervals, no level normalisation (so absolute numbers are not comparable with the noise pilot), and no comparison with other systems.
