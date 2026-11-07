@@ -4,15 +4,15 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ragleap-security"
-version = "0.1.0"
-description = "Small, auditable security primitives for the ragleap libraries: immutable tenant scopes, a tamper-evident hash-chained audit log, secret handling and redaction, and hard input limits. Standard library only. Not independently audited."
+version = "0.2.0"
+description = "Small, auditable security primitives for the ragleap libraries: immutable tenant scopes, a tamper-evident hash-chained audit log, secret handling and redaction, hard input limits, rate limits, keys with rotation, file integrity manifests and optional authenticated encryption. Standard library only, except optional AES-256-GCM encryption (extra: crypto). Not independently audited."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
 authors = [
     { name = "RagLeap" }
 ]
-keywords = ["security", "audit-log", "multi-tenant", "secrets", "redaction", "llm", "self-hosted"]
+keywords = ["security", "audit-log", "multi-tenant", "secrets", "redaction", "rate-limit", "encryption", "integrity", "llm", "self-hosted"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -29,6 +29,7 @@ dependencies = []
 
 [project.optional-dependencies]
 test = ["pytest>=8.0.0"]
+crypto = ["cryptography>=42.0.0"]
 
 [project.urls]
 Homepage = "https://github.com/ragleap/ragleap-core"
