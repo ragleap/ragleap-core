@@ -5,7 +5,7 @@ Two simulated adapters. They only **read**: `targets()` is empty, and `apply()` 
 - `adapters/energy.py`: `FakeEnergySiteAdapter`, a seeded model of a site with four meters (invented numbers).
 - `adapters/mtconnect.py`: `FakeMTConnectAdapter`, which replays recorded MTConnect "streams" XML documents that you give it as text or bytes. It is not an MTConnect client.
 
-MTConnect itself is **not purely read-only**, although vendor material often says so. Its Interfaces part (v2.8 model) describes request and response coordination between equipment, and the reference agent can be configured to accept HTTP PUT or POST of data (`AllowPut`, default false). This replay only reads and sends nothing.
+MTConnect is a standard for publishing equipment data. Its Interfaces part (Part 5; v1.6.0 is the version checked) lets two machines coordinate by each publishing request and response states that the other reads; the standard gives no direct way for one machine to command another. Some agents can be set to accept pushed data values or assets (the reference agent's `AllowPut`, default false; not re-checked since 2026-10-30). That is an agent setting, not a command to a machine, and what it could reach on a real installation is not verified. These adapters are observe-only: this replay only reads the documents you give it and sends nothing.
 
 ## One thing to know first
 An observe-only bridge still needs a valid envelope, because `Envelope` requires one target and one command. The adapters have neither, so the envelope below limits nothing. The real guard is `Capability.OBSERVE`: a proposal is refused.

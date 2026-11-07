@@ -1,4 +1,4 @@
-"""An observe-only MTConnect mock (the standard itself is not purely read-only): strict parsing of untrusted XML, replay as observations. Invented documents only."""
+"""An observe-only MTConnect mock: strict parsing of untrusted XML, replay as observations. Invented documents only."""
 import math
 
 import pytest

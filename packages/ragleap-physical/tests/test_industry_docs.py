@@ -26,6 +26,6 @@ def test_every_example_runs_and_prints_exactly_what_the_guide_shows():
 
 def test_the_guide_states_its_limits_and_has_no_addresses():
     text = DOC.read_text(encoding="utf-8")
-    for phrase in ("simulation only", "not verified", "invented", "not an MTConnect client", "not purely read-only", "AllowPut"):
+    for phrase in ("simulation only", "not verified", "invented", "not an MTConnect client", "observe-only", "no direct way", "AllowPut"):
         assert phrase.lower() in text.lower(), phrase
     assert not re.search(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b", text)
