@@ -5,7 +5,9 @@ Nothing here swallows an error and turns it into a default.
 """
 import os
 import pathlib
+import threading
 import time
+import weakref
 from collections.abc import Mapping
 
 from .cache import cache_root, model_dir
@@ -65,6 +67,40 @@ def _verify_cached(lock, d):
         if time.time_ns() - newest > _RACY_NS:
             _VERIFIED[key] = before
     return problems
+
+
+_ENGINE_LOCKS = weakref.WeakKeyDictionary()  # engine -> RLock
+_FALLBACK_LOCKS = {}  # id(engine) -> RLock, for engines that cannot be weakly referenced or hashed
+_ENGINE_LOCKS_GUARD = threading.Lock()
+
+
+def _engine_lock(eng):
+    """One re-entrant lock per engine object, shared by every caller that uses that engine. Different engines never wait
+    for each other."""
+    with _ENGINE_LOCKS_GUARD:
+        try:
+            lock = _ENGINE_LOCKS.get(eng)
+            if lock is None:
+                lock = _ENGINE_LOCKS[eng] = threading.RLock()
+        except TypeError:
+            lock = _FALLBACK_LOCKS.setdefault(id(eng), threading.RLock())
+    return lock
+
+
+def _locked_run(eng, dirs, request):
+    """load, run and close one engine while holding its lock, so two threads on the same engine run one after the other
+    instead of closing or reloading it under each other. Returns (result, name of a close() error or None)."""
+    closing = None
+    with _engine_lock(eng):
+        try:
+            eng.load(dirs)
+            res = eng.run(request)
+        finally:
+            try:
+                eng.close()
+            except Exception as exc:
+                closing = type(exc).__name__
+    return res, closing
 
 
 def _pick_engine(registry, name, language):
@@ -194,16 +230,8 @@ def _transcribe(audio, registry, manifest_path, *, language=None, engine="auto",
             return Transcript(text="", language=language, engine=eng.name, model=", ".join(eng.manifest_entries),
                               model_status=status, segments=(), notes=tuple(gate_notes))
     request = Request(kind="stt", language=language, audio=data, timestamps=bool(timestamps), options=dict(options or {}))
-    closing = None
     try:
-        try:
-            eng.load(dirs)
-            res = eng.run(request)
-        finally:
-            try:
-                eng.close()
-            except Exception as exc:
-                closing = type(exc).__name__
+        res, closing = _locked_run(eng, dirs, request)
     except RagleapVoiceError:
         raise
     except Exception as exc:

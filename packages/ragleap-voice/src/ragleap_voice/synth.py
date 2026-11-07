@@ -8,7 +8,7 @@ import math
 import wave
 from collections.abc import Mapping
 
-from .api import _resolve_models
+from .api import _locked_run, _resolve_models
 from .engine import Request, Result
 from .errors import (EngineError, NoEngineError, RagleapVoiceError, UnsupportedFeatureError,
                      UnsupportedLanguageError)
@@ -90,16 +90,8 @@ def _synthesize(text, registry, manifest_path, *, language, engine="auto", voice
     dirs, status, unverified = _resolve_models(eng, manifest_path, cache_dir, allow_unverified)
     request = Request(kind="tts", language=language, text=text, emotion=emotion,
                       speed=None if speed is None else float(speed), options=dict(options or {}))
-    closing = None
     try:
-        try:
-            eng.load(dirs)
-            res = eng.run(request)
-        finally:
-            try:
-                eng.close()
-            except Exception as exc:
-                closing = type(exc).__name__
+        res, closing = _locked_run(eng, dirs, request)
     except RagleapVoiceError:
         raise
     except Exception as exc:

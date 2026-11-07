@@ -7,6 +7,7 @@ passes samples to faster-whisper, so PyAV is not used for our input.
 import contextlib
 import io
 import os
+import threading
 import wave
 
 from .engine import Capabilities, Result
@@ -29,18 +30,33 @@ _CUDA_HINT = ('pass options={"device": "cpu"} to run on the CPU, or install the 
               'ctypes (RTLD_GLOBAL) before the model made device cuda work; this is one observation, not a guarantee.')
 
 
+_ENV_LOCK = threading.Lock()
+_ENV_USERS = 0
+_ENV_SAVED = {}
+
+
 @contextlib.contextmanager
 def _offline_env():
-    old = {k: os.environ.get(k) for k in _OFFLINE}
-    os.environ.update(_OFFLINE)
+    """Offline variables for the duration of a model open. Reference counted behind a lock: the first thread in saves the
+    caller's values and sets ours, the last one out restores them, so overlapping opens neither lose the setting nor leak it."""
+    global _ENV_USERS, _ENV_SAVED
+    with _ENV_LOCK:
+        if _ENV_USERS == 0:
+            _ENV_SAVED = {k: os.environ.get(k) for k in _OFFLINE}
+            os.environ.update(_OFFLINE)
+        _ENV_USERS += 1
     try:
         yield
     finally:
-        for k, v in old.items():
-            if v is None:
-                os.environ.pop(k, None)
-            else:
-                os.environ[k] = v
+        with _ENV_LOCK:
+            _ENV_USERS -= 1
+            if _ENV_USERS == 0:
+                for k, v in _ENV_SAVED.items():
+                    if v is None:
+                        os.environ.pop(k, None)
+                    else:
+                        os.environ[k] = v
+                _ENV_SAVED = {}
 
 
 def _cuda_check(exc):
