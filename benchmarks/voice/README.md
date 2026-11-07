@@ -412,3 +412,7 @@ For the TTS round trip, accept the conditions on `ai4bharat/indic-parler-tts` an
 ## Attribution
 
 FLEURS: Conneau et al., 2022 (CC-BY-4.0). See `packages/ragleap-voice/THIRD_PARTY_NOTICES.md`.
+
+## Per-call timing script (added, not yet run)
+
+`colab_transcribe_timing.py` times `transcribe()` (several calls in a row, and with `RAGLEAP_VOICE_VERIFY=always`) and a `Transcriber` on one FLEURS clip, and prints the real-time factor per call with the GPU, Python and package versions. It exists so the earlier one-off Colab timings can be reproduced. No results from this script are published yet. When they are, they will be one clip, one run and one machine, batch decoding only, and no comparison with other systems.
