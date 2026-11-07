@@ -3,6 +3,7 @@
 Standard library only. The engine is handed directories of verified model files and never fetches anything itself.
 Nothing here swallows an error and turns it into a default.
 """
+import contextlib
 import os
 import pathlib
 import threading
@@ -70,21 +71,35 @@ def _verify_cached(lock, d):
 
 
 _ENGINE_LOCKS = weakref.WeakKeyDictionary()  # engine -> RLock
-_FALLBACK_LOCKS = {}  # id(engine) -> RLock, for engines that cannot be weakly referenced or hashed
+_FALLBACK_LOCKS = {}  # id(engine) -> (RLock, users), only while in use, for engines that cannot be weakly referenced or hashed
 _ENGINE_LOCKS_GUARD = threading.Lock()
 
 
+@contextlib.contextmanager
 def _engine_lock(eng):
-    """One re-entrant lock per engine object, shared by every caller that uses that engine. Different engines never wait
-    for each other."""
+    """Hold one re-entrant lock per engine object, shared by every caller that uses that engine. Different engines never
+    wait for each other. An engine that cannot be weakly referenced gets a lock that is dropped when its last user leaves."""
+    key = None
     with _ENGINE_LOCKS_GUARD:
         try:
             lock = _ENGINE_LOCKS.get(eng)
             if lock is None:
                 lock = _ENGINE_LOCKS[eng] = threading.RLock()
         except TypeError:
-            lock = _FALLBACK_LOCKS.setdefault(id(eng), threading.RLock())
-    return lock
+            key = id(eng)
+            lock, users = _FALLBACK_LOCKS.get(key, (threading.RLock(), 0))
+            _FALLBACK_LOCKS[key] = (lock, users + 1)
+    try:
+        with lock:
+            yield
+    finally:
+        if key is not None:
+            with _ENGINE_LOCKS_GUARD:
+                lock, users = _FALLBACK_LOCKS[key]
+                if users <= 1:
+                    del _FALLBACK_LOCKS[key]
+                else:
+                    _FALLBACK_LOCKS[key] = (lock, users - 1)
 
 
 def _locked_run(eng, dirs, request):

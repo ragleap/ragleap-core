@@ -67,6 +67,8 @@ The names `transcribe_stream(chunks, ...)` (yields partial and final transcripts
 
 Licences are not declared by the engine. They come from `models.toml`, which stays the single authority. An engine cannot claim a model is safe; the manifest and the lock files say so.
 
+**Threads.** `transcribe()` and `synthesize()` hold a per-engine lock around load, run and close, so threads that share one engine run one after the other. An engine must not call `transcribe()` or `synthesize()` from inside its own `run()`: the lock is re-entrant, so a nested call would reload and close the outer call's state.
+
 ## 5. Registration
 
 - Built-in adapters (Whisper, IndicConformer, Parler, Kokoro, Chatterbox) are registered by name and need their extra installed (`pip install "ragleap-voice[parler]"`, and so on). A missing extra raises `EngineNotInstalledError` with the exact command.

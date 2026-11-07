@@ -5,7 +5,7 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 ### Fixed
-- Thread safety. Overlapping model opens no longer lose or leak the offline variables (`HF_HUB_OFFLINE`, `TRANSFORMERS_OFFLINE`): they are now reference counted behind a lock. `transcribe()` and `synthesize()` now hold a per-engine lock around load, run and close, so two threads on the same shared engine run one after the other instead of closing or reloading it under each other; different engines still run in parallel. `Transcriber` keeps its own engine and lock. Not covered: `Registry.register` called from several threads, other code changing the process environment, and thread safety inside faster-whisper itself (not checked).
+- Thread safety. Overlapping model opens no longer lose or leak the offline variables (`HF_HUB_OFFLINE`, `TRANSFORMERS_OFFLINE`): they are now reference counted behind a lock. `transcribe()` and `synthesize()` now hold a per-engine lock around load, run and close, so two threads on the same shared engine run one after the other instead of closing or reloading it under each other; different engines still run in parallel. `Transcriber` keeps its own engine and lock. `Registry.register` now takes a lock, and the locks kept for engines that cannot be weakly referenced are released after use. An engine must not call `transcribe()` or `synthesize()` from inside its own `run()`. Not covered: other code changing the process environment while a model is opening (it is overwritten when the last open ends), and thread safety inside faster-whisper itself (not checked).
 
 ## [0.3.4] - 2026-11-07
 ### Status
