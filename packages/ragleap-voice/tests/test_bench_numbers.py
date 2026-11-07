@@ -1300,6 +1300,7 @@ def test_chinese_mandarin_cardinals_follow_cldr_rules():
 def test_chinese_malformed_and_ambiguous_forms_are_preserved():
     for phrase in (
         "十十", "十百", "百百", "九百百", "千千", "千百", "两百千",
+        "二十三百", "三千二千", "十二百",
         "万万", "亿亿", "亿万", "一亿万", "一万万", "万万亿",
         "零一", "零零", "零五", "零百", "零一百",
         "零十", "一百零十", "一百零零三", "一万零万",

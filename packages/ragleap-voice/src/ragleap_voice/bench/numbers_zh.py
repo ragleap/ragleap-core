@@ -75,6 +75,7 @@ def _parse_chars(text):
     last_unit = None   # value of the unit digit most recently added, if any
     last_kind = None   # "unit", "zero", "mult", or "scale"
     last_scale = None
+    last_mult = None   # most recent 十/百/千 in the current section
 
     for ch in text:
         if ch == _ZERO:
@@ -91,6 +92,9 @@ def _parse_chars(text):
             if last_kind in ("zero", "mult") or last_unit == 0:
                 return None  # 零十 / 十十 / 百十 and the like
             multiplier = _MULTIPLIERS[ch]
+            if last_mult is not None and multiplier >= last_mult:
+                return None  # 二十三百 / 三千二千 / 十二百: order must descend
+            last_mult = multiplier
             if last_unit:
                 section += last_unit * (multiplier - 1)
                 last_unit = None
@@ -115,6 +119,7 @@ def _parse_chars(text):
             total += (section or 1) * scale
             section = 0
             last_unit = None
+            last_mult = None
             last_scale = scale
             last_kind = "scale"
 
