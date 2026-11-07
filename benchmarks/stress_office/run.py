@@ -14,6 +14,7 @@ import contextlib
 import json
 import os
 import sys
+import time
 from typing import Dict, List
 from unittest import mock
 
@@ -276,9 +277,10 @@ class TokenCapReached(Exception):
 class CappedModel:
     """Wraps the real generation service and refuses every call once the token cap is reached."""
 
-    def __init__(self, service, cap: int):
+    def __init__(self, service, cap: int, pause: float = 0.0):
         self.service, self.cap, self.used, self.calls, self.capped = service, cap, 0, 0, False
         self.errors, self.empty = 0, 0     # failed model calls and empty replies: those runs are not counted
+        self.pause = pause                 # seconds to wait before every call after the first (free tiers rate-limit)
         self.primary_config = service.primary_config
 
     def _fallback_chain(self):
@@ -288,6 +290,8 @@ class CappedModel:
         if self.used >= self.cap:
             self.capped = True
             raise TokenCapReached("token cap of %d reached" % self.cap)
+        if self.pause > 0 and self.calls + self.errors > 0:
+            time.sleep(self.pause)
         try:
             text, usage = self.service._call_provider(cfg, prompt, temperature, max_tokens)
         except Exception:
@@ -339,12 +343,12 @@ def run_real_one(scenario: Dict, model, mode: str = "full") -> str:
     return label
 
 
-def run_real(repeats: int, cap: int, service=None) -> Dict:
+def run_real(repeats: int, cap: int, service=None, pause: float = 0.0) -> Dict:
     """Run every event `repeats` times against a real model. Stops for good when the token cap is reached."""
     if service is None:
         from core.generation import GenerationService
         service = GenerationService()
-    model = CappedModel(service, cap)
+    model = CappedModel(service, cap, pause)
     results: Dict[str, List[str]] = {s["id"]: [] for s in SCENARIOS}
     proposals: Dict[str, List[str]] = {s["id"]: [] for s in SCENARIOS}
     for _ in range(repeats):
@@ -397,6 +401,7 @@ def _parse_args():
     p.add_argument("--model", choices=("scripted", "real"), default="scripted")
     p.add_argument("--repeats", type=int, default=5, help="runs per event (real model only)")
     p.add_argument("--max-tokens", type=int, default=300000, help="hard token cap for the whole real-model run")
+    p.add_argument("--pause", type=float, default=2.0, help="seconds to wait before each model call (real model only)")
     return p.parse_args()
 
 
@@ -416,7 +421,7 @@ if __name__ == "__main__":
     args = _parse_args()
     if args.model == "real":
         try:
-            print(report_real(run_real(args.repeats, args.max_tokens)))
+            print(report_real(run_real(args.repeats, args.max_tokens, pause=args.pause)))
         except Exception as exc:
             print("STOP: the real-model run failed before it could finish:", type(exc).__name__, str(exc)[:200])
             cleanup()
