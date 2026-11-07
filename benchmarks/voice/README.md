@@ -433,3 +433,13 @@ Script: `colab_transcribe_timing.py`. Setup: Tesla T4, Google Colab, 2026-11-07,
 What it shows: the first default call includes the one-time full hash of the model folder and the model open; later default calls skip the hash but still open the model on every call; with `RAGLEAP_VOICE_VERIFY=always` every call hashes the folder again; a `Transcriber` keeps the model open, so calls after its first took about 0.7 s here. All ten calls returned text of the same length (103 characters), which is not an accuracy check.
 
 Limits: one clip, one run, one machine; batch decoding only, not streaming latency; the script does not confirm that the GPU was used (the device option was `auto`); call-to-call differences of a few tenths of a second (for example default call 4) are within what one run cannot separate from noise; the operating system file cache was warm for the later modes. No comparison with any other system is made.
+
+GPU check (`colab_gpu_check.py`, same setup: Tesla T4, Google Colab, 2026-11-07, ragleap-voice 0.3.5, one clip, one run). A `Transcriber` was run with `device` set to `cpu`, `cuda` and `auto`, and `nvidia-smi` was sampled every 0.1 s during three warm calls.
+
+| Device option | GPU memory before, after load (MiB) | Mean and max GPU utilisation | 3 warm calls |
+|---|---|---|---|
+| `cpu` (control) | 109, 109 | 0% and 0% | 101.83 s |
+| `cuda` | 109, 3223 | 92.5% and 100% | 2.13 s |
+| `auto` | 109, 3223 | 87.7% and 98% | 2.26 s |
+
+`auto` behaved like `cuda` here (same memory growth, same peak of 3479 MiB, high utilisation), so the timing table above was measured on the GPU, and `cpu` showed no GPU use. GPU memory returned to 109 MiB after the `Transcriber` closed. Limits: one run, 17 samples for each GPU run, memory and utilisation are `nvidia-smi` samples and not a profiler, and `auto` picking the GPU is observed on this setup only.
