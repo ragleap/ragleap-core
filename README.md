@@ -112,7 +112,7 @@ Prefer Java? `ragleap-rag` is also on Maven Central:
 <dependency>
     <groupId>io.github.antonyrag</groupId>
     <artifactId>ragleap-rag</artifactId>
-    <version>0.13.0</version>
+    <version>0.14.0</version>
 </dependency>
 ```
 Independently versioned from the Python package above — see [`java/ragleap-rag`](java/ragleap-rag) for current scope.
@@ -122,7 +122,7 @@ The Neo4j graph index has a Java port too, over the HTTP Query API (regex or, op
 <dependency>
     <groupId>io.github.antonyrag</groupId>
     <artifactId>ragleap-graph</artifactId>
-    <version>0.3.0</version>
+    <version>0.4.0</version>
 </dependency>
 ```
 See [`java/ragleap-graph`](java/ragleap-graph) for current scope.
