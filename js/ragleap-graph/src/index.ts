@@ -17,3 +17,5 @@ export { DEFAULT_MAX_ENTITIES, DEFAULT_MAX_PAIRS, MAX_ATTEMPTS, NOT_AVAILABLE } 
 export type { UpsertChunk, UpsertLogger, UpsertOptions, UpsertSummary, UpsertTiming } from "./upsert.ts";
 export { MAX_ALLOWED_DEPTH } from "./queries.ts";
 export type { DocumentHit, EntityRef, LimitOptions, LineageEntry, LineageOptions, RelatedEntity, RelatedOptions, RelationHit, RelationsOptions, ScopeOptions, TypedEntity } from "./queries.ts";
+export { EPSILON, MAX_PASSES, detectCommunities, membersHash, modularity } from "./communities.ts";
+export type { Community, Edge } from "./communities.ts";
