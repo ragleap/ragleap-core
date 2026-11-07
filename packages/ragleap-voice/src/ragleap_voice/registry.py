@@ -5,6 +5,7 @@ candidate for automatic selection: it runs only when the caller names it. Rankin
 now candidates are ordered by name.
 """
 import re
+import threading
 
 from .engine import KINDS, Capabilities, EngineInfo
 from .errors import EngineNotInstalledError
@@ -16,6 +17,7 @@ _METHODS = ("load", "run", "close")
 class Registry:
     def __init__(self):
         self._items = {}
+        self._lock = threading.Lock()
 
     def register(self, engine, *, third_party=False):
         name = getattr(engine, "name", None)
@@ -29,9 +31,10 @@ class Registry:
         for method in _METHODS:
             if not callable(getattr(engine, method, None)):
                 raise TypeError("engine must have a callable %s()" % method)
-        if name in self._items:
-            raise ValueError("an engine named %r is already registered" % name)
-        self._items[name] = (engine, bool(third_party))
+        with self._lock:
+            if name in self._items:
+                raise ValueError("an engine named %r is already registered" % name)
+            self._items[name] = (engine, bool(third_party))
 
     def get(self, name):
         try:
