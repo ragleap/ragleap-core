@@ -413,6 +413,23 @@ For the TTS round trip, accept the conditions on `ai4bharat/indic-parler-tts` an
 
 FLEURS: Conneau et al., 2022 (CC-BY-4.0). See `packages/ragleap-voice/THIRD_PARTY_NOTICES.md`.
 
-## Per-call timing script (added, not yet run)
+## Per-call timing of transcribe() and Transcriber (one run)
 
-`colab_transcribe_timing.py` times `transcribe()` (several calls in a row, and with `RAGLEAP_VOICE_VERIFY=always`) and a `Transcriber` on one FLEURS clip, and prints the real-time factor per call with the GPU, Python and package versions. It exists so the earlier one-off Colab timings can be reproduced. No results from this script are published yet. When they are, they will be one clip, one run and one machine, batch decoding only, and no comparison with other systems.
+Script: `colab_transcribe_timing.py`. Setup: Tesla T4, Google Colab, 2026-11-07, Python 3.13.16, ragleap-voice 0.3.5, Whisper large-v3 (`Systran/faster-whisper-large-v3`), one clip (first `google/fleurs` en_us test clip, 10.56 s), `device="auto"`, CUDA 12 libraries preloaded with ctypes. One run, in this order.
+
+| Mode | Call | Seconds | RTF |
+|---|---|---|---|
+| `transcribe()` default | 1 | 13.519 | 1.280 |
+| `transcribe()` default | 2 | 3.362 | 0.318 |
+| `transcribe()` default | 3 | 3.352 | 0.317 |
+| `transcribe()` default | 4 | 3.851 | 0.365 |
+| `transcribe()` with `RAGLEAP_VOICE_VERIFY=always` | 1 | 12.222 | 1.157 |
+| `transcribe()` with `RAGLEAP_VOICE_VERIFY=always` | 2 | 12.391 | 1.173 |
+| `Transcriber` | 1 | 3.623 | 0.343 |
+| `Transcriber` | 2 | 0.704 | 0.067 |
+| `Transcriber` | 3 | 0.700 | 0.066 |
+| `Transcriber` | 4 | 0.694 | 0.066 |
+
+What it shows: the first default call includes the one-time full hash of the model folder and the model open; later default calls skip the hash but still open the model on every call; with `RAGLEAP_VOICE_VERIFY=always` every call hashes the folder again; a `Transcriber` keeps the model open, so calls after its first took about 0.7 s here. All ten calls returned text of the same length (103 characters), which is not an accuracy check.
+
+Limits: one clip, one run, one machine; batch decoding only, not streaming latency; the script does not confirm that the GPU was used (the device option was `auto`); call-to-call differences of a few tenths of a second (for example default call 4) are within what one run cannot separate from noise; the operating system file cache was warm for the later modes. No comparison with any other system is made.
