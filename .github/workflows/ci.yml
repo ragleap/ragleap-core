@@ -248,9 +248,14 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[test]"
-      - name: Run ragleap-security test suite
+      - name: Run ragleap-security test suite (without the crypto extra)
         working-directory: packages/ragleap-security
         run: |
+          python -m pytest tests/ -v
+      - name: Install the crypto extra and run the suite again
+        working-directory: packages/ragleap-security
+        run: |
+          pip install -e ".[crypto]"
           python -m pytest tests/ -v
 
   ragleap-memory-tests:
