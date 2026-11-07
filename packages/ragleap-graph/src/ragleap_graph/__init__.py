@@ -237,7 +237,11 @@ class GraphIndex:
         config: Optional[GraphConfig] = None,
         extraction: Optional[ExtractionConfig] = None,
         audit: Optional[AuditConfig] = None,
+        temporal: bool = False,
     ):
+        if not isinstance(temporal, bool):
+            raise ValueError("temporal must be a bool")
+        self.temporal = temporal
         self.config = config or GraphConfig()
         self.driver = None
         self._audit = AuditLogger(audit)
@@ -472,6 +476,28 @@ class GraphIndex:
     # ------------------------------------------------------------------
     # Core graph operations
     # ------------------------------------------------------------------
+
+    # Temporal variant of the RELATES_AS refresh (GraphIndex(temporal=True)): an edge whose total support drops to 0 is
+    # closed (valid_to set) instead of deleted, and a closed edge that gets support again is reopened (valid_from restarts).
+    _RELATES_AS_REFRESH_TEMPORAL = """
+                        MATCH (rw:RelationWeight {namespace: $namespace, subject: $subject, relation_type: $relation_type, object: $object, user_id: $user_id})
+                        WITH sum(rw.weight) AS total
+                        MATCH (es:Entity {name: $subject, namespace: $namespace, user_id: $user_id})
+                        MATCH (eo:Entity {name: $object, namespace: $namespace, user_id: $user_id})
+                        FOREACH (_ IN CASE WHEN total > 0 THEN [1] ELSE [] END |
+                            MERGE (es)-[r:RELATES_AS {composite_key: $relates_as_composite_key}]->(eo)
+                            ON CREATE SET r.relation_type = $relation_type, r.namespace = $namespace, r.user_id = $user_id,
+                                r.valid_from = datetime()
+                            SET r.valid_from = CASE WHEN r.valid_to IS NOT NULL THEN datetime() ELSE r.valid_from END
+                            SET r.valid_to = null, r.weight = total
+                        )
+                        FOREACH (_ IN CASE WHEN total = 0 THEN [1] ELSE [] END |
+                            MERGE (es)-[r2:RELATES_AS {composite_key: $relates_as_composite_key}]->(eo)
+                            ON CREATE SET r2.relation_type = $relation_type, r2.namespace = $namespace, r2.user_id = $user_id,
+                                r2.valid_from = datetime(), r2.weight = 0.0
+                            SET r2.valid_to = coalesce(r2.valid_to, datetime())
+                        )
+                        """
 
     def _upsert_document_once(
         self,
@@ -814,7 +840,7 @@ class GraphIndex:
                         ns, uid, subject, relation_type, obj
                     )
                     session.run(
-                        """
+                        self._RELATES_AS_REFRESH_TEMPORAL if self.temporal else """
                         MATCH (rw:RelationWeight {namespace: $namespace, subject: $subject, relation_type: $relation_type, object: $object, user_id: $user_id})
                         WITH sum(rw.weight) AS total
                         MATCH (es:Entity {name: $subject, namespace: $namespace, user_id: $user_id})
@@ -1105,6 +1131,7 @@ class GraphIndex:
         user_id: Optional[str] = None,
         limit: int = 25,
         direction: str = "outgoing",
+        as_of: Optional[Any] = None,
     ) -> List[Dict[str, Any]]:
         """
         Find typed relations involving entity_name (v0.4.0+;
@@ -1124,11 +1151,20 @@ class GraphIndex:
         every other query method here when there is simply nothing to find.
         relation_type= optionally filters to one relation type (e.g.
         "REPORTED"); omit to return all relation types for entity_name.
+
+        as_of= (a timezone-aware datetime) returns the relations that were valid at that moment
+        (valid_from <= as_of < valid_to; edges without those properties count as always valid).
+        On an index created with temporal=True, closed edges are left out by default.
         """
         if direction not in ("outgoing", "incoming", "both"):
             raise ValueError(
                 f'direction must be "outgoing", "incoming", or "both", got {direction!r}'
             )
+        if as_of is not None:
+            from datetime import datetime as _datetime
+
+            if not isinstance(as_of, _datetime) or as_of.tzinfo is None or as_of.utcoffset() is None:
+                raise ValueError("as_of must be a timezone-aware datetime")
         if not self.driver:
             logger.warning("Neo4j driver not available")
             return []
@@ -1183,6 +1219,21 @@ class GraphIndex:
                         ORDER BY weight DESC
                         LIMIT $limit
                     """
+                extra_params: Dict[str, Any] = {}
+                if as_of is not None:
+                    temporal_clause = (
+                        "AND (r.valid_from IS NULL OR r.valid_from <= $as_of)\n"
+                        "                          AND (r.valid_to IS NULL OR r.valid_to > $as_of)\n"
+                        "                        "
+                    )
+                    extra_params["as_of"] = as_of
+                elif self.temporal:
+                    temporal_clause = "AND r.valid_to IS NULL\n                        "
+                else:
+                    temporal_clause = ""
+                if temporal_clause:
+                    marker = "WITH DISTINCT" if direction == "both" else "RETURN s.display_name"
+                    query = query.replace(marker, temporal_clause + marker, 1)
                 result = session.run(
                     query,
                     subject=normalized.lower(),
@@ -1190,6 +1241,7 @@ class GraphIndex:
                     user_id=uid,
                     relation_type=relation_type,
                     limit=max(1, int(limit)),
+                    **extra_params,
                 )
                 relations = []
                 for row in result:
@@ -1520,6 +1572,13 @@ class GraphIndex:
     """
     _COMMUNITY_MEMBER_LIMIT = 25
     _COMMUNITY_SUMMARY_LIMIT = 20000
+    # With temporal=True only open RELATES_AS edges (valid_to not set) count for communities.
+    _COMMUNITY_RELATES_EDGES_OPEN = _COMMUNITY_RELATES_EDGES.replace(
+        "        RETURN a.name AS a", "          AND r.valid_to IS NULL\n        RETURN a.name AS a"
+    )
+    _COMMUNITY_RELATIONS_OPEN = _COMMUNITY_RELATIONS.replace(
+        "        RETURN s.display_name AS subject", "          AND r.valid_to IS NULL\n        RETURN s.display_name AS subject"
+    )
 
     @staticmethod
     def _check_community_args(resolution, min_size, max_edges) -> None:
@@ -1530,7 +1589,7 @@ class GraphIndex:
     def _fetch_community_edges(self, session, ns, uid, include_relations, max_edges):
         queries = [self._COMMUNITY_CO_OCCURS_EDGES]
         if include_relations:
-            queries.append(self._COMMUNITY_RELATES_EDGES)
+            queries.append(self._COMMUNITY_RELATES_EDGES_OPEN if self.temporal else self._COMMUNITY_RELATES_EDGES)
         edges: List[Tuple[str, str, float]] = []
         for query in queries:
             result = session.run(query, namespace=ns, user_id=uid, limit=max_edges + 1)
@@ -1736,7 +1795,7 @@ class GraphIndex:
                     "weight": float(row["weight"]),
                 }
                 for row in session.run(
-                    self._COMMUNITY_RELATIONS,
+                    self._COMMUNITY_RELATIONS_OPEN if self.temporal else self._COMMUNITY_RELATIONS,
                     namespace=ns,
                     user_id=uid,
                     members=community["members"],
