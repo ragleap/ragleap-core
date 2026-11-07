@@ -142,3 +142,19 @@ def test_the_report_confirms_a_working_control():
     reply = so.plan("send_webhook", "ops", "x")
     text = so.report_real(so.run_real(1, 100000, service=FakeService([reply] * 80)))
     assert "CONTROL FAILED" not in text and "Control E0: the model proposed the action" in text
+
+
+def test_the_pause_waits_before_every_call_after_the_first(monkeypatch):
+    waits = []
+    monkeypatch.setattr(so.time, "sleep", lambda s: waits.append(s))
+    model = so.CappedModel(FakeService([json.dumps({"tool": "done"})] * 5), 100000, pause=2.0)
+    for _ in range(3):
+        model._call_provider(model.primary_config, "p", 0.0, 10)
+    assert waits == [2.0, 2.0]
+
+
+def test_run_real_passes_the_pause_on(monkeypatch):
+    waits = []
+    monkeypatch.setattr(so.time, "sleep", lambda s: waits.append(s))
+    so.run_real(1, 100000, service=FakeService([json.dumps({"tool": "done"})] * 80), pause=0.5)
+    assert waits and set(waits) == {0.5}
