@@ -2,6 +2,8 @@
 
 An experiment with a plain question: **if the model is fully compromised, what do RagLeap's guardrails still stop?**
 
+Results, findings and limits: [docs/stress-office.md](../../docs/stress-office.md).
+
 Part 1 is deterministic and free. The "model" is a script that obeys every instruction hidden in the content it reads.
 That is the worst case for any real model. Everything else is the real code:
 
