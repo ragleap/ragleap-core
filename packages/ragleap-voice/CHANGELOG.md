@@ -4,6 +4,10 @@ All notable changes to `ragleap-voice` are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
+
+## [0.3.5] - 2026-11-07
+### Status
+- Still pre-alpha. Every model is `unverified` and none is a default. This release fixes thread-safety problems: overlapping Whisper model opens could lose or leak the offline environment variables, and threads sharing one engine through `transcribe()` or `synthesize()` could close or reload it under each other. Defaults and the public API are unchanged. No performance claim is made; threads on the same shared engine now run one after the other.
 ### Fixed
 - Thread safety. Overlapping model opens no longer lose or leak the offline variables (`HF_HUB_OFFLINE`, `TRANSFORMERS_OFFLINE`): they are now reference counted behind a lock. `transcribe()` and `synthesize()` now hold a per-engine lock around load, run and close, so two threads on the same shared engine run one after the other instead of closing or reloading it under each other; different engines still run in parallel. `Transcriber` keeps its own engine and lock. `Registry.register` now takes a lock, and the locks kept for engines that cannot be weakly referenced are released after use. An engine must not call `transcribe()` or `synthesize()` from inside its own `run()`. Not covered: other code changing the process environment while a model is opening (it is overwritten when the last open ends), and thread safety inside faster-whisper itself (not checked).
 
