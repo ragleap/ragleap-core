@@ -1,6 +1,8 @@
 package com.ragleap.graph;
 
 import java.lang.System.Logger.Level;
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -153,6 +155,30 @@ public final class GraphIndex implements GraphSearch, AutoCloseable {
             ORDER BY depth ASC
             LIMIT $limit
             """;
+    /**
+     * Temporal variant of RECOMPUTE_RELATES_AS (GraphIndex with temporal=true): an edge whose total support drops to 0 is
+     * closed (valid_to set) instead of deleted, and a closed edge that gets support again is reopened (valid_from restarts).
+     */
+    static final String RECOMPUTE_RELATES_AS_TEMPORAL = """
+            MATCH (rw:RelationWeight {namespace: $namespace, subject: $subject, relation_type: $relation_type, object: $object, user_id: $user_id})
+            WITH sum(rw.weight) AS total
+            MATCH (es:Entity {name: $subject, namespace: $namespace, user_id: $user_id})
+            MATCH (eo:Entity {name: $object, namespace: $namespace, user_id: $user_id})
+            FOREACH (_ IN CASE WHEN total > 0 THEN [1] ELSE [] END |
+                MERGE (es)-[r:RELATES_AS {composite_key: $relates_as_composite_key}]->(eo)
+                ON CREATE SET r.relation_type = $relation_type, r.namespace = $namespace, r.user_id = $user_id,
+                    r.valid_from = datetime()
+                SET r.valid_from = CASE WHEN r.valid_to IS NOT NULL THEN datetime() ELSE r.valid_from END
+                SET r.valid_to = null, r.weight = total
+            )
+            FOREACH (_ IN CASE WHEN total = 0 THEN [1] ELSE [] END |
+                MERGE (es)-[r2:RELATES_AS {composite_key: $relates_as_composite_key}]->(eo)
+                ON CREATE SET r2.relation_type = $relation_type, r2.namespace = $namespace, r2.user_id = $user_id,
+                    r2.valid_from = datetime(), r2.weight = 0.0
+                SET r2.valid_to = coalesce(r2.valid_to, datetime())
+            )
+            """;
+
     private static final String FIND_RELATIONS_OUT = """
             MATCH (s:Entity {name: $subject, namespace: $namespace})
                   -[r:RELATES_AS]->(o:Entity {namespace: $namespace})
@@ -228,6 +254,7 @@ public final class GraphIndex implements GraphSearch, AutoCloseable {
     private final Sleeper sleeper;
     private final ExtractionConfig extractionConfig;
     private final UpsertPlanner.Extraction extraction;
+    private final boolean temporal;
 
     public GraphIndex(GraphConfig config) {
         this(config, ExtractionConfig.regex(), AuditSink.NOOP);
@@ -246,12 +273,27 @@ public final class GraphIndex implements GraphSearch, AutoCloseable {
         this(open(config), audit, GraphIndex::sleepSeconds, extraction);
     }
 
+    /**
+     * With temporal=true a relation edge is closed (valid_to set) instead of deleted when no document supports it any
+     * more, and reopened when support returns; reads of relations then see only open edges. Times are indexing times.
+     * Keep the same setting for writes and reads.
+     */
+    public GraphIndex(GraphConfig config, ExtractionConfig extraction, AuditSink audit, boolean temporal) {
+        this(open(config), audit, GraphIndex::sleepSeconds, extraction, temporal);
+    }
+
     GraphIndex(CypherRunner candidate, AuditSink audit, Sleeper sleeper) {
         this(candidate, audit, sleeper, ExtractionConfig.regex());
     }
 
     /** For tests and custom runners; a null or unreachable runner makes the index unavailable. */
     GraphIndex(CypherRunner candidate, AuditSink audit, Sleeper sleeper, ExtractionConfig extraction) {
+        this(candidate, audit, sleeper, extraction, false);
+    }
+
+    GraphIndex(CypherRunner candidate, AuditSink audit, Sleeper sleeper, ExtractionConfig extraction,
+               boolean temporal) {
+        this.temporal = temporal;
         this.audit = audit == null ? AuditSink.NOOP : audit;
         this.sleeper = sleeper;
         this.extractionConfig = extraction == null ? ExtractionConfig.regex() : extraction;
@@ -463,7 +505,7 @@ public final class GraphIndex implements GraphSearch, AutoCloseable {
             Set<UpsertPlanner.RelKey> allRelations = new LinkedHashSet<>(oldRelations);
             allRelations.addAll(currentRelations);
             for (UpsertPlanner.RelKey r : allRelations) {
-                exec(RECOMPUTE_RELATES_AS, "namespace", ns, "subject", r.subject(),
+                exec(temporal ? RECOMPUTE_RELATES_AS_TEMPORAL : RECOMPUTE_RELATES_AS, "namespace", ns, "subject", r.subject(),
                         "relation_type", r.relationType(), "object", r.object(), "user_id", uid,
                         "relates_as_composite_key",
                         CompositeKey.of(ns, uid, r.subject(), r.relationType(), r.object()));
@@ -570,9 +612,18 @@ public final class GraphIndex implements GraphSearch, AutoCloseable {
         return findRelations(entityName, null, null, null, 25, "outgoing");
     }
 
-    /** Typed relations involving an entity; direction is "outgoing", "incoming" or "both". */
     public List<RelationHit> findRelations(String entityName, String relationType, String namespace, String userId,
                                            int limit, String direction) {
+        return findRelations(entityName, relationType, namespace, userId, limit, direction, null);
+    }
+
+    /**
+     * Typed relations involving an entity; direction is "outgoing", "incoming" or "both". With asOf, only relations valid at
+     * that moment (valid_from <= asOf < valid_to; edges without those properties count as always valid); on a temporal
+     * index closed edges are otherwise left out.
+     */
+    public List<RelationHit> findRelations(String entityName, String relationType, String namespace, String userId,
+                                           int limit, String direction, OffsetDateTime asOf) {
         if (!"outgoing".equals(direction) && !"incoming".equals(direction) && !"both".equals(direction)) {
             throw new IllegalArgumentException("direction must be \"outgoing\", \"incoming\", or \"both\", got "
                     + (direction == null ? "None" : "'" + direction + "'"));
@@ -592,10 +643,25 @@ public final class GraphIndex implements GraphSearch, AutoCloseable {
             case "incoming" -> FIND_RELATIONS_IN;
             default -> FIND_RELATIONS_BOTH;
         };
+        query = temporalRelations(query, "both".equals(direction), asOf);
+        List<Object> kv = new ArrayList<>();
+        kv.add("subject");
+        kv.add(PyText.lower(normalized));
+        kv.add("namespace");
+        kv.add(ns);
+        kv.add("user_id");
+        kv.add(uid);
+        kv.add("relation_type");
+        kv.add(relationType);
+        kv.add("limit");
+        kv.add(Math.max(1, limit));
+        if (asOf != null) {
+            kv.add("as_of");
+            kv.add(DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(asOf));
+        }
         try {
             List<RelationHit> relations = new ArrayList<>();
-            for (Map<String, Object> row : exec(query, "subject", PyText.lower(normalized), "namespace", ns,
-                    "user_id", uid, "relation_type", relationType, "limit", Math.max(1, limit))) {
+            for (Map<String, Object> row : exec(query, kv.toArray())) {
                 relations.add(new RelationHit(str(row.get("subject")), str(row.get("relation_type")),
                         str(row.get("object")), asDouble(row.get("weight"))));
             }
@@ -688,6 +754,29 @@ public final class GraphIndex implements GraphSearch, AutoCloseable {
             LOG.log(Level.ERROR, "Entity-by-type search error: " + e.getMessage(), e);
             return List.of();
         }
+    }
+
+    /**
+     * Adds the validity filter before RETURN (before WITH DISTINCT for "both"): open edges when temporal, the interval
+     * valid_from <= asOf < valid_to when asOf is given. asOf goes in as an ISO string and is read with datetime($as_of),
+     * because the HTTP Query API takes no typed parameters (Python passes a datetime object).
+     */
+    private String temporalRelations(String query, boolean both, OffsetDateTime asOf) {
+        String clause;
+        if (asOf != null) {
+            clause = "AND (r.valid_from IS NULL OR r.valid_from <= datetime($as_of))\n"
+                    + "AND (r.valid_to IS NULL OR r.valid_to > datetime($as_of))\n";
+        } else if (temporal) {
+            clause = "AND r.valid_to IS NULL\n";
+        } else {
+            return query;
+        }
+        String marker = both ? "WITH DISTINCT" : "RETURN s.display_name";
+        int at = query.indexOf(marker);
+        if (at < 0) {
+            throw new IllegalStateException("relation query has no " + marker);
+        }
+        return query.substring(0, at) + clause + query.substring(at);
     }
 
     private static String str(Object o) {
@@ -799,7 +888,7 @@ public final class GraphIndex implements GraphSearch, AutoCloseable {
     /** Groups the entities of a namespace into communities without writing; IllegalArgumentException for bad arguments. */
     public List<Communities.Community> detectCommunities(String namespace, String userId, double resolution, int minSize,
                                                          boolean includeRelations, int maxEdges) {
-        return new CommunityStore(runner, audit).detect(namespace, userId, resolution, minSize, includeRelations, maxEdges);
+        return new CommunityStore(runner, audit, temporal).detect(namespace, userId, resolution, minSize, includeRelations, maxEdges);
     }
 
     public CommunityStore.Refresh refreshCommunities() {
@@ -811,7 +900,7 @@ public final class GraphIndex implements GraphSearch, AutoCloseable {
                                                      boolean includeRelations, int maxEdges,
                                                      java.util.function.Function<Map<String, Object>, String> summarizer,
                                                      boolean force, int maxSummaryItems) {
-        return new CommunityStore(runner, audit).refresh(namespace, userId, resolution, minSize, includeRelations,
+        return new CommunityStore(runner, audit, temporal).refresh(namespace, userId, resolution, minSize, includeRelations,
                 maxEdges, summarizer, force, maxSummaryItems);
     }
 
@@ -829,7 +918,7 @@ public final class GraphIndex implements GraphSearch, AutoCloseable {
     /** Stored communities, optionally only those containing the given entities. */
     public List<CommunityStore.Hit> findCommunities(List<String> entityNames, String namespace, String userId, int limit,
                                                     boolean includeMembers) {
-        return new CommunityStore(runner, audit).find(entityNames, namespace, userId, limit, includeMembers);
+        return new CommunityStore(runner, audit, temporal).find(entityNames, namespace, userId, limit, includeMembers);
     }
 
     /** The connected runner, or null when the server could not be reached (used by MigrationRunner and tests). */

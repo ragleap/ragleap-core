@@ -105,6 +105,10 @@ public final class CommunityStore {
             LIMIT $limit
             """;
 
+    static final String RELATES_EDGES_OPEN = RELATES_EDGES.replace("RETURN a.name AS a", "AND r.valid_to IS NULL\nRETURN a.name AS a");
+    static final String RELATIONS_OPEN = RELATIONS.replace("RETURN s.display_name AS subject",
+            "AND r.valid_to IS NULL\nRETURN s.display_name AS subject");
+
     /** Every statement by its Python name (the parity test compares them with the recorded Python texts). */
     static final Map<String, String> STATEMENTS = Map.ofEntries(
             Map.entry("constraint", CONSTRAINT), Map.entry("co_occurs_edges", CO_OCCURS_EDGES),
@@ -144,10 +148,17 @@ public final class CommunityStore {
 
     private final CypherRunner runner;
     private final AuditSink audit;
+    private final boolean temporal;
 
     CommunityStore(CypherRunner runner, AuditSink audit) {
+        this(runner, audit, false);
+    }
+
+    /** With temporal=true only open RELATES_AS edges (valid_to not set) count for communities. */
+    CommunityStore(CypherRunner runner, AuditSink audit, boolean temporal) {
         this.runner = runner;
         this.audit = audit == null ? AuditSink.NOOP : audit;
+        this.temporal = temporal;
     }
 
     /** Groups the entities of a namespace into communities without writing anything. */
@@ -339,7 +350,7 @@ public final class CommunityStore {
                 names.put(str(row.get("name")), str(row.get("display_name")));
             }
             List<Object> relations = new ArrayList<>();
-            for (Map<String, Object> row : run(RELATIONS, "namespace", ns, "user_id", uid, "members",
+            for (Map<String, Object> row : run(temporal ? RELATIONS_OPEN : RELATIONS, "namespace", ns, "user_id", uid, "members",
                     community.members(), "limit", limit)) {
                 Map<String, Object> rel = new LinkedHashMap<>();
                 rel.put("subject", row.get("subject"));
@@ -402,7 +413,7 @@ public final class CommunityStore {
     }
 
     private List<Communities.Edge> fetchEdges(String ns, String uid, boolean includeRelations, int maxEdges) {
-        List<String> queries = includeRelations ? List.of(CO_OCCURS_EDGES, RELATES_EDGES) : List.of(CO_OCCURS_EDGES);
+        List<String> queries = includeRelations ? List.of(CO_OCCURS_EDGES, temporal ? RELATES_EDGES_OPEN : RELATES_EDGES) : List.of(CO_OCCURS_EDGES);
         Number limit = maxEdges < Integer.MAX_VALUE ? (Number) Integer.valueOf(maxEdges + 1) : Long.valueOf(maxEdges + 1L);
         List<Communities.Edge> edges = new ArrayList<>();
         for (String query : queries) {
