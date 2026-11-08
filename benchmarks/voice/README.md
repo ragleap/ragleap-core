@@ -444,6 +444,25 @@ GPU check (`colab_gpu_check.py`, same setup: Tesla T4, Google Colab, 2026-11-07,
 
 `auto` behaved like `cuda` here (same memory growth, same peak of 3479 MiB, high utilisation), so the timing table above was measured on the GPU, and `cpu` showed no GPU use. GPU memory returned to 109 MiB after the `Transcriber` closed. Limits: one run, 17 samples for each GPU run, memory and utilisation are `nvidia-smi` samples and not a profiler, and `auto` picking the GPU is observed on this setup only.
 
-## Phone-line codec benchmark script (added, not yet run)
+## Phone-line codec benchmark (one run)
 
-`colab_phone_line_benchmark.py` compares Whisper large-v3 word error on clean FLEURS clips (English, Spanish, Russian, the first 30 each) with the same clips after three 8 kHz telephone-style paths: ffmpeg mu-law (as in the noise pilot), and ragleap's own `down2`, mu-law or A-law encode and decode, `up2`. It first checks that each codec round-trips, then reports word error with 95% bootstrap intervals, the change against clean, and the change of ragleap mu-law against ffmpeg mu-law. No results from this script are published yet. When they are, they will cover a resample and a codec only: no added noise, no packet loss or carrier processing, one run, wide intervals, no level normalisation (so absolute numbers are not comparable with the noise pilot), and no comparison with other systems.
+Question: does ragleap's own 8 kHz path (`down2`, mu-law or A-law encode and decode, `up2`) change Whisper large-v3 word error on clean speech, and does it differ from ffmpeg's mu-law? Script: `colab_phone_line_benchmark.py`. Setup: Tesla T4, Google Colab, 2026-11-07, Python 3.13.16, ragleap-voice 0.3.5, Whisper large-v3 (`Systran/faster-whisper-large-v3`), `device="auto"`. Data: the first 30 `google/fleurs` test clips (CC-BY-4.0) for English (en_us), Spanish (es_419) and Russian (ru_ru). Conditions: clean; ffmpeg 8 kHz mu-law and back (as in the noise pilot); ragleap mu-law; ragleap A-law. No added noise and no level normalisation. Intervals are 95% bootstrap intervals over clips (2000 resamples, one seed), and the changes are paired on the same clips. Before any transcription the script checked that both codecs round-trip (SNR 31.8 dB for mu-law and 28.1 dB for A-law on the 8 kHz signal).
+
+| Language | Condition | WER % (95% interval) | Change vs clean (points) | Change vs ffmpeg mu-law (points) |
+|---|---|---|---|---|
+| English | clean | 5.5 (3.9 to 7.6) | | -0.9 [-2.3, +0.4] |
+| English | ffmpeg mu-law | 6.4 (4.5 to 8.8) | +0.9 [-0.4, +2.3] | |
+| English | ragleap mu-law | 6.3 (4.3 to 8.8) | +0.7 [-0.6, +2.4] | -0.1 [-1.0, +0.6] |
+| English | ragleap A-law | 6.9 (4.9 to 9.3) | +1.3 [-0.3, +3.5] | +0.4 [-0.6, +1.5] |
+| Spanish | clean | 2.5 (0.9 to 5.1) | | -0.5 [-1.3, 0.0] |
+| Spanish | ffmpeg mu-law | 3.1 (1.3 to 5.7) | +0.5 [0.0, +1.3] | |
+| Spanish | ragleap mu-law | 2.8 (1.1 to 5.4) | +0.3 [0.0, +0.7] | -0.3 [-0.9, 0.0] |
+| Spanish | ragleap A-law | 3.1 (1.0 to 6.5) | +0.5 [0.0, +1.4] | 0.0 [-1.1, +1.1] |
+| Russian | clean | 5.7 (3.5 to 8.6) | | -7.3 [-20.6, +0.4] |
+| Russian | ffmpeg mu-law | 13.0 (4.4 to 25.9) | +7.3 [-0.4, +20.6] | |
+| Russian | ragleap mu-law | 13.5 (4.5 to 26.5) | +7.8 [-0.2, +21.2] | +0.5 [0.0, +1.6] |
+| Russian | ragleap A-law | 13.1 (4.6 to 25.9) | +7.5 [-0.5, +20.9] | +0.2 [-0.5, +1.0] |
+
+What it shows: in all three languages the ragleap mu-law and A-law paths differ from ffmpeg mu-law by -0.3 to +0.5 points, and every interval includes zero or touches it at the edge, so no difference between the ragleap path and ffmpeg's was found at this sample size. Against clean, the telephone-style paths raised word error by 0.3 to 1.3 points in English and Spanish and by 7.3 to 7.8 points in Russian; the English and Russian intervals include zero and the Spanish ones start at zero, so no effect is established with 30 clips. The Russian intervals are very wide; per-clip errors were saved by the script and have not been analysed here.
+
+Limits: a resample plus a codec is not a real phone network (no packet loss, jitter, carrier processing or handset noise); read speech only; 30 clips per language, one run, one seed, wide intervals; word error only; the absolute numbers are not comparable with the noise pilot above, which used a level fix; the speakers and sentences of consecutive clips may repeat. No comparison with any other system is made.
