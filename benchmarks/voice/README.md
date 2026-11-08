@@ -467,6 +467,24 @@ What it shows: in all three languages the ragleap mu-law and A-law paths differ 
 
 Limits: a resample plus a codec is not a real phone network (no packet loss, jitter, carrier processing or handset noise); read speech only; 30 clips per language, one run, one seed, wide intervals; word error only; the absolute numbers are not comparable with the noise pilot above, which used a level fix; the speakers and sentences of consecutive clips may repeat. No comparison with any other system is made.
 
-## Gate and Silero false accepts on real recorded noise (script added, not yet run)
+## Gate and Silero false accepts on real recorded noise (one run)
 
-`colab_gate_real_noise_benchmark.py` counts false accepts of StreamGate (default floor and -60 dBFS) and Silero VAD on the 843 files of the `free-sound` folder of MUSAN (Snyder, Chen and Povey, 2015; listed as CC BY 4.0 on openslr.org/17; the folder's LICENSE file states that all selected recordings are marked Public Domain on Free Sound). The `sound-bible` folder (listed as Attribution 3.0) is not used. Conditions: as recorded, scaled to -23 dBFS, and the scaled version through ragleap's own 16 to 8 to 16 kHz path for every fourth file. It lists the files Silero accepts so a person can listen to them. No results are published yet. When they are, they will be sound-library recordings, not noise recorded in a room or on a phone line, with no speech mixed in (so nothing about detecting speech), one run, and thresholds that have not been tuned.
+Question: how often do StreamGate and Silero VAD report speech on real recorded noise that contains no speech mixed in? Script: `colab_gate_real_noise_benchmark.py`. Setup: Google Colab (CPU), 2026-11-08, Python 3.13.16, ragleap-voice 0.3.5, Silero `silero_vad_16k_op15.onnx` at `snakers4/silero-vad` commit `066409f3d9db45a30d21dfcbf9147826ffdd7052` (SHA-256 checked by the script), StreamGate at its default floor and at -60 dBFS. Data: the `free-sound` folder of MUSAN (Snyder, Chen and Povey, 2015; listed as CC BY 4.0 on openslr.org/17; the folder's LICENSE file states that all selected recordings are marked Public Domain on Free Sound). The `sound-bible` folder (listed as Attribution 3.0) was not used. 843 files, all 16 kHz mono; 47 files shorter than 1 s were skipped, leaving 796; each file was cut to its first 10 s. A trigger is a `speech_start` event (StreamGate) or three consecutive Silero windows with probability at least 0.5, and on noise-only input a trigger is a false accept. Intervals are 95% Wilson intervals.
+
+| Condition | Detector | Files | False accepts | Rate (95% interval) |
+|---|---|---|---|---|
+| as recorded | StreamGate default | 796 | 788 | 99.0% (98.0 to 99.5) |
+| as recorded | StreamGate floor -60 | 796 | 792 | 99.5% (98.7 to 99.8) |
+| as recorded | Silero | 796 | 43 | 5.4% (4.0 to 7.2) |
+| scaled to -23 dBFS | StreamGate default | 796 | 792 | 99.5% (98.7 to 99.8) |
+| scaled to -23 dBFS | StreamGate floor -60 | 796 | 793 | 99.6% (98.9 to 99.9) |
+| scaled to -23 dBFS | Silero | 796 | 35 | 4.4% (3.2 to 6.1) |
+| phone path, -23 dBFS | StreamGate default | 195 | 194 | 99.5% (97.2 to 99.9) |
+| phone path, -23 dBFS | StreamGate floor -60 | 195 | 194 | 99.5% (97.2 to 99.9) |
+| phone path, -23 dBFS | Silero | 195 | 10 | 5.1% (2.8 to 9.2) |
+
+The phone path is ragleap's own 16 to 8 kHz resample, mu-law encode and decode, and 8 to 16 kHz resample, applied to every fourth file.
+
+What it shows: StreamGate reported speech on almost every recording at both floors and at both levels, so on these files it does not separate noise from speech, which agrees with the synthetic-noise result above. Silero reported speech on 4.4% to 5.4% of the files, more than the 0 of 30 it gave on synthetic noise, and its rate through the phone path (5.1%) is close to its rate before it (4.4%) on a smaller subset. The 35 files Silero accepted at -23 dBFS (for example `noise-free-sound-0001`, `0026`, `0062`) have not been listened to, so it is not known whether they contain voice-like sound; the script lists all of them.
+
+Limits: sound-library recordings, not noise recorded in a room or on a phone line; no speech mixed in, so nothing is said about detecting speech; one run, the first 10 s of each file; the thresholds (StreamGate floors, Silero 0.5 and three windows) are untuned; the accepted files were not reviewed by a person; the phone path is a resample plus a codec, not a real network. MUSAN should be acknowledged in anything that publishes these results.
