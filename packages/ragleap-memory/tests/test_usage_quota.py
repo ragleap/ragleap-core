@@ -211,7 +211,7 @@ def test_a_010_database_migrates_and_its_totals_feed_the_quota(tmp_path):
         s.add(A, "a third entry")
     s.add(B, "globex has room")
     assert totals_match(s)
-    assert s._db.execute("PRAGMA user_version").fetchone()[0] == 2
+    assert s._db.execute("PRAGMA user_version").fetchone()[0] == 3
     s.close()
     s = SQLiteStore(p)                           # a second open migrates nothing again
     assert s.count(A) == 2 and totals_match(s)
