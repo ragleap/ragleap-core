@@ -4,8 +4,17 @@ All notable changes to `ragleap-voice` are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
+
+## [0.3.6] - 2026-11-08
+### Status
+- Still pre-alpha. Every model is `unverified` and none is a default. This release adds an optional voice-activity detector, `SileroGate`, behind a new extra (`vad`). It is not exported, not used by default and not wired into `transcribe(gate=...)` or `transcribe_stream`; the model file is not bundled or downloaded (the caller supplies it and a file without the pinned SHA-256 is refused). Defaults and the public API are unchanged. Benchmark results added in this release are one-run measurements with their limits stated, not claims about quality.
 ### Added
 - `ragleap_voice.vad_silero.SileroGate`: an optional model-based voice-activity detector with the same `feed()` and `finish()` interface and events as `StreamGate`. Not exported and not used by default; `transcribe(gate=...)` and `transcribe_stream` are unchanged. It needs the new extra `vad` (`onnxruntime`, `numpy`; the core stays standard library only). The model file is not bundled and nothing is downloaded: the caller supplies the path of `silero_vad_16k_op15.onnx`, and any file without the pinned SHA-256 is refused. Defaults (probability 0.5, three consecutive windows) are the values used in the benchmarks, which measured false accepts on noise only; the hangover and hard-cap defaults are not measured. The model has no entry in `models.toml`, and its weights licence and training data are not verified. Tests use a fake backend and do not run the real model; one manual Colab smoke test with the real model passed (see `docs/design/vad-gate.md`, section 9).
+
+### Documentation and benchmarks
+- Results under `benchmarks/voice/`, each one run on Google Colab with its limits stated in the README: per-call timing of `transcribe()` and `Transcriber` on a T4 (and a check that the GPU was used); Whisper large-v3 word error on clean speech against ffmpeg mu-law and ragleap's own 8 kHz mu-law and A-law path (English, Spanish, Russian, 30 clips each; no difference between ragleap's path and ffmpeg's was found at that sample size); false accepts of `StreamGate` and Silero VAD on real recorded noise (MUSAN, `free-sound` folder; `StreamGate` about 99%, Silero 4.4% to 5.4%; no speech mixed in, so nothing about speech detection).
+- `docs/verification-criteria.md`: what has to be true before a model is marked `verified`, separating what code enforces from steps the project intends to require. No model changes status.
+- `docs/design/vad-gate.md` section 9 records `SileroGate`, including one manual smoke test with the real model and the observation that the default hangover splits speech at short pauses.
 
 ## [0.3.5] - 2026-11-07
 ### Status
