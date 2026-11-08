@@ -4,7 +4,7 @@ All notable changes are listed here. Format: Keep a Changelog.
 
 ## [Unreleased]
 
-## [0.0.5] - 2026-11-07
+## [0.0.5] - 2026-11-08
 
 ### Added
 - An explicit-state model of the approval flow (`benchmarks/approval_model.py`) and tests that replay every short event sequence (one proposal,
