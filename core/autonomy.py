@@ -111,9 +111,24 @@ def set_autonomy(mode: str, channels: Optional[List[str]] = None,
         conn.close()
 
 
+def sha256_text(text: str) -> str:
+    import hashlib
+    return hashlib.sha256((text or "").encode("utf-8", "replace")).hexdigest()
+
+
+def _audit_event(event: str, **fields) -> None:
+    """Emit one structured audit log line (core/audit.emit). Never raises."""
+    try:
+        from core import audit
+        audit.emit(event, **fields)
+    except Exception:
+        pass
+
+
 def log_autonomous_action(action_type: str, channel: str, target: str,
                            content: str, result: str, approved: bool = True,
-                           role: Optional[str] = None, decided_by: Optional[Dict] = None) -> None:
+                           role: Optional[str] = None, decided_by: Optional[Dict] = None,
+                           action_id: Optional[str] = None) -> None:
     """Log an autonomous action. Table keeps unbounded history; callers
     wanting production's "last 200" behavior should query with LIMIT.
     role is optional and nullable -- older callers/rows keep working.
@@ -122,6 +137,13 @@ def log_autonomous_action(action_type: str, channel: str, target: str,
     if action_type in ("list_files", "read_file"):
         # Keep only the fixed first line (size, truncation). The log never stores file contents.
         result = (result or "").split("\n", 1)[0]
+    _r = result or ""
+    _outcome = "rejected" if not approved else ("error" if _r.startswith("ERROR") else "executed")
+    _d = decided_by or {}
+    _audit_event("action_" + _outcome, content=content, action_id=action_id, action_type=action_type,
+                 channel=channel, target=target, role=role, outcome=_outcome,
+                 autonomous=bool(approved and not decided_by), approver=_d.get("name"),
+                 approver_role=_d.get("role"), approver_kind=_d.get("kind"), result_sha256=sha256_text(_r))
     conn = get_connection()
     try:
         cur = conn.cursor()
@@ -344,17 +366,21 @@ def execute_or_request(action_type: str, channel: str, target: str,
     channels = settings["channels"]
 
     if mode == "off":
+        _audit_event("action_skipped", content=content, reason="autonomy off", action_type=action_type, channel=channel, role=role)
         return {"status": "skipped", "result": "autonomy off"}
 
     if actions and action_type not in actions:
+        _audit_event("action_skipped", content=content, reason="action not allowed", action_type=action_type, channel=channel, role=role)
         return {"status": "skipped", "result": f"{action_type} not in allowed actions"}
 
     if channels and channel not in channels:
+        _audit_event("action_skipped", content=content, reason="channel not allowed", action_type=action_type, channel=channel, role=role)
         return {"status": "skipped", "result": f"{channel} not in allowed channels"}
 
     if mode == "full" and (force_semi or action_type == "request_access"):
         # caller (e.g. a run that has read untrusted web/MCP content) requires approval for this call
         logger.info(f"force_semi: {action_type} forced full->semi")
+        _audit_event("action_forced_approval", content=content, reason="untrusted input or request_access", action_type=action_type, channel=channel, role=role)
         mode = "semi"
 
     if mode == "full" and role:
@@ -399,6 +425,7 @@ def execute_or_request(action_type: str, channel: str, target: str,
         finally:
             conn.close()
 
+        _audit_event("action_proposed", content=content, action_id=action_id, action_type=action_type, channel=channel, target=target, role=role)
         sent = request_approval(action_type, channel, target, content, action_id, role=role)
         return {"status": "pending_approval", "action_id": action_id, "approval_sent": sent}
 
@@ -452,7 +479,7 @@ def process_approval_response(message: str, decided_by: Optional[Dict] = None) -
 
     if not approved:
         log_autonomous_action(action_type, channel, target, content, "REJECTED by owner", approved=False, role=role,
-                              decided_by=decided_by)
+                              decided_by=decided_by, action_id=action_id)
         employee_learning.learn_from_owner_approval(
             action_type, content, "REJECTED by owner", approved=False
         )
@@ -461,7 +488,7 @@ def process_approval_response(message: str, decided_by: Optional[Dict] = None) -
 
     result = _send_via_channel(channel, target, content)
     log_autonomous_action(action_type, channel, target, content, result, approved=True, role=role,
-                          decided_by=decided_by)
+                          decided_by=decided_by, action_id=action_id)
     employee_learning.learn_from_owner_approval(
         action_type, content, result, approved=True
     )
