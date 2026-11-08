@@ -2,7 +2,7 @@
 
 Open-source (MIT), local-first speech tooling, with Indian languages as a priority.
 
-**Status: pre-alpha. Versions 0.1.0 to 0.3.5 add `transcribe()` and `synthesize()` with a Whisper large-v3 engine and an Indic Parler-TTS engine (see "What 0.1.0 adds" below). Every model is unverified and none is a default. Each engine has been run on only a few clips on one maintainer's machine. This is a first release for testing, not a finished product.**
+**Status: pre-alpha. Versions 0.1.0 to 0.3.6 add `transcribe()` and `synthesize()` with a Whisper large-v3 engine and an Indic Parler-TTS engine (see "What 0.1.0 adds" below). Every model is unverified and none is a default. Each engine has been run on only a few clips on one maintainer's machine. This is a first release for testing, not a finished product.**
 
 ## What works today
 
@@ -23,7 +23,9 @@ A command line and a small standard-library-only Python core (no runtime depende
 
 Nothing in the package uses the network unless you run `models pull` or `models lock`.
 
-## What 0.1.0 to 0.3.5 add
+## What 0.1.0 to 0.3.6 add
+
+**0.3.6** adds an optional voice-activity detector, `SileroGate` (extra `vad`; not exported, off by default; the caller supplies the pinned model file), and publishes one-run benchmark results with their limits. Defaults are unchanged.
 
 **0.3.5** fixes thread safety: the offline variables used while opening the Whisper model are reference counted, `transcribe()` and `synthesize()` hold a per-engine lock around load, run and close, and `Registry.register` takes a lock. Defaults are unchanged.
 
