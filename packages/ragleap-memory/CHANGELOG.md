@@ -3,6 +3,48 @@
 All notable changes to `ragleap-memory` are documented here. Format
 loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.3.0] - 2026-11-08
+
+Design: #1263. Vector and hybrid search over vectors that the caller's own embedder function produces. The library has no provider code, no keys and no network access.
+
+### Behaviour changes (read first)
+
+- A 0.1.0 or 0.2.0 database file is **migrated in place to schema 3 on first open** (one transaction). A migrated file cannot be opened by 0.2.0 or older, which refuse newer schemas. Back up the file first if you may need to go back.
+- `search` has two new keyword arguments, `mode` and `query_vector`. The default, `mode="keyword"`, behaves exactly as in 0.2.0.
+- `usage()` dictionaries have two new keys, `embedded_tokens` and `embed_calls`.
+- Entries removed by `forget`, `erase` or `sweep_expired` now lose their vector too (a database trigger).
+- Code that does not pass an embedder sees nothing else change.
+
+### Added
+
+- Options on `SQLiteStore` and `ShardedStore`: `embedder`, `embedding_model`, `embedding_dim`, `embed_quota_tokens`, `embed_batch_size` (default 64) and `max_vector_candidates` (default 5,000). Model and size go together; an embedder needs both.
+- `embed_pending(scope, limit=100, dry_run=False, replace_stale=False)` returns `EmbedResult(embedded, tokens, calls, remaining, dry_run)`. It embeds entries the scope can see that have no vector for the store's model (most recent first; superseded and expired entries are skipped). `dry_run=True` changes nothing and calls nothing. `replace_stale=True` also re-embeds vectors made by another model or size. It is also available on `ShardedStore`.
+- `search(..., mode="vector" | "hybrid", query_vector=None)`. Vector mode ranks by cosine similarity and scans at most `max_vector_candidates` entries (newest first, after every filter). Hybrid fuses the keyword and vector ranks by reciprocal rank fusion (k=60); an entry without a vector can still be found by keyword. `kinds`, `min_trust`, superseded and expired entries, `k` and `max_tokens` work in every mode. A query embedding is one embedder call; `query_vector` avoids it.
+- A per-tenant daily cap, `embed_quota_tokens` (off by default). Embedder tokens and calls are counted **before** each call (a call that then fails stays counted) and shown in `usage()`. If a batch would pass the cap, only the entries that fit are embedded and `remaining` says how many are left; if not even one fits, `QuotaExceededError` is raised before the embedder is called. Exactly at the cap is allowed.
+- `EmbedderError`: the embedder raised, or returned the wrong number of vectors, wrong sizes, non-finite numbers or an all-zero vector. Its message never contains entry text or vectors, and nothing from that batch is stored.
+- Schema 3: an `embeddings` table (vectors stored normalized as little-endian float32), a delete trigger, and the two new usage counters.
+- Audit event `memory.embed` (count and tokens, never text).
+
+### Differences from the design in #1263
+
+- `EmbedResult` has the fields `embedded`, `tokens`, `calls`, `remaining` and `dry_run`; the design listed `skipped` instead of `remaining`.
+- When only part of a batch fits under the cap, `embed_pending` embeds what fits and reports `remaining`; it raises only if not even one entry fits. The design said it would raise.
+
+### Verified (real output)
+
+- 472 tests pass (306 from 0.2.0 and 166 new) on Python 3.12.3 and on Python 3.10.20 (author's sandbox; SQLite 3.45.1 and 3.53.1).
+- 177 of 177 mutations killed on both Python versions. A first full run found one survivor (the `kinds` filter of the keyword part of hybrid search was not tested on its own); it has its own test now.
+- A database written by the released ragleap-memory 0.2.0 from PyPI opens with this code, migrates to schema 3, keeps its usage counters, and can then be embedded and searched. Each tenant only got its own vectors.
+- `erase` removes the vector bytes from the file (byte-level test with a positive control); export files carry no vectors and an import refuses an entry that carries one.
+
+### Not verified
+
+- SQLite 3.37.2 (the VPS) is checked in the pull request, not here. Windows and macOS were not run.
+- Big-endian machines: vectors are stored little-endian with a byte swap that has never been run.
+- No real embedding provider was used; the tests use a deterministic fake embedder. Retrieval quality has not been measured and depends on the embedder.
+- The scan timings in the threat model (128 ms and 470 ms) were measured once in a sandbox.
+- Several processes writing one file and network file systems are still not verified.
+
 ## [0.2.0] - 2026-11-02
 
 Design: #900 (comment of 2026-10-25). Pushpa's requirements: low and predictable token use, no bill spike however large the memory, strongly indexed separate compartments.

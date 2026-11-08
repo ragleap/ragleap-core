@@ -38,6 +38,22 @@ class ImportResult:
     dropped_links: int
 
 
+class EmbedderError(MemoryStoreError):
+    """The embedder function failed or returned something unusable. The message never contains entry text
+    or vectors."""
+
+
+@dataclass(frozen=True)
+class EmbedResult:
+    """What embed_pending did (or, with dry_run=True, would do). `embedded` entries got a vector using `calls`
+    embedder calls and about `tokens` estimated tokens; `remaining` entries still have no vector for this model."""
+    embedded: int
+    tokens: int
+    calls: int
+    remaining: int
+    dry_run: bool = False
+
+
 class NotFoundError(MemoryStoreError):
     """No such entry, or it is not visible to the scope that asked. The two cases look the same."""
 

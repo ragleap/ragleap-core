@@ -1,4 +1,5 @@
-"""SQLiteStore: durable memory in one SQLite file (or in memory), with FTS5 keyword search.
+"""SQLiteStore: durable memory in one SQLite file (or in memory), with FTS5 keyword search and optional
+vector and hybrid search over vectors the caller's embedder produced.
 
 Every operation takes a Scope and is filtered by it inside the SQL, not by the caller. A scope sees
 the entries whose scope it covers: a tenant-wide scope sees everything in the tenant, a narrower scope
@@ -8,20 +9,30 @@ from __future__ import annotations
 
 import contextlib
 import json
+import math
 import os
 import re
 import sqlite3
+import sys
 import threading
 import uuid
+from array import array
 from datetime import datetime, timezone
+from operator import mul
 from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Sequence
 
 from ragleap_security import (AuditLog, LimitError, Scope, check_json_shape, check_size, require_scope)
 
-from .model import (ID_RE, KINDS, SOURCE_RE, TRUSTS, InvalidEntryError, MemoryEntry, MemoryStoreError,
-                    ImportResult, NotFoundError, QuotaExceededError, SearchHit, estimate_tokens, trust_rank)
+from .model import (ID_RE, KINDS, SOURCE_RE, TRUSTS, EmbedderError, EmbedResult, InvalidEntryError, MemoryEntry,
+                    MemoryStoreError, ImportResult, NotFoundError, QuotaExceededError, SearchHit, estimate_tokens,
+                    trust_rank)
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
+MODEL_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:@/-]{0,63}\Z")
+MAX_EMBEDDING_DIM = 4096
+SEARCH_MODES = ("keyword", "vector", "hybrid")
+RRF_K = 60
+MAX_QUERY_BYTES = 1000
 _SCOPE_FIELDS = ("tenant", "subject", "agent", "session")
 _TOKEN = re.compile(r"\w+")
 _PERIOD = re.compile(r"\d{4}-\d{2}-\d{2}\Z")
@@ -73,6 +84,49 @@ _V2_DDL = (
     "CREATE TRIGGER IF NOT EXISTS totals_ad AFTER DELETE ON memories BEGIN"
     " UPDATE tenant_totals SET entries = entries - 1, tokens = tokens - old.tokens WHERE tenant = old.tenant; END",
 )
+
+
+# Schema 3 (0.3.0): vectors made by the caller's embedder, kept next to the entries they describe.
+_V3_DDL = (
+    "CREATE TABLE IF NOT EXISTS embeddings(rowid INTEGER PRIMARY KEY, model TEXT NOT NULL,"
+    " dim INTEGER NOT NULL, vec BLOB NOT NULL)",
+    "CREATE TRIGGER IF NOT EXISTS embeddings_ad AFTER DELETE ON memories BEGIN"
+    " DELETE FROM embeddings WHERE rowid = old.rowid; END",
+)
+
+
+def _unit_vector(vec: Any, dim: int) -> "array[float]":
+    """Check a vector (finite numbers, exactly `dim` of them, not all zero) and return it scaled to length 1."""
+    try:
+        n = len(vec)
+    except TypeError:
+        raise InvalidEntryError("a vector must be a sequence of numbers") from None
+    if n != dim:
+        raise InvalidEntryError(f"a vector must have exactly {dim} numbers")
+    values = []
+    for x in vec:
+        if isinstance(x, bool) or not isinstance(x, (int, float)) or not math.isfinite(x):
+            raise InvalidEntryError("a vector must contain only finite numbers")
+        values.append(float(x))
+    norm = math.sqrt(sum(v * v for v in values))
+    if not math.isfinite(norm) or norm == 0.0:
+        raise InvalidEntryError("a vector must not be all zeros")
+    return array("f", (v / norm for v in values))
+
+
+def _to_blob(vec: "array[float]") -> bytes:
+    out = array("f", vec)
+    if sys.byteorder != "little":
+        out.byteswap()
+    return out.tobytes()
+
+
+def _from_blob(blob: bytes) -> "array[float]":
+    out = array("f")
+    out.frombytes(blob)
+    if sys.byteorder != "little":
+        out.byteswap()
+    return out
 
 
 def _iso(dt: datetime) -> str:
@@ -147,14 +201,39 @@ class SQLiteStore:
     def __init__(self, path: str = ":memory:", *, audit: Optional[AuditLog] = None,
                  clock: Optional[Callable[[], datetime]] = None, max_text_bytes: int = 8192,
                  max_results: int = 50, quota_entries: Optional[int] = None, quota_tokens: Optional[int] = None,
-                 token_estimator: Optional[Callable[[str], int]] = None):
-        for name, q in (("quota_entries", quota_entries), ("quota_tokens", quota_tokens)):
+                 token_estimator: Optional[Callable[[str], int]] = None,
+                 embedder: Optional[Callable[[List[str]], Any]] = None, embedding_model: Optional[str] = None,
+                 embedding_dim: Optional[int] = None, embed_quota_tokens: Optional[int] = None,
+                 embed_batch_size: int = 64, max_vector_candidates: int = 5000):
+        for name, q in (("quota_entries", quota_entries), ("quota_tokens", quota_tokens),
+                        ("embed_quota_tokens", embed_quota_tokens)):
             if q is not None and (isinstance(q, bool) or not isinstance(q, int) or q < 1):
                 raise InvalidEntryError(f"{name} must be a positive int or None")
         if token_estimator is not None and not callable(token_estimator):
             raise InvalidEntryError("token_estimator must be callable")
+        if embedder is not None and not callable(embedder):
+            raise InvalidEntryError("embedder must be callable")
+        if (embedding_model is None) != (embedding_dim is None):
+            raise InvalidEntryError("embedding_model and embedding_dim go together")
+        if embedder is not None and embedding_model is None:
+            raise InvalidEntryError("an embedder needs embedding_model and embedding_dim")
+        if embedding_model is not None:
+            if not isinstance(embedding_model, str) or not MODEL_RE.match(embedding_model):
+                raise InvalidEntryError("embedding_model must be a short id such as 'text-embed-small-1'")
+            if (isinstance(embedding_dim, bool) or not isinstance(embedding_dim, int)
+                    or not 1 <= embedding_dim <= MAX_EMBEDDING_DIM):
+                raise InvalidEntryError(f"embedding_dim must be an int from 1 to {MAX_EMBEDDING_DIM}")
+        for name, v, high in (("embed_batch_size", embed_batch_size, 256), ("max_vector_candidates", max_vector_candidates, 100000)):
+            if isinstance(v, bool) or not isinstance(v, int) or not 1 <= v <= high:
+                raise InvalidEntryError(f"{name} must be an int from 1 to {high}")
         self.quota_entries = quota_entries
         self.quota_tokens = quota_tokens
+        self.embed_quota_tokens = embed_quota_tokens
+        self._embedder = embedder
+        self.embedding_model = embedding_model
+        self.embedding_dim = embedding_dim
+        self.embed_batch_size = embed_batch_size
+        self.max_vector_candidates = max_vector_candidates
         self._estimator = token_estimator or estimate_tokens
         self.path = os.fspath(path)
         self._audit = audit
@@ -198,7 +277,7 @@ class SQLiteStore:
         return n
 
     def _migrate(self) -> None:
-        """Bring the file to schema 2 in ONE transaction: a crash leaves the old schema or the complete new one."""
+        """Bring the file to schema 3 in ONE transaction: a crash leaves the old schema or the complete new one."""
         db = self._db
         db.execute("BEGIN IMMEDIATE")
         try:
@@ -219,6 +298,12 @@ class SQLiteStore:
             if migrating:
                 db.execute("INSERT INTO tenant_totals(tenant, entries, tokens)"
                            " SELECT tenant, COUNT(*), SUM(tokens) FROM memories GROUP BY tenant")
+            usage_cols = {r["name"] for r in db.execute("PRAGMA table_info(usage)")}
+            for col in ("embedded_tokens", "embed_calls"):
+                if col not in usage_cols:
+                    db.execute(f"ALTER TABLE usage ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0")
+            for ddl in _V3_DDL:
+                db.execute(ddl)
             db.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         except BaseException:
             db.execute("ROLLBACK")
@@ -338,7 +423,35 @@ class SQLiteStore:
 
     def search(self, scope: Scope, query: str, *, k: int = 5, kinds: Optional[Sequence[str]] = None,
                min_trust: str = "untrusted", include_superseded: bool = False,
-               include_expired: bool = False, max_tokens: Optional[int] = None) -> List[SearchHit]:
+               include_expired: bool = False, max_tokens: Optional[int] = None, mode: str = "keyword",
+               query_vector: Optional[Sequence[float]] = None) -> List[SearchHit]:
+        """Search the entries `scope` can see.
+
+        mode="keyword" (default): FTS5 bm25 keyword search, exactly as in 0.2.0.
+        mode="vector": cosine similarity between the query and the stored vectors of this store's embedding
+        model, scanning at most `max_vector_candidates` entries (most recent first, after all filters).
+        mode="hybrid": reciprocal rank fusion (k=60) of the keyword and vector results; entries without a
+        vector can still be found by keyword.
+
+        Vector and hybrid need embedding_model and embedding_dim, and either an embedder (one embedder call
+        for the query, counted against embed_quota_tokens) or a query_vector. kinds, min_trust, superseded,
+        expired, k and max_tokens work the same in every mode. hit.score is bm25-based for keyword, the cosine
+        for vector and the fused rank score for hybrid."""
+        if mode not in SEARCH_MODES:
+            raise InvalidEntryError("mode must be 'keyword', 'vector' or 'hybrid'")
+        if mode == "keyword":
+            if query_vector is not None:
+                raise InvalidEntryError("query_vector needs mode 'vector' or 'hybrid'")
+            return self._keyword_search(scope, query, k=k, kinds=kinds, min_trust=min_trust,
+                                        include_superseded=include_superseded, include_expired=include_expired,
+                                        max_tokens=max_tokens, record=True)
+        return self._vector_search(scope, query, k=k, kinds=kinds, min_trust=min_trust,
+                                   include_superseded=include_superseded, include_expired=include_expired,
+                                   max_tokens=max_tokens, query_vector=query_vector, hybrid=(mode == "hybrid"))
+
+    def _keyword_search(self, scope: Scope, query: str, *, k: int, kinds: Optional[Sequence[str]],
+                        min_trust: str, include_superseded: bool, include_expired: bool,
+                        max_tokens: Optional[int], record: bool) -> List[SearchHit]:
         """Keyword search (FTS5, bm25) over the entries `scope` can see. The query is split into
         words; any word may match. Operators in the query are treated as plain words.
 
@@ -361,7 +474,8 @@ class SQLiteStore:
             raise InvalidEntryError("invalid kinds")
         words = _TOKEN.findall(query)[:32]
         if not words:
-            self._record_served(scope.tenant, 0)
+            if record:
+                self._record_served(scope.tenant, 0)
             return []
         match = " OR ".join('"%s"' % t for t in words)
         clause, params = _scope_clause(scope, "m")
@@ -388,7 +502,8 @@ class SQLiteStore:
                 continue
             used += r["tokens"]
             hits.append(SearchHit(_row_to_entry(r), -float(r["score"]), r["tokens"]))
-        self._record_served(scope.tenant, used)
+        if record:
+            self._record_served(scope.tenant, used)
         return hits
 
     def _period(self, period: Optional[str]) -> str:
@@ -419,10 +534,192 @@ class SQLiteStore:
         with self._lock:
             n, stored = self._db.execute(f"SELECT COUNT(*), COALESCE(SUM(tokens), 0) FROM memories WHERE {clause}",
                                          params).fetchone()
-            row = self._db.execute("SELECT served_tokens, searches FROM usage WHERE tenant = ? AND period = ?",
-                                   [scope.tenant, period]).fetchone()
+            row = self._db.execute("SELECT served_tokens, searches, embedded_tokens, embed_calls FROM usage"
+                                   " WHERE tenant = ? AND period = ?", [scope.tenant, period]).fetchone()
         return {"entries": n, "stored_tokens": stored, "period": period,
-                "served_tokens": row["served_tokens"] if row else 0, "searches": row["searches"] if row else 0}
+                "served_tokens": row["served_tokens"] if row else 0, "searches": row["searches"] if row else 0,
+                "embedded_tokens": row["embedded_tokens"] if row else 0,
+                "embed_calls": row["embed_calls"] if row else 0}
+
+    # -- embeddings (0.3.0) ------------------------------------------------------------------------
+
+    def _need_embedding_config(self) -> None:
+        if self.embedding_model is None:
+            raise InvalidEntryError("this store has no embedding_model and embedding_dim")
+
+    def _reserve_embed(self, tenant: str, tokens: int) -> None:
+        """Count one embedder call and its tokens on the tenant's UTC day BEFORE the embedder is called, and
+        refuse if that would take the tenant over embed_quota_tokens. A call that then fails stays counted."""
+        period = self._period(None)
+        with self._tx() as db:
+            if self.embed_quota_tokens is not None:
+                row = db.execute("SELECT embedded_tokens FROM usage WHERE tenant = ? AND period = ?",
+                                 [tenant, period]).fetchone()
+                if (row["embedded_tokens"] if row else 0) + tokens > self.embed_quota_tokens:
+                    raise QuotaExceededError("embedding quota reached for this tenant today")
+            db.execute("INSERT INTO usage(tenant, period, served_tokens, searches, embedded_tokens, embed_calls)"
+                       " VALUES (?, ?, 0, 0, ?, 1) ON CONFLICT(tenant, period) DO UPDATE SET"
+                       " embedded_tokens = embedded_tokens + excluded.embedded_tokens,"
+                       " embed_calls = embed_calls + 1", [tenant, period, tokens])
+
+    def _call_embedder(self, texts: List[str]) -> "List[array[float]]":
+        assert self._embedder is not None and self.embedding_dim is not None
+        try:
+            out = self._embedder(list(texts))
+        except Exception:
+            raise EmbedderError("the embedder failed") from None
+        try:
+            if len(out) != len(texts):
+                raise InvalidEntryError("wrong number of vectors")
+            return [_unit_vector(v, self.embedding_dim) for v in out]
+        except (InvalidEntryError, TypeError):
+            raise EmbedderError("the embedder returned an unusable result") from None
+
+    def embed_pending(self, scope: Scope, *, limit: int = 100, dry_run: bool = False,
+                      replace_stale: bool = False) -> EmbedResult:
+        """Give a vector to up to `limit` entries `scope` can see that have none for this store's embedding
+        model (most recent first; superseded and expired entries are skipped). replace_stale=True also
+        re-embeds entries whose vector came from another model or size.
+
+        If embed_quota_tokens is set, only as many entries as fit in what is left of the tenant's quota for
+        today are embedded (see `remaining` in the result); if not even one fits, QuotaExceededError is raised
+        before the embedder is called. dry_run=True changes nothing, calls nothing and reports what would be
+        sent. The texts of the entries are sent to YOUR embedder function; where it sends them is up to it."""
+        scope = require_scope(scope)
+        self._need_embedding_config()
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 1000:
+            raise InvalidEntryError("limit must be an int from 1 to 1000")
+        if not isinstance(dry_run, bool) or not isinstance(replace_stale, bool):
+            raise InvalidEntryError("dry_run and replace_stale must be True or False")
+        if self._embedder is None and not dry_run:
+            raise InvalidEntryError("this store has no embedder")
+        clause, params = _scope_clause(scope, "m")
+        stale = " OR e.model != ? OR e.dim != ?" if replace_stale else ""
+        base = (f"FROM memories m LEFT JOIN embeddings e ON e.rowid = m.rowid WHERE {clause}"
+                f" AND m.superseded_by IS NULL AND (m.expires_at IS NULL OR m.expires_at > ?)"
+                f" AND (e.rowid IS NULL{stale})")
+        args: list = [*params, _iso(self._clock())]
+        if replace_stale:
+            args += [self.embedding_model, self.embedding_dim]
+        with self._lock:
+            rows = self._db.execute("SELECT m.rowid AS rid, m.text AS text, m.tokens AS tokens " + base
+                                    + " ORDER BY m.created_at DESC, m.rowid DESC LIMIT ?", [*args, limit]).fetchall()
+            pending = self._db.execute("SELECT COUNT(*) " + base, args).fetchone()[0]
+            used = self._db.execute("SELECT embedded_tokens FROM usage WHERE tenant = ? AND period = ?",
+                                    [scope.tenant, self._period(None)]).fetchone()
+        chosen = list(rows)
+        if self.embed_quota_tokens is not None:
+            room = self.embed_quota_tokens - (used["embedded_tokens"] if used else 0)
+            fits, total = [], 0
+            for r in chosen:
+                if total + r["tokens"] > room:
+                    break
+                fits.append(r)
+                total += r["tokens"]
+            if chosen and not fits and not dry_run:
+                raise QuotaExceededError("embedding quota reached for this tenant today")
+            chosen = fits
+        batches = -(-len(chosen) // self.embed_batch_size)
+        if dry_run:
+            return EmbedResult(len(chosen), sum(r["tokens"] for r in chosen), batches, pending - len(chosen), True)
+        embedded = spent = calls = 0
+        for i in range(0, len(chosen), self.embed_batch_size):
+            batch = chosen[i:i + self.embed_batch_size]
+            batch_tokens = sum(r["tokens"] for r in batch)
+            self._reserve_embed(scope.tenant, batch_tokens)
+            spent += batch_tokens
+            calls += 1
+            vectors = self._call_embedder([r["text"] for r in batch])
+            with self._tx() as db:
+                stored = 0
+                for r, v in zip(batch, vectors):
+                    stored += db.execute(
+                        "INSERT OR REPLACE INTO embeddings(rowid, model, dim, vec) SELECT ?, ?, ?, ?"
+                        " WHERE EXISTS (SELECT 1 FROM memories WHERE rowid = ?)",
+                        [r["rid"], self.embedding_model, self.embedding_dim, _to_blob(v), r["rid"]]).rowcount
+                self._log("memory.embed", scope, {"count": stored, "tokens": batch_tokens})
+            embedded += stored
+        return EmbedResult(embedded, spent, calls, pending - len(chosen), False)
+
+    def _vector_search(self, scope: Scope, query: str, *, k: int, kinds: Optional[Sequence[str]], min_trust: str,
+                       include_superseded: bool, include_expired: bool, max_tokens: Optional[int],
+                       query_vector: Optional[Sequence[float]], hybrid: bool) -> List[SearchHit]:
+        scope = require_scope(scope)
+        self._need_embedding_config()
+        assert self.embedding_dim is not None
+        if not isinstance(query, str):
+            raise InvalidEntryError("query must be a string")
+        check_size(query, MAX_QUERY_BYTES, "query")
+        if isinstance(k, bool) or not isinstance(k, int) or k < 1:
+            raise InvalidEntryError("k must be a positive int")
+        top = min(k, self.max_results)
+        if max_tokens is not None and (isinstance(max_tokens, bool) or not isinstance(max_tokens, int) or max_tokens < 1):
+            raise InvalidEntryError("max_tokens must be a positive int or None")
+        if min_trust not in TRUSTS:
+            raise InvalidEntryError("invalid min_trust")
+        wanted_kinds = tuple(kinds) if kinds is not None else KINDS
+        if not wanted_kinds or any(x not in KINDS for x in wanted_kinds):
+            raise InvalidEntryError("invalid kinds")
+        floor = trust_rank(min_trust)
+        trusts = [t for t in TRUSTS if trust_rank(t) >= floor]
+        if query_vector is not None:
+            qvec = _unit_vector(query_vector, self.embedding_dim)
+        elif not query.strip():
+            self._record_served(scope.tenant, 0)
+            return []
+        elif self._embedder is None:
+            raise InvalidEntryError("vector search needs an embedder or a query_vector")
+        else:
+            self._reserve_embed(scope.tenant, self._estimate(query))
+            qvec = self._call_embedder([query])[0]
+        clause, params = _scope_clause(scope, "m")
+        sql = ("SELECT m.*, e.vec AS vec FROM embeddings e JOIN memories m ON m.rowid = e.rowid"
+               f" WHERE e.model = ? AND e.dim = ? AND {clause}"
+               f" AND m.kind IN ({','.join('?' * len(wanted_kinds))}) AND m.trust IN ({','.join('?' * len(trusts))})")
+        args: list = [self.embedding_model, self.embedding_dim, *params, *wanted_kinds, *trusts]
+        if not include_superseded:
+            sql += " AND m.superseded_by IS NULL"
+        if not include_expired:
+            sql += " AND (m.expires_at IS NULL OR m.expires_at > ?)"
+            args.append(_iso(self._clock()))
+        sql += " ORDER BY m.created_at DESC, m.rowid DESC LIMIT ?"
+        args.append(self.max_vector_candidates)
+        with self._lock:
+            rows = self._db.execute(sql, args).fetchall()
+        scored = []
+        for r in rows:
+            if len(r["vec"]) != 4 * self.embedding_dim:
+                continue
+            scored.append((sum(map(mul, qvec, _from_blob(r["vec"]))), r))
+        scored.sort(key=lambda s: -s[0])  # stable: equal scores stay newest first
+        ranked: "List[tuple[float, MemoryEntry, int]]" = [(s, _row_to_entry(r), r["tokens"]) for s, r in scored]
+        if hybrid:
+            fused: "Dict[str, list]" = {}
+            keyword = self._keyword_search(scope, query, k=self.max_results, kinds=kinds, min_trust=min_trust,
+                                           include_superseded=include_superseded, include_expired=include_expired,
+                                           max_tokens=None, record=False)
+            for rank, h in enumerate(keyword, 1):
+                fused[h.entry.id] = [1.0 / (RRF_K + rank), h.entry, h.tokens]
+            for rank, (_, entry, tokens) in enumerate(ranked[:self.max_results], 1):
+                if entry.id in fused:
+                    fused[entry.id][0] += 1.0 / (RRF_K + rank)
+                else:
+                    fused[entry.id] = [1.0 / (RRF_K + rank), entry, tokens]
+            merged = list(fused.values())
+            merged.sort(key=lambda f: (f[1].created_at, f[1].id), reverse=True)
+            merged.sort(key=lambda f: -f[0])
+            ranked = [(f[0], f[1], f[2]) for f in merged]
+        hits: List[SearchHit] = []
+        used = 0
+        for score, entry, tokens in ranked:
+            if len(hits) >= top:
+                break
+            if max_tokens is not None and used + tokens > max_tokens:
+                continue
+            used += tokens
+            hits.append(SearchHit(entry, float(score), tokens))
+        self._record_served(scope.tenant, used)
+        return hits
 
     def supersede(self, scope: Scope, old_id: str, text: str, *, kind: Optional[str] = None, source: str = "api",
                   trust: str = "untrusted", importance: Optional[float] = None,

@@ -14,7 +14,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional
 
 from ragleap_security import Scope, require_scope
 
-from .model import ImportResult, InvalidEntryError, MemoryEntry, SearchHit
+from .model import EmbedResult, ImportResult, InvalidEntryError, MemoryEntry, SearchHit
 from .sqlite_store import SQLiteStore
 
 
@@ -104,6 +104,9 @@ class ShardedStore:
 
     def search(self, scope: Scope, query: str, **kw: Any) -> List[SearchHit]:
         return self._run(scope, lambda s, sc: s.search(sc, query, **kw))
+
+    def embed_pending(self, scope: Scope, **kw: Any) -> EmbedResult:
+        return self._run(scope, lambda s, sc: s.embed_pending(sc, **kw))
 
     def supersede(self, scope: Scope, old_id: str, text: str, **kw: Any) -> MemoryEntry:
         return self._run(scope, lambda s, sc: s.supersede(sc, old_id, text, **kw))
