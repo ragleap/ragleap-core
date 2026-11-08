@@ -19,3 +19,5 @@ export { MAX_ALLOWED_DEPTH } from "./queries.ts";
 export type { DocumentHit, EntityRef, LimitOptions, LineageEntry, LineageOptions, RelatedEntity, RelatedOptions, RelationHit, RelationsOptions, ScopeOptions, TypedEntity } from "./queries.ts";
 export { EPSILON, MAX_PASSES, detectCommunities, membersHash, modularity } from "./communities.ts";
 export type { Community, Edge } from "./communities.ts";
+export { COMMUNITY_STATEMENTS, CommunityArgumentError } from "./communityStore.ts";
+export type { CommunityHit, CommunityInfo, DetectOptions, FindOptions, RefreshOptions, RefreshResult, Summarizer } from "./communityStore.ts";
