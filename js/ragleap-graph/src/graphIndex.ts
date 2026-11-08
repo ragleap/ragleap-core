@@ -5,6 +5,9 @@ import type { CypherRunner } from "./queryApiRunner.ts";
 import * as queries from "./queries.ts";
 import type { DocumentHit, EntityRef, LimitOptions, LineageEntry, LineageOptions, RelatedEntity, RelatedOptions, RelationHit, RelationsOptions, ScopeOptions, TypedEntity } from "./queries.ts";
 import { upsertDocumentWithRetry } from "./upsert.ts";
+import type { Community } from "./communities.ts";
+import * as communityStore from "./communityStore.ts";
+import type { CommunityHit, DetectOptions, FindOptions, RefreshOptions, RefreshResult } from "./communityStore.ts";
 import type { UpsertChunk, UpsertOptions, UpsertSummary, UpsertTiming } from "./upsert.ts";
 
 /** The composite_key constraints created on connect (idempotent: IF NOT EXISTS). */
@@ -185,6 +188,21 @@ export class GraphIndex {
   /** Entities of a given type, matched case-insensitively. */
   async findEntitiesByType(entityType: string, options: LimitOptions = {}): Promise<TypedEntity[]> {
     return queries.findEntitiesByType(this.#runner, this.#logger, entityType, options);
+  }
+
+  /** Groups the entities of a namespace into communities without writing anything (rejects with a RangeError for bad arguments). */
+  async detectCommunities(options: DetectOptions = {}): Promise<Community[]> {
+    return communityStore.detectIndexCommunities(this.#runner, this.#logger, options);
+  }
+
+  /** Detects the communities and stores them as :Community nodes (unchanged ones are kept with their summary). */
+  async refreshCommunities(options: RefreshOptions = {}): Promise<RefreshResult> {
+    return communityStore.refreshIndexCommunities(this.#runner, this.#logger, options);
+  }
+
+  /** Stored communities, optionally only those containing the given entities. */
+  async findCommunities(entityNames?: readonly string[] | null, options: FindOptions = {}): Promise<CommunityHit[]> {
+    return communityStore.findIndexCommunities(this.#runner, this.#logger, entityNames, options);
   }
 
   /** All entities linked to one document (at most 50). */
