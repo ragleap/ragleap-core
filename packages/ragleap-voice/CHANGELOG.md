@@ -4,6 +4,8 @@ All notable changes to `ragleap-voice` are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
+### Added
+- `ragleap_voice.vad_silero.SileroGate`: an optional model-based voice-activity detector with the same `feed()` and `finish()` interface and events as `StreamGate`. Not exported and not used by default; `transcribe(gate=...)` and `transcribe_stream` are unchanged. It needs the new extra `vad` (`onnxruntime`, `numpy`; the core stays standard library only). The model file is not bundled and nothing is downloaded: the caller supplies the path of `silero_vad_16k_op15.onnx`, and any file without the pinned SHA-256 is refused. Defaults (probability 0.5, three consecutive windows) are the values used in the benchmarks, which measured false accepts on noise only; the hangover and hard-cap defaults are not measured. The model has no entry in `models.toml`, and its weights licence and training data are not verified. Tests use a fake backend and do not run the real model.
 
 ## [0.3.5] - 2026-11-07
 ### Status

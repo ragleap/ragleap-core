@@ -26,6 +26,7 @@ dependencies = []
 
 [project.optional-dependencies]
 whisper = ["faster-whisper==1.2.1"]
+vad = ["onnxruntime>=1.14,<2", "numpy"]
 test = ["pytest>=8.0.0", "tomli>=2.0.0; python_version < '3.11'"]
 
 [project.scripts]
