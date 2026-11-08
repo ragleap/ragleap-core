@@ -11,7 +11,11 @@ not applied yet) the event is dropped with one warning. A person's name is copie
 readable after the person is removed. The table is not trimmed: delete old rows yourself if it grows too large.
 """
 import asyncio
+import hashlib
+import json
 import logging
+import os
+from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +28,34 @@ _warned = set()
 def _connect():
     from core import document_store
     return document_store._connect()
+
+
+audit_logger = logging.getLogger("ragleap.audit")
+
+
+def sha256_hex(text) -> str:
+    return hashlib.sha256(str(text if text is not None else "").encode("utf-8", "replace")).hexdigest()
+
+
+def emit(event: str, content=None, **fields) -> None:
+    """Write one JSON audit line on the "ragleap.audit" logger, so a log shipper can keep it.
+
+    The line starts with "AUDIT " and holds: ts (UTC), audit (the event name) and the fields given (empty ones are
+    left out, each cut to 200 characters). If content is given, only its sha256 is written (content_sha256, of the
+    full text); the text itself is never written. Turn the lines off with AUDIT_LOG_LINES=false. Never raises.
+    """
+    if os.environ.get("AUDIT_LOG_LINES", "true").strip().lower() in ("false", "0", "no"):
+        return
+    try:
+        line = {"ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"), "audit": event}
+        for k, v in fields.items():
+            if v is not None and v != "":
+                line[k] = v if isinstance(v, (bool, int, float)) else str(v)[:200]
+        if content is not None:
+            line["content_sha256"] = sha256_hex(content)
+        audit_logger.info("AUDIT %s", json.dumps(line, sort_keys=True, ensure_ascii=False))
+    except Exception:
+        pass
 
 
 def should_record(method: str, path: str) -> bool:
