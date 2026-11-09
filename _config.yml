@@ -8,3 +8,8 @@ defaults:
       path: ""
     values:
       layout: "default"
+
+# Not part of the site: Ansible/Jinja files start with "---" and contain "{{ }}",
+# which Jekyll would render with Liquid and the Pages build fails.
+exclude:
+  - packages/ragleap-ansible/playbooks
