@@ -13,3 +13,5 @@ defaults:
 # which Jekyll would render with Liquid and the Pages build fails.
 exclude:
   - packages/ragleap-ansible/playbooks
+kramdown:
+  parse_block_html: true
