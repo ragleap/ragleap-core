@@ -527,12 +527,22 @@ jobs:
       - name: Validate kind-cluster module
         working-directory: packages/ragleap-terraform/modules/kind-cluster
         run: |
-          terraform init -backend=false
+          ok=0
+          for i in 1 2 3; do
+            terraform init -backend=false && ok=1 && break
+            echo "terraform init failed (try $i of 3), retrying in 20 s"; sleep 20
+          done
+          [ "$ok" = 1 ]
           terraform validate
       - name: Validate kind example
         working-directory: packages/ragleap-terraform/examples/kind
         run: |
-          terraform init -backend=false
+          ok=0
+          for i in 1 2 3; do
+            terraform init -backend=false && ok=1 && break
+            echo "terraform init failed (try $i of 3), retrying in 20 s"; sleep 20
+          done
+          [ "$ok" = 1 ]
           terraform validate
       - name: Check formatting
         working-directory: packages/ragleap-terraform
