@@ -5,6 +5,7 @@ All notable changes are listed here. Format: Keep a Changelog.
 ## [Unreleased]
 
 ### Added
+- A claims ledger (`docs/claims.json`) and a test (`tests/test_claims_ledger.py`) that fails when a public claim disappears from the file that states it, when a test it names no longer exists, when a verified claim has no evidence, or when the README or docs contain a phrase we promised not to use. First 18 claims; wiki claims are listed as external and are not checked automatically.
 - A Simplified Chinese README draft (`README.zh-CN.md`): AI-assisted, not reviewed by a native speaker. The language list now names English as the
   original and says that the Hindi and Tamil drafts are older and shorter than the English README.
 - A line in the Hindi and Tamil drafts that points to the English original and says the English text is the one to trust.
