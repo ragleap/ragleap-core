@@ -74,3 +74,13 @@ Risks of B: the owner's token is used whatever NAME says, so the owner must know
 2. Decision 2: A, B, D (recommended), or later.
 3. Whether to obtain a test credential for one read-only call.
 4. Whether to link this note from the "Open decisions" section of `utcp.md` (this note does not edit it).
+
+## Addendum 2026-11-09: what the `inputs` check found
+
+One more read-only GET (no credential, no tool call, counts only) was made on 2026-11-09, about 03:19 UTC, with a structure-only script. HTTP 200, 320,876 bytes, **37 tools**. The manual keeps changing: 33 tools on 2026-11-07, 35 on 2026-11-08, 37 on 2026-11-09 (237,586, 242,911 and 320,876 bytes).
+
+- For all 37 tools `inputs` is an object schema with exactly one property, and that property is the template's own `body_field` (`arguments`), of type `object` and listed as required. `additionalProperties` is absent on all of them.
+- So "Possible blocker 3" above is resolved: the `body_field` rule of 0.4.0 is satisfied by every tool of this manual. The two blockers that remain are the auth rule and the query-string rule, as described above.
+- Size: the `inputs` schemas range from 221 to 14,799 characters (median 528). The 0.4.0 check skips a schema larger than `max_schema_chars` (line 283 of `utcp.py`). The default for the MCP client is 10,000 characters and `UtcpConfig` extends `McpConfig`, so the same default is expected here (not read). At least the largest tool would then be skipped with "inputs schema is too large" until the limit is raised, whatever is decided above. This is an expected, stated skip, not a blocker for the other tools. How many tools exceed 10,000 characters was not counted.
+- What a model would supply is therefore one nested object, `arguments`, which 0.4.0 would send as the JSON body. Whether that is useful to a model was not assessed.
+- Still not verified: any tool call against a real UTCP server, the normative specification, the full known-fields set.
