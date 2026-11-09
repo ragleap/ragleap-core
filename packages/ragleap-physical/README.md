@@ -61,6 +61,6 @@ python examples/two_link_workspace_demo.py
 Report vulnerabilities privately through the repository's Security tab (see `SECURITY.md`).
 
 ## Other languages (drafts, not reviewed by native speakers)
-English (this file) is the original: if a translation differs, trust the English text. The Hindi and Tamil drafts are older and shorter than this file.
+English (this file) is the original: if a translation differs, trust the English text. The Hindi and Tamil drafts are older and shorter than this file. The Spanish text was written by a native speaker, with translation tools, and has not been read by a second one.
 
-[English (original)](https://github.com/ragleap/ragleap-core/blob/main/packages/ragleap-physical/README.md) · [Hindi](https://github.com/ragleap/ragleap-core/blob/main/packages/ragleap-physical/README.hi.md) · [Tamil](https://github.com/ragleap/ragleap-core/blob/main/packages/ragleap-physical/README.ta.md) · [Chinese, Simplified](https://github.com/ragleap/ragleap-core/blob/main/packages/ragleap-physical/README.zh-CN.md)
+[English (original)](https://github.com/ragleap/ragleap-core/blob/main/packages/ragleap-physical/README.md) · [Hindi](https://github.com/ragleap/ragleap-core/blob/main/packages/ragleap-physical/README.hi.md) · [Tamil](https://github.com/ragleap/ragleap-core/blob/main/packages/ragleap-physical/README.ta.md) · [Chinese, Simplified](https://github.com/ragleap/ragleap-core/blob/main/packages/ragleap-physical/README.zh-CN.md) · [Spanish](https://github.com/ragleap/ragleap-core/blob/main/packages/ragleap-physical/README.es.md)

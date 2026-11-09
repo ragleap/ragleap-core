@@ -5,6 +5,7 @@ All notable changes are listed here. Format: Keep a Changelog.
 ## [Unreleased]
 
 ### Added
+- A Spanish README (`README.es.md`) by @Jaimesf14: translated by a native speaker with translation tools, with review fixes by the project, not yet read by a second native speaker. The language list links it.
 - A claims ledger (`docs/claims.json`) and a test (`tests/test_claims_ledger.py`) that fails when a public claim disappears from the file that states it, when a test it names no longer exists, when a verified claim has no evidence, or when the README or docs contain a phrase we promised not to use. First 18 claims; wiki claims are listed as external and are not checked automatically.
 - A Simplified Chinese README draft (`README.zh-CN.md`): AI-assisted, not reviewed by a native speaker. The language list now names English as the
   original and says that the Hindi and Tamil drafts are older and shorter than the English README.
