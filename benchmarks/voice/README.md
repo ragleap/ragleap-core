@@ -488,3 +488,24 @@ The phone path is ragleap's own 16 to 8 kHz resample, mu-law encode and decode, 
 What it shows: StreamGate reported speech on almost every recording at both floors and at both levels, so on these files it does not separate noise from speech, which agrees with the synthetic-noise result above. Silero reported speech on 4.4% to 5.4% of the files, more than the 0 of 30 it gave on synthetic noise, and its rate through the phone path (5.1%) is close to its rate before it (4.4%) on a smaller subset. The 35 files Silero accepted at -23 dBFS (for example `noise-free-sound-0001`, `0026`, `0062`) have not been listened to, so it is not known whether they contain voice-like sound; the script lists all of them.
 
 Limits: sound-library recordings, not noise recorded in a room or on a phone line; no speech mixed in, so nothing is said about detecting speech; one run, the first 10 s of each file; the thresholds (StreamGate floors, Silero 0.5 and three windows) are untuned; the accepted files were not reviewed by a person; the phone path is a resample plus a codec, not a real network. MUSAN should be acknowledged in anything that publishes these results.
+
+## Parler description option: acoustic measurements (one run)
+
+Question (issue 991): does the `description` option of the `parler` engine change anything beyond speaking pace, in English and Hindi? Script: `colab_parler_style_measurements.py`. This is not a listening test and says nothing about whether any clip sounds like the emotion asked for. Setup: Google Colab (T4), 2026-11-09, `ragleap-voice` 0.3.6 on a Python 3.13 host, Indic Parler-TTS in a Python 3.11 worker environment built as in issue 990 with `parler-tts` at the commit named there. In that environment the worker first failed at the tokenizer with `ImportError: cannot import name 'runtime_version' from 'google.protobuf'` (`protobuf` 4.25.9, `sentencepiece` 0.2.3, `torch` 2.15.0, `transformers` 4.46.1); installing `sentencepiece==0.2.0` into it fixed that import and `uv pip check` then reported all 117 packages compatible. That was tried once, on one install. One sentence per language (the author's own text; the Hindi one has not been reviewed by a fluent speaker), five descriptions (neutral, happy, sad, angry, calm; the author's own wording, so the lengths are not comparable with those quoted in issue 991), two takes each, no seed. Duration is from the WAV header, RMS is over the whole clip, and F0 is the median of a plain autocorrelation estimate over voiced 40 ms frames (137 to 250 voiced frames per clip), which is rough.
+
+| Language | Style | Seconds (take 1, 2) | Median F0 in Hz (take 1, 2) | RMS in dBFS (take 1, 2) |
+|---|---|---|---|---|
+| en | neutral | 2.69, 2.50 | 175, 193 | -23.9, -22.3 |
+| en | happy | 2.80, 2.39 | 220, 200 | -21.4, -19.6 |
+| en | sad | 2.39, 2.60 | 110, 102 | -23.2, -24.3 |
+| en | angry | 2.00, 1.80 | 196, 170 | -20.8, -23.0 |
+| en | calm | 2.79, 2.90 | 165, 212 | -24.5, -20.0 |
+| hi | neutral | 2.81, 2.81 | 207, 199 | -26.2, -22.2 |
+| hi | happy | 3.09, 2.71 | 283, 272 | -20.3, -26.1 |
+| hi | sad | 2.50, 2.69 | 96, 98 | -23.9, -22.2 |
+| hi | angry | 1.80, 2.00 | 248, 240 | -21.6, -25.7 |
+| hi | calm | 3.20, 4.60 | 217, 189 | -22.5, -26.9 |
+
+What it shows: sad has the lowest pitch in both languages in both takes (the gap to neutral is much larger than the difference between takes); happy is higher in both, clearly in Hindi and only just clear of neutral in English; angry is the shortest in both languages and higher in pitch in Hindi but not in English; calm cannot be told from neutral in pitch (the two English takes differ by 47 Hz) and its two Hindi takes differ by 1.4 s. Sad was not slower than neutral in English although the description asked for a slow speed. RMS level shows no pattern: the two takes of one style differ by up to about 6 dB.
+
+Limits: one run, one sentence per language, two takes, no seed, so a style effect cannot be separated from the model's sampling randomness; a rough pitch estimate; one voice description ("a female speaker"); only `en` and `hi` were run, not `ta`, `te`, `ml` or `kn`. Pitch moving in the expected direction is consistent with the label, not evidence for it: judging emotion needs listeners (issue 756).
