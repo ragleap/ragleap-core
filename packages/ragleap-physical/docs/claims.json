@@ -1,0 +1,268 @@
+{
+ "schema": 1,
+ "comment": "Each public claim, where it is stated, and the evidence behind it. tests/test_claims_ledger.py fails if a claim's text disappears from its file, if a named test no longer exists, or if a banned phrase appears in the README or docs. 'verified' needs evidence; 'limitation' is something we say we do not do or know; an external claim lives outside this repository and is only listed.",
+ "banned_phrases": [
+  "production-ready",
+  "production ready",
+  "safe for real robots",
+  "powered by MuJoCo",
+  "aerospace grade",
+  "aerospace-grade",
+  "medical grade",
+  "medical-grade",
+  "covers all industries",
+  "reduces waste"
+ ],
+ "claims": [
+  {
+   "id": "C01",
+   "claim": "Exactly four tools for an AI agent",
+   "where": "README.md",
+   "status": "verified",
+   "evidence": [
+    {
+     "type": "test",
+     "ref": "tests/test_tools.py::test_exactly_four_tools_at_recommend_and_three_at_observe"
+    }
+   ],
+   "note": ""
+  },
+  {
+   "id": "C02",
+   "claim": "None of them can approve, apply, stop or change a limit",
+   "where": "README.md",
+   "status": "verified",
+   "evidence": [
+    {
+     "type": "test",
+     "ref": "tests/test_tools.py::test_no_tool_can_apply_approve_stop_or_change_limits"
+    }
+   ],
+   "note": ""
+  },
+  {
+   "id": "C03",
+   "claim": "approvals bound to",
+   "where": "README.md",
+   "status": "verified",
+   "evidence": [
+    {
+     "type": "test",
+     "ref": "tests/test_console.py::test_a_wrong_digest_is_refused_and_nothing_is_applied"
+    },
+    {
+     "type": "test",
+     "ref": "tests/test_approval_model.py::test_bridge_rejects_approval_of_an_altered_proposal_copy"
+    }
+   ],
+   "note": ""
+  },
+  {
+   "id": "C04",
+   "claim": "a stop that needs no approval",
+   "where": "README.md",
+   "status": "verified",
+   "evidence": [
+    {
+     "type": "test",
+     "ref": "tests/test_bridge.py::test_stop_needs_no_approval_and_blocks_apply"
+    }
+   ],
+   "note": ""
+  },
+  {
+   "id": "C05",
+   "claim": "loopback by default",
+   "where": "README.md",
+   "status": "verified",
+   "evidence": [
+    {
+     "type": "test",
+     "ref": "tests/test_mcp_server.py::test_unsafe_bind_and_weak_token_refused"
+    },
+    {
+     "type": "test",
+     "ref": "tests/test_mcp_server.py::test_bearer_token"
+    }
+   ],
+   "note": ""
+  },
+  {
+   "id": "C06",
+   "claim": "refuses DTDs and entities",
+   "where": "README.md",
+   "status": "verified",
+   "evidence": [
+    {
+     "type": "test",
+     "ref": "tests/test_mtconnect_adapter.py::test_a_dtd_or_entity_is_refused_before_the_parser_sees_it"
+    }
+   ],
+   "note": ""
+  },
+  {
+   "id": "C07",
+   "claim": "These adapters are observe-only",
+   "where": "README.md",
+   "status": "verified",
+   "evidence": [
+    {
+     "type": "test",
+     "ref": "tests/test_adapter_conformance.py::test_apply_is_implemented_or_refused_read_only"
+    },
+    {
+     "type": "test",
+     "ref": "tests/test_adapter_conformance.py::test_dry_run_is_implemented_or_refused_read_only"
+    }
+   ],
+   "note": ""
+  },
+  {
+   "id": "C08",
+   "claim": "Status: pre-alpha. Simulation only.",
+   "where": "README.md",
+   "status": "verified",
+   "evidence": [
+    {
+     "type": "file-contains",
+     "file": "pyproject.toml",
+     "text": "Development Status :: 2 - Pre-Alpha"
+    },
+    {
+     "type": "test",
+     "ref": "tests/test_bridge.py::test_real_hardware_refused"
+    }
+   ],
+   "note": "Only simulated adapters are accepted by the Bridge; no hardware adapter exists."
+  },
+  {
+   "id": "C18",
+   "claim": "If a workspace is set and the adapter cannot report positions, everything is refused",
+   "where": "README.md",
+   "status": "verified",
+   "evidence": [
+    {
+     "type": "test",
+     "ref": "tests/test_workspace.py::test_unknown_workspace_fails_closed"
+    },
+    {
+     "type": "test",
+     "ref": "tests/test_workspace.py::test_a_mid_path_excursion_is_refused_even_if_the_end_pose_is_fine"
+    }
+   ],
+   "note": ""
+  },
+  {
+   "id": "C09",
+   "claim": "Nothing here controls real hardware",
+   "where": "README.md",
+   "status": "verified",
+   "evidence": [
+    {
+     "type": "test",
+     "ref": "tests/test_bridge.py::test_real_hardware_refused"
+    },
+    {
+     "type": "test",
+     "ref": "tests/test_adapter_conformance.py::test_simulated_is_true"
+    }
+   ],
+   "note": "An absence claim: backed by the Bridge refusing non-simulated adapters, not by a search of all code."
+  },
+  {
+   "id": "C10",
+   "claim": "exact replay within one installed environment",
+   "where": "README.md",
+   "status": "verified",
+   "evidence": [
+    {
+     "type": "test",
+     "ref": "tests/test_mujoco_adapter.py::test_advance_moves_the_pendulum_and_repeats_exactly"
+    }
+   ],
+   "note": "Within one environment only. See C11."
+  },
+  {
+   "id": "C11",
+   "claim": "cross-machine repeatability is not claimed",
+   "where": "README.md",
+   "status": "limitation",
+   "evidence": [],
+   "note": "Not measured. A comparison across MuJoCo 3.17.0 and 4.0.0 is planned (issue 1130) and would still be two environments, not two machines."
+  },
+  {
+   "id": "C12",
+   "claim": "not reviewed by native speakers",
+   "where": "README.md",
+   "status": "limitation",
+   "evidence": [],
+   "note": "Translations are AI-assisted drafts. Review calls: issues 1122, 1123 and 1281."
+  },
+  {
+   "id": "C13",
+   "claim": "out-of-range",
+   "where": "docs/first-hour.md",
+   "status": "verified",
+   "evidence": [
+    {
+     "type": "test",
+     "ref": "tests/test_bridge.py::test_out_of_range_refused_no_clamping"
+    },
+    {
+     "type": "test",
+     "ref": "tests/test_envelope.py::test_clamping_not_allowed"
+    }
+   ],
+   "note": ""
+  },
+  {
+   "id": "C14",
+   "claim": "the AI can only adjust a tool offset",
+   "where": "README.md",
+   "status": "verified",
+   "evidence": [
+    {
+     "type": "test",
+     "ref": "tests/test_machine_tool.py::test_a_joint_command_cannot_be_used_on_an_offset_target_and_the_other_way_round"
+    },
+    {
+     "type": "test",
+     "ref": "tests/test_machine_adapter_inputs.py::test_an_unknown_target_or_command_is_still_refused_first"
+    }
+   ],
+   "note": "The only command is set_tool_offset; the numbers in the machine-tool model are invented (see C15)."
+  },
+  {
+   "id": "C15",
+   "claim": "the wear-study numbers are invented",
+   "where": "wiki: Home.md live-packages row",
+   "status": "limitation",
+   "evidence": [],
+   "note": "External text (the project wiki), listed so that it is not forgotten.",
+   "external": true
+  },
+  {
+   "id": "C16",
+   "claim": "604 passed, 16 skipped (designed skips)",
+   "where": "wiki: Home.md and Roadmap.md, ragleap-physical rows",
+   "status": "verified",
+   "evidence": [
+    {
+     "type": "run",
+     "ref": "Colab 2026-11-07, Python 3.13.18, pytest 8.4.2, MuJoCo 4.0.0, MCP SDK 1.30.0; run from the TestPyPI source archive of 0.0.5"
+    }
+   ],
+   "note": "External text. The 16 skips are the control-only cases of four observe-only adapters, by design.",
+   "external": true
+  },
+  {
+   "id": "C17",
+   "claim": "Not independently audited",
+   "where": "wiki: Home.md and Roadmap.md, ragleap-physical rows",
+   "status": "limitation",
+   "evidence": [],
+   "note": "External text. The English README does not say it; the wiki does.",
+   "external": true
+  }
+ ]
+}
