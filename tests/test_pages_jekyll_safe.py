@@ -73,3 +73,15 @@ def test_kramdown_parses_markdown_inside_html_blocks():
     # README.md and the translations in readmes/ open with <div align="center">. Without this
     # setting kramdown shows everything inside that block as raw text on the website.
     assert (_config().get("kramdown") or {}).get("parse_block_html") is True
+
+
+def test_root_pages_have_no_links_that_only_work_on_github():
+    # "../../issues" works on github.com but points outside the site on GitHub Pages (a 404 there).
+    # Use full https://github.com/ragleap/ragleap-core/... links in the pages the site publishes.
+    bad = []
+    for name in sorted(os.listdir(ROOT)):
+        if name.endswith(".md"):
+            with open(os.path.join(ROOT, name), encoding="utf-8") as f:
+                if "](../../" in f.read():
+                    bad.append(name)
+    assert bad == [], "relative ../../ links found in: " + ", ".join(bad)
