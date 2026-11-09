@@ -79,12 +79,12 @@ RagLeap's production RAG engine originally lived inside a larger private Django 
 - [x] Per-document idempotency for `CONTAINS`/`CO_OCCURS_WITH`/`RELATES_AS` (fixed real weight-doubling and stale-edge bugs)
 - [x] `find_lineage()` — per-document contribution lookup, previously unreachable via any public method
 - [x] `user_id=` for per-user data isolation across `upsert_document()` and all read methods, plus `backfill_user_id_defaults()` migration
-- [x] Audit logging (Postgres-backed, `database_url=`, writes+reads) — shipped v0.6.6, [#151](../../issues/151) closed (found already implemented during a documentation-claims audit, the issue description had drifted stale)
-- [x] Ontology cross-validation between relation types and entity types — shipped v0.9.0, see [#152](../../issues/152)
-- [ ] Eval framework (graph-RAG vs vector-RAG accuracy) — new engineering, still needs domain-expert-authored labeled test cases, see [#153](../../issues/153)
-- [x] Cross-chunk relation extraction — shipped v0.8.0, see [#154](../../issues/154)
+- [x] Audit logging (Postgres-backed, `database_url=`, writes+reads) — shipped v0.6.6, [#151](https://github.com/ragleap/ragleap-core/issues/151) closed (found already implemented during a documentation-claims audit, the issue description had drifted stale)
+- [x] Ontology cross-validation between relation types and entity types — shipped v0.9.0, see [#152](https://github.com/ragleap/ragleap-core/issues/152)
+- [ ] Eval framework (graph-RAG vs vector-RAG accuracy) — new engineering, still needs domain-expert-authored labeled test cases, see [#153](https://github.com/ragleap/ragleap-core/issues/153)
+- [x] Cross-chunk relation extraction — shipped v0.8.0, see [#154](https://github.com/ragleap/ragleap-core/issues/154)
 
-Also open: rotating a previously-exposed `GEMINI_API_KEY` ([#155](../../issues/155)), deciding how a future `ragleap-voice` package should relate to the existing `channels/voice/` code ([#156](../../issues/156)), and confirming the `/simple/` PyPI proxy serves real package data ([#157](../../issues/157)).
+Also open: rotating a previously-exposed `GEMINI_API_KEY` ([#155](https://github.com/ragleap/ragleap-core/issues/155)), deciding how a future `ragleap-voice` package should relate to the existing `channels/voice/` code ([#156](https://github.com/ragleap/ragleap-core/issues/156)), and confirming the `/simple/` PyPI proxy serves real package data ([#157](https://github.com/ragleap/ragleap-core/issues/157)).
 
 ## Phase 8 — Ecosystem expansion (planned)
 
@@ -191,4 +191,4 @@ Note (2026-10-24): `ragleap-security` and `ragleap-memory` give tenant scoping a
 
 ---
 
-This roadmap will be updated as work progresses. Contributions and feedback are welcome via [Issues](../../issues) and [Discussions](../../discussions).
+This roadmap will be updated as work progresses. Contributions and feedback are welcome via [Issues](https://github.com/ragleap/ragleap-core/issues) and [Discussions](https://github.com/ragleap/ragleap-core/discussions).

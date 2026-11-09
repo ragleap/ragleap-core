@@ -11,9 +11,9 @@ channel adapters — all verified end-to-end. Every change goes through CI
 (compile check + a real Docker build + smoke test), so contributions are
 welcome now, not "someday."
 
-Check the [good first issue](../../issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
+Check the [good first issue](https://github.com/ragleap/ragleap-core/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
 label for scoped, approachable tasks, or
-[help wanted](../../issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22)
+[help wanted](https://github.com/ragleap/ragleap-core/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22)
 for things that need investigation or specific API access to test.
 
 ## How to contribute code
@@ -41,7 +41,7 @@ change touches multiple unrelated things, consider splitting it up.
 
 ## Reporting bugs
 
-Open an [Issue](../../issues) with:
+Open an [Issue](https://github.com/ragleap/ragleap-core/issues) with:
 - What you expected to happen
 - What actually happened
 - Steps to reproduce
@@ -136,4 +136,4 @@ the guardrail flag.
 
 ## Questions
 
-Open a [Discussion](../../discussions) or reach out via [ragleap.com](https://ragleap.com).
+Open a [Discussion](https://github.com/ragleap/ragleap-core/discussions) or reach out via [ragleap.com](https://ragleap.com).

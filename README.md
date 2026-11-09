@@ -883,7 +883,7 @@ You do not need to write code to help: pick a test, run a few steps on sample fi
 
 ## Contributing
 
-RagLeap Core is working, tested, and open for contributions now. See [CONTRIBUTING.md](CONTRIBUTING.md) for how to get started, and check the [good first issue](../../issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) label for scoped tasks.
+RagLeap Core is working, tested, and open for contributions now. See [CONTRIBUTING.md](CONTRIBUTING.md) for how to get started, and check the [good first issue](https://github.com/ragleap/ragleap-core/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) label for scoped tasks.
 
 Want to see exactly what's being worked on and what's open to claim? Check the [Project board](https://github.com/users/antonyrag/projects/1) — issues are staged as Good First Issue, Ready (Scoped), or Needs Scoping, so you can pick something that matches how much design work you want to do versus just build.
 
@@ -891,8 +891,8 @@ Want to see exactly what's being worked on and what's open to claim? Check the [
 
 ## Community
 
-- [GitHub Issues](../../issues) — bugs and feature requests
-- [GitHub Discussions](../../discussions) — ideas and questions
+- [GitHub Issues](https://github.com/ragleap/ragleap-core/issues) — bugs and feature requests
+- [GitHub Discussions](https://github.com/ragleap/ragleap-core/discussions) — ideas and questions
 - [ragleap.com](https://ragleap.com) — the project website
 
 ## License

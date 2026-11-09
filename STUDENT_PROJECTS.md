@@ -11,7 +11,7 @@ a weekend), **semester** (a real final-year or capstone project), and
 
 If you're a professor considering recommending this repo to students, or a
 student picking a project: open an issue tagged with the project name below,
-or start a [Discussion](../../discussions), and we'll help scope it together.
+or start a [Discussion](https://github.com/ragleap/ragleap-core/discussions), and we'll help scope it together.
 
 ---
 
@@ -76,5 +76,5 @@ or start a [Discussion](../../discussions), and we'll help scope it together.
 - Real, visible history: every PR, every fix, every discussion is public
   and permanent — genuinely something to point to.
 
-Questions? Open a [Discussion](../../discussions) — happy to help scope
+Questions? Open a [Discussion](https://github.com/ragleap/ragleap-core/discussions) — happy to help scope
 any of these to the right size for a course project, thesis, or weekend hack.
