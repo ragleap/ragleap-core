@@ -67,3 +67,9 @@ def test_no_liquid_syntax_in_files_jekyll_would_render():
 def test_ansible_playbooks_are_excluded_from_pages():
     patterns = [str(p).rstrip("/") for p in (_config().get("exclude") or [])]
     assert "packages/ragleap-ansible/playbooks" in patterns
+
+
+def test_kramdown_parses_markdown_inside_html_blocks():
+    # README.md and the translations in readmes/ open with <div align="center">. Without this
+    # setting kramdown shows everything inside that block as raw text on the website.
+    assert (_config().get("kramdown") or {}).get("parse_block_html") is True
