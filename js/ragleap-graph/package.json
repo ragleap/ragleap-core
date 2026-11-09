@@ -3,13 +3,36 @@
   "version": "0.1.0",
   "private": true,
   "description": "TypeScript port of ragleap-graph (work in progress, not published)",
+  "license": "MIT",
   "type": "module",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/ragleap/ragleap-core.git",
     "directory": "js/ragleap-graph"
   },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "sideEffects": false,
   "scripts": {
+    "build": "tsc -p tsconfig.json && node scripts/postbuild.mjs",
     "test": "node --test test/parity.test.ts test/runner.test.ts test/graphIndex.test.ts test/upsert.test.ts test/live.test.ts test/liveIndex.test.ts test/liveUpsert.test.ts test/queries.test.ts test/liveQueries.test.ts test/communities.test.ts test/communitiesParity.test.ts test/communityIndex.test.ts test/communityIndexParity.test.ts test/liveCommunityIndex.test.ts"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "typescript": "5.9.3"
   }
 }
