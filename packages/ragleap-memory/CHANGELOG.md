@@ -3,7 +3,9 @@
 All notable changes to `ragleap-memory` are documented here. Format
 loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [0.3.0] - 2026-11-08
+## [0.3.0] - 2026-11-09
+
+Correction (2026-11-09): the published 0.3.0 package shows 2026-11-08 here, the day this entry was written. It was released on 2026-11-09 (UTC).
 
 Design: #1263. Vector and hybrid search over vectors that the caller's own embedder function produces. The library has no provider code, no keys and no network access.
 
