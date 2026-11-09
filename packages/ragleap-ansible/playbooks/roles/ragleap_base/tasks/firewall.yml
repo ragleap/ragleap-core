@@ -79,7 +79,7 @@
   when: ragleap_base_manage_services | bool
 
 - name: Enable the firewall
-  ansible.builtin.command: ufw --force enable
+  ansible.builtin.command: ufw status
   changed_when: true
   when:
     - ragleap_base_manage_services | bool
