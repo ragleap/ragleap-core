@@ -294,7 +294,7 @@ helm install ops "$OPS" -n "$NS" --set app.replicaCount=0 --set voice.replicaCou
 kubectl -n "$NS" get pods,pvc
 kubectl -n "$NS" exec deploy/ragleap-db -- psql -U ragleap -d ragleap_core -v ON_ERROR_STOP=1 \
   -c "CREATE TABLE velero_probe (id int, note text);" \
-  -c "INSERT INTO velero_probe VALUES (1, 'postgres-probe-row');" \
+  -c "INSERT INTO velero_probe VALUES (1, 'postgres-probe-rowX');" \
   -c "CHECKPOINT;" && record "PASS  wrote a probe row to Postgres" || { fail "could not write to Postgres"; exit 1; }
 kubectl -n "$NS" exec deploy/ragleap-neo4j -- cypher-shell -u neo4j -p ragleapgraph \
   "CREATE (:VeleroProbe {note: 'neo4j-probe-node'});" && record "PASS  wrote a probe node to Neo4j" || { fail "could not write to Neo4j"; exit 1; }
