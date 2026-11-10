@@ -455,6 +455,25 @@ jobs:
         working-directory: java/ragleap-vectorstores
         run: mvn -B test
 
+  ragleap-graph-js-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: js/ragleap-graph/package-lock.json
+      - name: Install ragleap-graph JS dependencies
+        working-directory: js/ragleap-graph
+        run: npm ci
+      - name: Build ragleap-graph JS
+        working-directory: js/ragleap-graph
+        run: npm run build
+      - name: Run ragleap-graph JS test suite
+        working-directory: js/ragleap-graph
+        run: npm test
+
   ragleap-vectorstores-tests:
     runs-on: ubuntu-latest
     strategy:
