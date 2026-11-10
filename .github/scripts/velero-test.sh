@@ -279,7 +279,7 @@ velero install --provider aws \
   --plugins "velero/velero-plugin-for-aws:$AWS_PLUGIN_VERSION" \
   --bucket velero --secret-file /tmp/velero-creds \
   --backup-location-config region=us-east-1,s3ForcePathStyle=true,s3Url=http://rustfs.velero.svc:9000 \
-  --use-volume-snapshots=false --use-node-agent --default-volumes-to-fs-backup --wait
+  --use-volume-snapshots=false --use-node-agent --wait
 PHASE=""
 for i in $(seq 1 24); do
   PHASE=$(kubectl -n velero get backupstoragelocation default -o jsonpath='{.status.phase}' 2>/dev/null || true)
@@ -300,7 +300,7 @@ kubectl -n "$NS" exec deploy/ragleap-neo4j -- cypher-shell -u neo4j -p ragleapgr
   "CREATE (:VeleroProbe {note: 'neo4j-probe-node'});" && record "PASS  wrote a probe node to Neo4j" || { fail "could not write to Neo4j"; exit 1; }
 
 echo "== backup"
-velero backup create probe-backup --include-namespaces "$NS" --default-volumes-to-fs-backup --wait
+velero backup create probe-backup --include-namespaces "$NS" --wait
 BPHASE=$(kubectl -n velero get backup probe-backup -o jsonpath='{.status.phase}' 2>/dev/null || true)
 if [ "$BPHASE" = "Completed" ]; then record "PASS  backup phase is Completed"; else fail "backup phase is '$BPHASE'"; fi
 PVB=$(kubectl -n velero get podvolumebackups -o jsonpath='{range .items[*]}{.status.phase}{"\n"}{end}' 2>/dev/null || true)
