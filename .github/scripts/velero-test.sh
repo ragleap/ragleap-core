@@ -325,7 +325,7 @@ echo "pod volume backups by volume: $(tr '\n' ' ' <<< "$VOLS")"
 if grep -q -x "db-data=Completed" <<< "$VOLS"; then record "PASS  the Postgres data volume (db-data) has a completed pod volume backup"; else fail "the db-data volume has no completed pod volume backup"; fi
 
 echo "== disaster: delete the namespace"
-kubectl delete namespace "$NS" --wait --timeout=300s
+kubectl get pv -o name | xargs -r -I{} kubectl patch {} -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}' && kubectl delete namespace "$NS" --wait --timeout=300s
 if kubectl get namespace "$NS" >/dev/null 2>&1; then fail "namespace $NS still exists"; else record "PASS  namespace $NS is gone"; fi
 if [ "$STORAGE" = "static" ]; then
 echo "== the disks are lost too: replace both volumes with fresh empty ones"
