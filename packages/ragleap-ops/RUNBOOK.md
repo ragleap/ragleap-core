@@ -369,8 +369,8 @@ databases were empty. K3s uses a provisioner with the same name, but the CI
 test on k3s v1.34.12 (in Docker, through k3d) observed that its default
 storage class `local-path` created `local` PersistentVolumes, not `hostPath`
 ones. So the trap was seen on kind's default storage only: check your own
-cluster with the command below. Whether Velero backs up and restores
-databases on k3s's default storage was not tested.
+cluster with the command below. On that k3s default storage the Velero
+test passed too (see "What was verified").
 
 **What was verified** (`.github/scripts/velero-test.sh`, workflow
 `velero-test`; four passing runs on GitHub runners, 2026-10-19 and
@@ -383,6 +383,16 @@ records came back.
 
 The same test also passed once on k3s v1.34.12 in Docker (k3d v5.9.0, run
 40087055391, 2026-10-24), again with static `local` PersistentVolumes.
+
+It also passed on k3s's own default dynamic storage (`local-path`, which created
+`local` PersistentVolumes; no static volumes), on the same k3d cluster, through the
+workflow input `storage=default` (runs 42749230898 and 42750271654, 2026-11-10). In that
+mode the test first checks that deleting the namespace removed the volumes and their
+data directories, then restores, and both records came back. The checks were shown to
+fail when the guarded step is broken: volumes kept after the namespace was deleted
+(run 42750190622), a restore without pods (run 42750219327) and a backup without the
+file-system flag (run 42750247722). This is one cluster, one Velero version and one
+node, not a statement about every k3s.
 
 **How to check that a backup really contains your data**
 
@@ -404,7 +414,7 @@ never been restored is not a backup.
 **Not covered:** application-consistent backups, CSI snapshots,
 scheduled backups, retention, restoring into a different cluster,
 real object storage, multi-node clusters, a systemd k3s install, and
-Velero on k3s's default dynamic storage (the k3d run used static volumes).
+more than one k3s version (the dynamic-storage run used k3s v1.34.12 only).
 
 ---
 

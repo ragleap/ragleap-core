@@ -13,7 +13,7 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Documentation
 
-- RUNBOOK Appendix A: the statement that k3s's default storage very likely behaves like kind's was an untested inference and is wrong for k3s v1.34.12. A CI run on k3s in Docker (k3d v5.9.0, run 40087055391) observed that its default `local-path` storage creates `local` PersistentVolumes, not `hostPath`. The Velero test also passed on that cluster with static `local` volumes. Not tested: Velero on k3s's default dynamic storage, and a systemd k3s install.
+- RUNBOOK Appendix A: the statement that k3s's default storage very likely behaves like kind's was an untested inference and is wrong for k3s v1.34.12. A CI run on k3s in Docker (k3d v5.9.0, run 40087055391) observed that its default `local-path` storage creates `local` PersistentVolumes, not `hostPath`. The Velero test also passed on that cluster with static `local` volumes. Update 2026-11-10: the Velero test now has a `storage=default` mode and passed on that cluster with k3s's own dynamic storage (runs 42749230898 and 42750271654), with break proofs (runs 42750190622, 42750219327, 42750247722). Not tested: a systemd k3s install.
 
 ### Changed
 
