@@ -33,6 +33,7 @@ from core import tasks as core_tasks
 from core import proactive_triggers as core_triggers
 from core import scheduler_leader
 from core import retention
+from core import request_context
 from core import autonomy
 from core import agent_loop
 from core import auth_throttle
@@ -53,7 +54,7 @@ from urllib.parse import quote as _urlquote
 from core import queue
 from core.employees.sensitivity import is_sensitive_role
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, **request_context.log_config())
 logger = logging.getLogger("ragleap-core.api")
 
 async def _sync_job():
@@ -384,6 +385,7 @@ def _route_label(request: Request) -> str:
 async def observe_requests(request: Request, call_next):
     """Added after require_api_key, so it wraps it: refused requests are counted too. Every response gets X-Request-ID."""
     rid = core_metrics.request_id(request.headers.get("x-request-id"))
+    token = request_context.bind(rid)
     on = core_metrics.enabled()
     t0, status = core_metrics.start(), 500
     if on:
@@ -394,6 +396,7 @@ async def observe_requests(request: Request, call_next):
         response.headers["X-Request-ID"] = rid
         return response
     finally:
+        request_context.unbind(token)
         if on:
             core_metrics.inflight(-1)
             core_metrics.record(request.method, _route_label(request), status, core_metrics.since(t0))

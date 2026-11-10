@@ -51,6 +51,13 @@ def emit(event: str, content=None, **fields) -> None:
         for k, v in fields.items():
             if v is not None and v != "":
                 line[k] = v if isinstance(v, (bool, int, float)) else str(v)[:200]
+        if "request_id" not in line:
+            try:
+                from core import request_context
+                if request_context.current():
+                    line["request_id"] = request_context.current()
+            except Exception:
+                pass
         if content is not None:
             line["content_sha256"] = sha256_hex(content)
         audit_logger.info("AUDIT %s", json.dumps(line, sort_keys=True, ensure_ascii=False))
