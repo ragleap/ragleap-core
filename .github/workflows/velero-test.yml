@@ -33,6 +33,14 @@ on:
         description: 'k3s image (only used when cluster is k3d)'
         required: false
         default: 'rancher/k3s:v1.34.12-k3s1'
+      storage:
+        description: 'Storage mode: static (hand-made local volumes) or default (the cluster own dynamic storage, k3d only)'
+        required: false
+        type: choice
+        default: 'static'
+        options:
+          - static
+          - default
   pull_request:
     branches: [main]
     paths:
@@ -61,4 +69,5 @@ jobs:
           CLUSTER: ${{ inputs.cluster || 'kind' }}
           K3D_VERSION: ${{ inputs.k3d_version || 'v5.9.0' }}
           K3S_IMAGE: ${{ inputs.k3s_image || 'rancher/k3s:v1.34.12-k3s1' }}
+          STORAGE: ${{ inputs.storage || 'static' }}
         run: bash .github/scripts/velero-test.sh
