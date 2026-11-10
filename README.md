@@ -35,9 +35,10 @@
 [![PyPI ragleap-memory](https://img.shields.io/pypi/v/ragleap-memory?label=ragleap-memory)](https://pypi.org/project/ragleap-memory/) [![Downloads](https://img.shields.io/pepy/dt/ragleap-memory?label=downloads)](https://pypi.org/project/ragleap-memory/)
 [![PyPI ragleap-security](https://img.shields.io/pypi/v/ragleap-security?label=ragleap-security)](https://pypi.org/project/ragleap-security/) [![Downloads](https://img.shields.io/pepy/dt/ragleap-security?label=downloads)](https://pypi.org/project/ragleap-security/)
 
-**Tracing (Python)**
+**Tracing and cost (Python)**
 
 [![PyPI ragleap-trace](https://img.shields.io/pypi/v/ragleap-trace?label=ragleap-trace)](https://pypi.org/project/ragleap-trace/) [![Downloads](https://img.shields.io/pepy/dt/ragleap-trace?label=downloads)](https://pypi.org/project/ragleap-trace/)
+[![PyPI ragleap-optimizer](https://img.shields.io/pypi/v/ragleap-optimizer?label=ragleap-optimizer)](https://pypi.org/project/ragleap-optimizer/) [![Downloads](https://img.shields.io/pepy/dt/ragleap-optimizer?label=downloads)](https://pypi.org/project/ragleap-optimizer/)
 
 **Physical AI (Python, simulation only)**
 
@@ -248,6 +249,22 @@ pip install "ragleap-security[crypto]"
 uv add ragleap-security
 ```
 
+Need to see what your Python AI code does without recording its content? `ragleap-trace` is a dependency-free tracing library (standard library only): spans with hard limits, privacy-safe by default, and an adapter for ragleap-rag hooks. It writes to memory or a local file and has no network exporters.
+
+```bash
+pip install ragleap-trace
+# or, with uv
+uv add ragleap-trace
+```
+
+Want to cut the token use of LLM requests, and measure what you lose? `ragleap-optimizer` is an alpha library, not independently audited: every step reports what it changed and whether it can lose information, and `evaluate` compares quality on your own cases. No savings figure has been measured.
+
+```bash
+pip install ragleap-optimizer
+# or, with uv
+uv add ragleap-optimizer
+```
+
 Or run the full self-hosted app (channels, the AI Office dashboard, Docker Compose) — see [Quickstart](#quickstart) below. Browse every package at [packages.ragleap.com](https://packages.ragleap.com). Try it hands-on with the runnable scripts in [examples/](examples/) — `01_ingest_and_query.py` (upload a document, ask a question via the API) and `02_test_channel_directly.py` (test channel answering logic without real bot credentials).
 
 ## If a RAG chatbot answers questions, RagLeap runs your business
@@ -290,9 +307,9 @@ WhatsApp, Telegram, and Discord bots are included in this repo too — single-te
 
 | It's not... | It is... |
 |---|---|
-| A hosted product | Self-hosted software you run yourself |
-| Multi-tenant, with persistent cross-session memory | Single-tenant — one bot, one document set, per deployment |
-| A multi-tenant platform | WhatsApp/Telegram/Discord/Voice channel adapters included, single-tenant |
+| A hosted product | Self-hosted software you run yourself today. Hosting is planned inside ragleap-core (no date) |
+| Multi-tenant, with persistent cross-session memory | Single-tenant today: one document set per deployment, served by a staff of AI employees (46 roles), not by one bot. Multi-tenant use is planned (no date) |
+| A multi-tenant platform | Not yet: multi-tenant use is planned (no date). WhatsApp/Telegram/Discord/Voice channel adapters are included, single-tenant |
 | A no-code SaaS dashboard | A codebase you deploy and configure |
 | Feature-complete | The foundational subset — see [Roadmap](#roadmap) |
 
@@ -879,7 +896,7 @@ You do not need to write code to help: pick a test, run a few steps on sample fi
 
 | Area | Tested by | OS / setup | Result | Issue |
 |---|---|---|---|---|
-| (no reports yet) | | | | |
+| Windows installer with the Ollama option | @Anurag07-crypto | Windows 11 Pro 25H2 (build 26200.9711), Docker 29.9.2, Ollama 0.40.14, qwen2.5:3b and nomic-embed-text | Services started, the dashboard opened, the chat and embedding connection tests passed, one PDF was ingested (5 chunks) and one chat request was answered (HTTP 200). One machine, one PDF, one question: not a compatibility guarantee, and macOS and Linux desktops are not verified. [Evidence](https://github.com/ragleap/community-tests/tree/main/windows-ollama-781) | [#781](https://github.com/ragleap/ragleap-core/issues/781) |
 
 ## Contributing
 
