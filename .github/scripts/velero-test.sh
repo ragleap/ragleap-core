@@ -323,7 +323,7 @@ make_pv pv-neo /mnt/pv-neo
 if [ -z "$(docker exec "$KNODE" ls -A /mnt/pv-db)" ]; then record "PASS  the replacement database volume is empty (the restore must bring the data back)"; else fail "the replacement volume is not empty"; fi
 
 echo "== restore"
-velero restore create probe-restore --from-backup probe-backup --wait
+velero restore create probe-restore --from-backup probe-backup --exclude-resources pods --wait
 RPHASE=$(kubectl -n velero get restore probe-restore -o jsonpath='{.status.phase}' 2>/dev/null || true)
 if [ "$RPHASE" = "Completed" ]; then record "PASS  restore phase is Completed"; else fail "restore phase is '$RPHASE'"; fi
 if kubectl -n "$NS" wait --for=condition=Available deploy/ragleap-db --timeout=420s >/dev/null 2>&1; then record "PASS  ragleap-db is available after the restore"; else fail "ragleap-db is not available after the restore"; fi
