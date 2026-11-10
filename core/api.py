@@ -32,6 +32,7 @@ from core import workflows
 from core import tasks as core_tasks
 from core import proactive_triggers as core_triggers
 from core import scheduler_leader
+from core import retention
 from core import autonomy
 from core import agent_loop
 from core import auth_throttle
@@ -102,6 +103,13 @@ async def _folder_ingest_job():
     except Exception as e:
         logger.error("Error in folder ingest job: %s", e)
 
+async def _retention_job():
+    """Delete audit rows older than the limits the operator set (core/retention.py). purge never raises."""
+    try:
+        await asyncio.to_thread(retention.purge)
+    except Exception as e:
+        logger.error("Error in retention job: %s", e)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
@@ -118,6 +126,9 @@ async def lifespan(app: FastAPI):
     if folder_ingest.enabled():
         scheduler.add_job(scheduler_leader.leader_only(_folder_ingest_job), "interval",
                           minutes=folder_ingest.interval_minutes(), max_instances=1, coalesce=True)
+    if retention.enabled():
+        scheduler.add_job(scheduler_leader.leader_only(_retention_job), "interval", hours=6,
+                          max_instances=1, coalesce=True)
     scheduler.start()
     logger.info("Background sync scheduler started.")
     yield
@@ -1133,6 +1144,19 @@ def office_overview():
 def office_autonomy_log(limit: int = 50, approved: bool | None = None):
     """The autonomy action log as data, newest first."""
     return {"log": office.autonomy_log(limit=limit, approved=approved)}
+
+
+@app.get("/retention")
+def retention_status():
+    """How long the audit trail is kept and how many rows are already older than the limit. Admin and owner only."""
+    return {"min_days": retention.MIN_DAYS, "tables": retention.status()}
+
+
+@app.post("/retention/purge")
+def retention_purge(dry_run: bool = True):
+    """Delete rows older than the retention limits now. With dry_run=true (the default) it only counts them.
+    Owner only. The scheduled job does the same every 6 hours when a limit is set."""
+    return {"dry_run": dry_run, "tables": retention.purge(trigger="api", dry_run=dry_run)}
 
 
 @app.get("/file-grants")
