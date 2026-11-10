@@ -169,6 +169,15 @@ if not RAGLEAP_API_KEY:
     )
 
 
+def _sso_rate_wait(request: Request, bucket: str) -> int:
+    """Seconds to wait when this client has used up its sign-in budget (core/auth_throttle.py), else 0."""
+    if not auth_throttle.enabled():
+        return 0
+    peer = getattr(getattr(request, "client", None), "host", "") or ""
+    client = auth_throttle.client_id(peer, request.headers.get("x-forwarded-for", ""))
+    return auth_throttle.rate_limited(bucket, client)
+
+
 def _too_many_attempts(wait_seconds: int):
     return JSONResponse(
         status_code=429,
@@ -1313,9 +1322,13 @@ def auth_config():
 
 
 @app.get("/auth/login")
-def auth_login():
+def auth_login(request: Request):
     if not core_sso.enabled():
         raise HTTPException(status_code=404, detail="Single sign-on is not set up.")
+    wait = _sso_rate_wait(request, "auth_login")
+    if wait:
+        return JSONResponse(status_code=429, content={"detail": "Too many sign-in attempts. Try again in a minute."},
+                            headers={"Retry-After": str(wait)})
     try:
         return _sso_redirect(core_sso.start_login())
     except core_oidc.OidcError as e:
@@ -1327,9 +1340,11 @@ def auth_login():
 
 
 @app.get("/auth/callback")
-def auth_callback(code: str = "", state: str = "", error: str = ""):
+def auth_callback(request: Request, code: str = "", state: str = "", error: str = ""):
     """The provider sends the person back here. The session token goes to the dashboard in the URL fragment, which
     browsers do not send to servers, so it stays out of access logs."""
+    if core_sso.enabled() and _sso_rate_wait(request, "auth_callback"):
+        return _sso_redirect("/office#sso_error=" + _urlquote("Too many sign-in attempts. Try again in a minute.", safe=""))
     try:
         result = core_sso.finish_login(state, code, error)
     except core_oidc.OidcError as e:

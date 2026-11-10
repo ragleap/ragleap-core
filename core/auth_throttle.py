@@ -20,6 +20,8 @@ _clock = time.monotonic
 _lock = threading.Lock()
 _failures: Dict[str, Deque[float]] = {}
 _locked_until: Dict[str, float] = {}
+_rate: Dict[tuple, Deque[float]] = {}
+_noted: Dict[tuple, float] = {}
 
 
 def _int_env(name: str, default: int, low: int, high: int) -> int:
@@ -140,7 +142,61 @@ def record_success(client: str) -> None:
         _failures.pop(client, None)
 
 
+def sso_limit() -> int:
+    """Requests per client and minute allowed on each public sign-in address (AUTH_SSO_MAX_PER_MINUTE, 1 to 10000)."""
+    return _int_env("AUTH_SSO_MAX_PER_MINUTE", 30, 1, 10000)
+
+
+def _make_rate_room(now: float, window: int) -> None:
+    if len(_rate) < MAX_TRACKED_CLIENTS:
+        return
+    for k in [k for k, q in _rate.items() if not q or now - q[-1] > window]:
+        del _rate[k]
+        _noted.pop(k, None)
+    while len(_rate) >= MAX_TRACKED_CLIENTS and _rate:
+        k = next(iter(_rate))
+        del _rate[k]
+        _noted.pop(k, None)
+
+
+def _note(bucket: str, client: str, limit: int, wait: int) -> None:
+    try:
+        from core import audit
+        audit.emit("sso_rate_limited", route=bucket, client=client, limit=limit, retry_after=wait)
+    except Exception:
+        pass
+
+
+def rate_limited(bucket: str, client: str) -> int:
+    """Count one request to a public sign-in address. Returns the seconds to wait when this client has used up its
+    budget for the last minute, else 0. Refused requests are not counted, so hammering does not extend the wait.
+    The first refusal per client and minute writes one sso_rate_limited audit log line."""
+    now = _clock()
+    limit = sso_limit()
+    window = 60
+    key = (bucket, client)
+    note = None
+    with _lock:
+        _make_rate_room(now, window)
+        q = _rate.setdefault(key, deque())
+        while q and now - q[0] > window:
+            q.popleft()
+        if len(q) >= limit:
+            wait = max(1, int(q[0] + window - now + 0.999))
+            if now - _noted.get(key, -1e9) > window:
+                _noted[key] = now
+                note = wait
+        else:
+            q.append(now)
+            wait = 0
+    if note is not None:
+        _note(bucket, client, limit, note)
+    return wait
+
+
 def reset() -> None:
     with _lock:
         _failures.clear()
         _locked_until.clear()
+        _rate.clear()
+        _noted.clear()

@@ -80,7 +80,16 @@ two test users, one with a second factor and one without. Then:
 3. Check the Audit tab, end the session from the Users tab, and confirm the next request is refused.
 4. Turn on `OIDC_REQUIRE_MFA=true` and check that the user without a second factor is refused.
 
+## Rate limit on the sign-in addresses
+
+`/auth/login` and `/auth/callback` are public, so each client address may use each of them at most
+`AUTH_SSO_MAX_PER_MINUTE` times per minute (default 30, range 1 to 10000). Over the limit, `/auth/login` answers 429 with a
+`Retry-After` header and `/auth/callback` sends the person back to the dashboard with a short message. Refused requests
+are not counted, so waiting is enough. The first refusal per client and minute writes one `sso_rate_limited` line
+(`docs/audit-log-lines.md`). The state is in memory, per process, and `AUTH_THROTTLE=off` switches it off together
+with the API key throttle. Behind a reverse proxy, list the proxy in `TRUSTED_PROXIES`; without it every person behind the
+proxy shares one counter. The number of sign-ins in progress is also capped at 1000.
+
 ## Not covered yet
 
-SAML, LDAP, group-to-role mapping, automatic account creation, and rate limiting of the sign-in start address (the number of
-sign-ins in progress is capped at 1000 instead).
+SAML, LDAP, group-to-role mapping and automatic account creation.
