@@ -17,7 +17,7 @@ updates:
     groups:
       codeql-actions:
         patterns:
-          - "github/codeql-action"
+          - "github/codeql-action/*"
     labels:
       - "dependencies"
       - "ci"
