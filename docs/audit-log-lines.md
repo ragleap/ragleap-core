@@ -19,6 +19,7 @@ INFO:ragleap.audit:AUDIT {"action_id": "3f9c1a2b", "action_type": "send_email", 
 | `action_skipped` | an action was not allowed (`reason`: autonomy off, action not allowed, channel not allowed) |
 | `action_forced_approval` | an action that would have run on its own needs approval (untrusted input) |
 | `retention_purge` | the retention job deleted rows (`table`, `retention_days`, `cutoff`, `deleted`, `trigger`), see `docs/audit-retention.md` |
+| `sso_rate_limited` | a client used up its sign-in budget (`route`, `client`, `limit`, `retry_after`); written once per client and minute |
 
 ## Fields
 
