@@ -165,7 +165,7 @@ provisioner: kubernetes.io/no-provisioner
 volumeBindingMode: WaitForFirstConsumer
 EOF
 make_pv() { # name path: wipe the directory on the node and (re)create the PV
-  docker exec "$KNODE" sh -c "rm -rf $2 && mkdir -p $2 && chmod 777 $2"
+  docker exec "$KNODE" sh -c "mkdir -p $2 && chmod 777 $2"
   kubectl apply -f - <<EOF
 apiVersion: v1
 kind: PersistentVolume
