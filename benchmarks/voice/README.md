@@ -509,3 +509,26 @@ Question (issue 991): does the `description` option of the `parler` engine chang
 What it shows: sad has the lowest pitch in both languages in both takes (the gap to neutral is much larger than the difference between takes); happy is higher in both, clearly in Hindi and only just clear of neutral in English; angry is the shortest in both languages and higher in pitch in Hindi but not in English; calm cannot be told from neutral in pitch (the two English takes differ by 47 Hz) and its two Hindi takes differ by 1.4 s. Sad was not slower than neutral in English although the description asked for a slow speed. RMS level shows no pattern: the two takes of one style differ by up to about 6 dB.
 
 Limits: one run, one sentence per language, two takes, no seed, so a style effect cannot be separated from the model's sampling randomness; a rough pitch estimate; one voice description ("a female speaker"); only `en` and `hi` were run, not `ta`, `te`, `ml` or `kn`. Pitch moving in the expected direction is consistent with the label, not evidence for it: judging emotion needs listeners (issue 756).
+
+## SileroGate hangover: utterances per clip (one run)
+
+Question: how does the `hangover_windows` option of `SileroGate` change the number of utterances reported for one read sentence? Script: `colab_silero_hangover.py`. Setup: Google Colab (CPU), 2026-11-09, `ragleap-voice` 0.3.6 with the `vad` extra, Silero `silero_vad_16k_op15.onnx` at `snakers4/silero-vad` commit `066409f3d9db45a30d21dfcbf9147826ffdd7052` (SHA-256 checked by `SileroGate`), probability 0.5 and three windows (unchanged), one window is 32 ms. Data: the first 30 `google/fleurs` test clips (CC-BY-4.0) for English (en_us) and Hindi (hi_in), clean read speech, no noise. The default is 12 windows (about 0.38 s).
+
+| Language | Hangover (windows) | Seconds | Mean utterances | Median | Clips with one utterance | Coverage |
+|---|---|---|---|---|---|---|
+| en | 6 | 0.19 | 2.07 | 1.5 | 15 of 30 | 76% |
+| en | 12 | 0.38 | 1.27 | 1.0 | 24 of 30 | 79% |
+| en | 25 | 0.80 | 1.07 | 1.0 | 28 of 30 | 82% |
+| en | 50 | 1.60 | 1.00 | 1.0 | 30 of 30 | 87% |
+| en | 100 | 3.20 | 1.00 | 1.0 | 30 of 30 | 89% |
+| hi | 6 | 0.19 | 2.90 | 2.0 | 9 of 30 | 78% |
+| hi | 12 | 0.38 | 2.00 | 2.0 | 13 of 30 | 80% |
+| hi | 25 | 0.80 | 1.20 | 1.0 | 26 of 30 | 87% |
+| hi | 50 | 1.60 | 1.00 | 1.0 | 30 of 30 | 91% |
+| hi | 100 | 3.20 | 1.00 | 1.0 | 30 of 30 | 91% |
+
+What it shows: at the default the Hindi clips were split into more utterances than the English ones (2.00 against 1.27 per clip); with a hangover of 25 windows (about 0.8 s) 28 of 30 English and 26 of 30 Hindi clips gave one utterance, and with 50 windows (about 1.6 s) all 60 did. The end of an utterance can only be reported after the hangover has passed, so a longer hangover delays that event by at least that long (this follows from the code, it was not timed).
+
+Coverage is the share of each clip's duration between a `speech_start` and its `speech_end`. A segment ends at its last speech window, so the hangover itself is not counted, but a segment still open when the stream ends is closed at the end of the stream, so at long hangovers trailing silence is counted: coverage is not a measure of speech kept.
+
+Limits: 30 clean read-speech clips per language, one run; it counts utterances only and assumes that one read sentence should be one utterance, which was not checked (a merged pause may have been a real break); no noise, no real calls, and no other languages; untuned probability and window count. No default is recommended: what suits real speech and real calls has not been measured.
