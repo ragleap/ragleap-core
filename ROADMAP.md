@@ -175,20 +175,20 @@ interest, real risk, explicitly unscoped until the guardrail and the
 questions above are actually addressed. Anyone interested in helping
 shape this is welcome to open a Discussion.
 
-## Not planned for RagLeap Core
+## Planned for RagLeap Core: hosted and multi-tenant operation (not built, no dates)
 
-These remain part of the commercial hosted product at [ragleap.com](https://ragleap.com), consistent with the open-core model. Note: this repo *does* include single-tenant WhatsApp/Telegram/Discord/Voice channel adapters (see Phase 4 above) — the items below are what the hosted platform adds on top of them, not duplicates of what's already open:
+The project now plans one ragleap-core that also covers these, instead of a separate commercial product. None of it is built, and there are no dates. Note: this repo *does* include single-tenant WhatsApp/Telegram/Discord/Voice channel adapters (see Phase 4 above) — the items below are what is still missing on top of them, not duplicates of what's already open:
 
-- Multi-tenant channel routing (this repo's channel adapters are single-tenant, one bot/config per deployment)
+- Multi-tenant channel routing (this repo's channel adapters are single-tenant, one configuration per deployment)
 - Multi-tenant AI Employees orchestration — per-workspace seeding at scale (single-tenant AI Employees runtime is open in this repo, see Phase 4)
-- Manager AI (executive-assistant layer with cross-channel reach) — the assistant persona itself is a real candidate to open eventually, but it's entangled with locked features (analytics, team permissions, database connections) that genuinely are SaaS-only; needs its own scoping pass before any code starts, not committed to a timeline yet
+- Manager AI (executive-assistant layer with cross-channel reach) — the assistant persona itself is a real candidate to open eventually, but it's entangled with locked features (analytics, team permissions, database connections) that were planned for the hosted product, which is now planned inside ragleap-core; needs its own scoping pass before any code starts, not committed to a timeline yet
 - Persistent memory that spans sessions and channels as a hosted service (cross-channel routing and the hosted memory layer). The open-source `ragleap-memory` library is memory you run yourself; it does not route across channels
 - Multi-tenant n8n workflow routing (per-workspace) and Voice channel coverage (single-tenant text-channel automation is open in this repo, see Phase 4)
 - Multi-tenant billing and subscription management
 - Observability & hallucination detection dashboard
 - Managed hosting, support, and SLAs
 
-Note (2026-10-24): `ragleap-security` and `ragleap-memory` give tenant scoping as an isolation guarantee inside a library you run yourself. Hosted multi-tenant operation (routing, billing, managed hosting, SLAs) stays commercial. Both libraries state their limits in `docs/threat-model.md`.
+Note (2026-10-24): `ragleap-security` and `ragleap-memory` give tenant scoping as an isolation guarantee inside a library you run yourself. Hosted multi-tenant operation (routing, billing, managed hosting, SLAs) is not built and has no date. The plan is to bring multi-tenant use and hosting into ragleap-core rather than keep a separate commercial product. Both libraries state their limits in `docs/threat-model.md`.
 
 ---
 

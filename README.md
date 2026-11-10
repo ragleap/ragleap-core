@@ -271,7 +271,7 @@ Or run the full self-hosted app (channels, the AI Office dashboard, Docker Compo
 
 Most open-source RAG projects give you a toolkit — you still have to build the app, wire up a UI, add memory, and connect every channel yourself. RagLeap Core gives you one AI across WhatsApp, Telegram, Discord, and voice calls, instead of a different disconnected bot per channel. Memory persists across sessions and channels, so it isn't relearning who a customer is every time. Voice is a real, working inbound-call handler (Twilio Media Streams, Whisper STT, OpenAI TTS) — not just document Q&A with a phone number bolted on — and n8n workflow automation can be triggered directly from any conversation.
 
-What this repo doesn't include: a multi-tenant admin dashboard (settings, analytics, team, billing) and an executive-assistant layer (Manager AI). It does ship a single-tenant dashboard, the AI Office at `/office` (approvals, employees by department, tasks, agent runs, activity, Settings and a Setup checklist). RagLeap Core itself is single-tenant, self-hosted, and configured via `.env`.
+What this repo doesn't include yet: a multi-tenant admin dashboard (settings, analytics, team, billing) and an executive-assistant layer (Manager AI). It does ship a single-tenant dashboard, the AI Office at `/office` (approvals, employees by department, tasks, agent runs, activity, Settings and a Setup checklist). RagLeap Core itself is single-tenant, self-hosted, and configured via `.env`. Multi-tenant use and hosting are planned inside ragleap-core, with no date.
 
 ## What makes RagLeap Core specifically different
 
