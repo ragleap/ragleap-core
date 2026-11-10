@@ -297,7 +297,7 @@ kubectl -n "$NS" exec deploy/ragleap-db -- psql -U ragleap -d ragleap_core -v ON
   -c "INSERT INTO velero_probe VALUES (1, 'postgres-probe-row');" \
   -c "CHECKPOINT;" && record "PASS  wrote a probe row to Postgres" || { fail "could not write to Postgres"; exit 1; }
 kubectl -n "$NS" exec deploy/ragleap-neo4j -- cypher-shell -u neo4j -p ragleapgraph \
-  "CREATE (:VeleroProbe {note: 'neo4j-probe-node'});" && record "PASS  wrote a probe node to Neo4j" || { fail "could not write to Neo4j"; exit 1; }
+  "CREATE (:VeleroProbeX {note: 'neo4j-probe-node'});" && record "PASS  wrote a probe node to Neo4j" || { fail "could not write to Neo4j"; exit 1; }
 
 echo "== backup"
 velero backup create probe-backup --include-namespaces "$NS" --default-volumes-to-fs-backup --wait
