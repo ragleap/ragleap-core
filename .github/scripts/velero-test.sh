@@ -12,6 +12,7 @@ VELERO_VERSION="${VELERO_VERSION:-v1.18.3}"
 AWS_PLUGIN_VERSION="${AWS_PLUGIN_VERSION:-v1.14.0}"
 S3_IMAGE="${S3_IMAGE:-rustfs/rustfs@sha256:9ca9559533b537d10482fe923288b676ad08f92a7069d9a17327fbae3cab688b}"
 CLUSTER="${CLUSTER:-kind}"
+STORAGE="${STORAGE:-static}"
 K3D_VERSION="${K3D_VERSION:-v5.9.0}"
 K3S_IMAGE="${K3S_IMAGE:-rancher/k3s:v1.34.12-k3s1}"
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -73,6 +74,11 @@ case "$CLUSTER" in
     k3d version
     echo "k3s image: $K3S_IMAGE" ;;
   *) stop "CLUSTER must be kind or k3d (got '$CLUSTER')" ;;
+esac
+case "$STORAGE" in
+  static) ;;
+  default) [ "$CLUSTER" = "k3d" ] || stop "STORAGE=default needs CLUSTER=k3d: kind's default storage creates hostPath volumes, which Velero file-system backup skips" ;;
+  *) stop "STORAGE must be static or default (got '$STORAGE')" ;;
 esac
 if [ "$CLUSTER" = "k3d" ]; then
   CLUSTERS=$(k3d cluster list --no-headers 2>&1 | awk '{print $1}' || true)
@@ -151,6 +157,7 @@ kubectl -n default delete pvc probe-default --wait --timeout=60s || true
 echo "== storage Velero can back up: static PersistentVolumes of type local (not hostPath)"
 KNODE=$(kubectl get nodes -o jsonpath='{.items[0].metadata.name}')
 docker inspect "$KNODE" >/dev/null 2>&1 || stop "no docker container is named like the node ($KNODE); the volume setup needs it"
+if [ "$STORAGE" = "static" ]; then
 for sc in $(kubectl get storageclass --no-headers | awk '/\(default\)/ {print $1}'); do
   kubectl patch storageclass "$sc" -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"false"}}}' || true
 done
@@ -191,6 +198,10 @@ EOF
 make_pv pv-db /mnt/pv-db
 make_pv pv-neo /mnt/pv-neo
 kubectl get pv,storageclass
+else
+  echo "== default storage mode: keeping the cluster's own storage class (no static volumes)"
+  kubectl get storageclass
+fi
 
 echo "== S3 stand-in (RustFS)"
 kubectl create namespace velero
@@ -316,11 +327,23 @@ if grep -q -x "db-data=Completed" <<< "$VOLS"; then record "PASS  the Postgres d
 echo "== disaster: delete the namespace"
 kubectl delete namespace "$NS" --wait --timeout=300s
 if kubectl get namespace "$NS" >/dev/null 2>&1; then fail "namespace $NS still exists"; else record "PASS  namespace $NS is gone"; fi
+if [ "$STORAGE" = "static" ]; then
 echo "== the disks are lost too: replace both volumes with fresh empty ones"
 kubectl delete pv pv-db pv-neo --wait --timeout=120s || true
 make_pv pv-db /mnt/pv-db
 make_pv pv-neo /mnt/pv-neo
 if [ -z "$(docker exec "$KNODE" ls -A /mnt/pv-db)" ]; then record "PASS  the replacement database volume is empty (the restore must bring the data back)"; else fail "the replacement volume is not empty"; fi
+else
+  echo "== default storage: deleting the namespace deleted its claims; the volumes and their data directories must be gone"
+  GONE=""; LEFT="?"; DIRS="?"
+  for i in $(seq 1 24); do
+    LEFT=$(kubectl get pv -o jsonpath='{range .items[*]}{.spec.claimRef.namespace}{"\n"}{end}' 2>/dev/null | grep -c -x "$NS" || true)
+    DIRS=$(docker exec "$KNODE" sh -c "ls /var/lib/rancher/k3s/storage 2>/dev/null | grep -c _${NS}_" || true)
+    if [ "$LEFT" = "0" ] && [ "$DIRS" = "0" ]; then GONE=yes; break; fi
+    sleep 5
+  done
+  if [ "$GONE" = "yes" ]; then record "PASS  the volumes and their data directories are gone (the restore must bring the data back)"; else fail "volumes or data directories of $NS still exist (persistent volumes left: $LEFT, directories left: $DIRS)"; fi
+fi
 
 echo "== restore"
 velero restore create probe-restore --from-backup probe-backup --wait
@@ -352,7 +375,7 @@ if grep -q "neo4j-probe-node" <<< "$NODE"; then record "PASS  the Neo4j probe no
 echo
 echo "== SUMMARY ($(date +%T))"
 for r in "${RESULTS[@]}"; do echo "$r"; done
-echo "Cluster: $CLUSTER. Storage: static local PersistentVolumes (the OBSERVED line above says what this cluster's default storage creates). Velero file-system backup skips hostPath volumes."
+echo "Cluster: $CLUSTER. Storage mode: $STORAGE (static = hand-made local PersistentVolumes, default = the cluster's own dynamic storage; the OBSERVED line above says what the default storage creates). Velero file-system backup skips hostPath volumes."
 echo "Not exercised: application-consistent backups (these are crash-consistent file copies of running databases; the runbook's pg_dump CronJob"
 echo "remains the stronger guarantee), CSI snapshots, scheduled backups, restore into a different cluster, TTL and retention, real object storage, multi-node."
 if [ "$FAILS" -eq 0 ]; then echo "ALL CHECKS PASSED"; else echo "$FAILS CHECK(S) FAILED"; exit 1; fi
