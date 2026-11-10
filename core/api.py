@@ -1148,10 +1148,19 @@ def _actor_of(request):
 
 
 @app.get("/audit")
-def audit_events(limit: int = 100, actor: str | None = None):
-    """Who did what: state-changing requests by signed-in people, newest first. Admin and owner only."""
+def audit_events(limit: int = 100, actor: str | None = None, method: str | None = None, path: str | None = None,
+                 status: int | None = None, since: str | None = None, until: str | None = None,
+                 before_id: int | None = None):
+    """Who did what: state-changing requests by signed-in people, newest first. Admin and owner only.
+
+    Optional filters (combined with AND): actor, method, path (starts with), status, since and until (ISO 8601,
+    UTC when no zone is given) and before_id (the id of the last event you got, to read the next page).
+    """
     try:
-        return {"events": audit.list_events(limit=limit, actor=actor)}
+        return {"events": audit.list_events(limit=limit, actor=actor, method=method, path=path, status=status,
+                                            since=since, until=until, before_id=before_id)}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         if e.__class__.__name__ in ("UndefinedTable", "UndefinedColumn"):
             raise HTTPException(status_code=503, detail="The database has no audit table yet (apply db/schema.sql).")

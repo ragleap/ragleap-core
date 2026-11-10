@@ -96,13 +96,49 @@ def schedule(actor: dict, method: str, path: str, status: int) -> None:
     task.add_done_callback(_tasks.discard)
 
 
-def list_events(limit: int = 100, actor: str = None) -> list:
+def _parse_time(value, name):
+    """An ISO 8601 time (UTC when it has no zone). Empty means no limit. Raises ValueError with a clear message."""
+    if value in (None, ""):
+        return None
+    try:
+        t = datetime.fromisoformat(str(value).strip().replace("Z", "+00:00"))
+    except ValueError:
+        raise ValueError("%s must be an ISO 8601 time, for example 2026-11-09T00:00:00Z" % name)
+    return t if t.tzinfo else t.replace(tzinfo=timezone.utc)
+
+
+def list_events(limit: int = 100, actor: str = None, method: str = None, path: str = None, status: int = None,
+                since: str = None, until: str = None, before_id: int = None) -> list:
+    """Newest first. Optional filters, all combined with AND: actor (exact name), method, path (starts with),
+    status, since (at or after), until (before) and before_id (only rows older than that id, to read the next page).
+    """
     limit = max(1, min(int(limit), 500))
     sql = "SELECT id, at, actor_name, actor_role, actor_kind, actor_user, method, path, status FROM audit_events"
-    params = []
+    where, params = [], []
     if actor:
-        sql += " WHERE actor_name = %s"
+        where.append("actor_name = %s")
         params.append(actor)
+    if method:
+        where.append("method = %s")
+        params.append(str(method).strip().upper())
+    if path:
+        where.append("path LIKE %s ESCAPE '\\'")
+        params.append(str(path).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%")
+    if status is not None:
+        where.append("status = %s")
+        params.append(int(status))
+    t_since, t_until = _parse_time(since, "since"), _parse_time(until, "until")
+    if t_since:
+        where.append("at >= %s")
+        params.append(t_since)
+    if t_until:
+        where.append("at < %s")
+        params.append(t_until)
+    if before_id is not None:
+        where.append("id < %s")
+        params.append(int(before_id))
+    if where:
+        sql += " WHERE " + " AND ".join(where)
     sql += " ORDER BY id DESC LIMIT %s"
     params.append(limit)
     conn = _connect()
