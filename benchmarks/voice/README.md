@@ -558,3 +558,54 @@ Limits (read before quoting any number):
 - Read speech, clean recordings. The round trips are filters applied by our own pure-Python code to 16 kHz clips: no Opus, no codec, no packet loss, not real LiveKit audio. No noise was added.
 - Word error only. No latency, no listening test. The per-clip CSV and the JSON summary are kept by the maintainer and are not in the repository.
 - No comparison with any other system.
+
+## Parler description option in Tamil, Telugu, Malayalam and Kannada: acoustic measurements (one run)
+
+Question: does the Parler worker produce audio in the four declared languages that had not been run (ta, te, ml, kn), and do the patterns of the English and Hindi section above appear again? Script: `colab_parler_style_measurements.py` with `STYLE_LANGS=ta,te,ml,kn` (added in PR 1349). Not a listening test.
+
+Setup (2026-11-11): Colab GPU (nvidia-smi showed 3771 MiB in use; the GPU model name and the installed ragleap-voice version were not printed in this run, and 0.3.6 was the latest release); the script from main after PR 1349; worker environment on Python 3.11.18 built with uv: parler-tts 0.2.2 at commit d108732cd57788ec86bc857d99a6cabd66663d68, torch 2.15.0, transformers 4.46.1, protobuf 4.25.9, and sentencepiece 0.2.0 (0.2.3 was resolved first and replaced by the pin, as in issue 990; `uv pip check` reported 117 packages compatible). 5 styles, 2 takes each, 4 languages, 40 clips, no seed, one sentence per language: the author's own translation of "The meeting has been moved to tomorrow morning." None of the four sentences has been reviewed by a fluent speaker. The descriptions are the same as in the section above.
+
+Per clip, take 1 / take 2:
+
+| Language | Style | Seconds | RMS dBFS | F0 median Hz |
+|---|---|---|---|---|
+| Tamil | neutral | 2.80 / 2.69 | -25.0 / -25.1 | 190 / 184 |
+| Tamil | happy | 2.89 / 2.79 | -19.9 / -21.1 | 232 / 232 |
+| Tamil | sad | 2.60 / 2.50 | -23.6 / -23.2 | 105 / 105 |
+| Tamil | angry | 1.82 / 1.80 | -23.2 / -18.4 | 200 / 224 |
+| Tamil | calm | 2.69 / 3.76 | -22.8 / -23.0 | 178 / 209 |
+| Telugu | neutral | 2.89 / 3.09 | -24.6 / -24.3 | 177 / 189 |
+| Telugu | happy | 3.29 / 2.79 | -20.7 / -22.9 | 233 / 195 |
+| Telugu | sad | 3.29 / 3.27 | -23.9 / -25.0 | 126 / 115 |
+| Telugu | angry | 2.50 / 2.69 | -20.9 / -18.7 | 197 / 258 |
+| Telugu | calm | 3.29 / 3.96 | -21.6 / -23.0 | 213 / 203 |
+| Malayalam | neutral | 3.34 / 3.08 | -23.0 / -22.2 | 204 / 216 |
+| Malayalam | happy | 2.67 / 3.33 | -20.4 / -18.9 | 241 / 242 |
+| Malayalam | sad | 3.59 / 3.75 | -24.8 / -37.9 | 171 / 148 |
+| Malayalam | angry | 2.00 / 2.19 | -22.6 / -22.6 | 246 / 249 |
+| Malayalam | calm | 3.63 / 2.94 | -19.3 / -24.0 | 203 / 206 |
+| Kannada | neutral | 2.90 / 3.59 | -22.1 / -20.6 | 205 / 199 |
+| Kannada | happy | 3.09 / 2.89 | -22.7 / -23.9 | 236 / 236 |
+| Kannada | sad | 3.30 / 3.19 | -24.5 / -24.6 | 152 / 131 |
+| Kannada | angry | 2.09 / 2.02 | -21.1 / -24.6 | 240 / 191 |
+| Kannada | calm | 3.49 / 3.20 | -21.1 / -22.7 | 194 / 191 |
+
+What it shows:
+
+- All 40 clips were produced without an error, between 1.8 s and 3.96 s long. Whether they are intelligible, or in the right language, was not checked.
+- Sad has the lowest median pitch in each language: both takes are below every take of every other style.
+- Angry is the shortest in each language: both takes are shorter than every take of every other style.
+- Happy has a higher median pitch than neutral in each language, both takes. It is clear in Tamil, Malayalam and Kannada; in Telugu the margin is small (take 2 is 195 Hz, the highest neutral take 189 Hz).
+- Angry has a higher median pitch than neutral in Tamil, Telugu and Malayalam, but not in Kannada (240 and 191 Hz against 205 and 199 Hz).
+- Calm shows no consistent pattern: in Telugu it is higher in pitch and longer than neutral, in Kannada lower in pitch, in Tamil and Malayalam it overlaps neutral.
+- Sad was not slower in every language: in Tamil it is shorter than neutral (2.60 and 2.50 s against 2.80 and 2.69 s), although the description asks for a slow speed.
+- For sad (lowest pitch), angry (shortest) and calm (not separable) the pattern is the same as in the English and Hindi section above.
+- One clip stands out in level: Malayalam sad take 2 at -37.9 dBFS, while the other 39 clips lie between -25.1 and -18.4 dBFS. It was not examined.
+- Pitch is a plain autocorrelation estimate. Its spread within a clip ranges from 8 to 109 Hz (not shown in the table), and octave errors were not checked.
+
+Limits (read before quoting any number):
+
+- One run, two takes per style, no seed, one sentence per language: this separates nothing from the model's sampling randomness.
+- The four sentences are unreviewed translations. Duration, level and a rough pitch are all that was measured: nothing about intelligibility, naturalness or whether a clip sounds like the emotion asked for. That needs listeners (issue 756).
+- Generation time per clip was not recorded; counting finished clips over one 90 s window gave about 30 s per clip, including the script's own analysis.
+- The WAV files and measurements.json are kept by the maintainer and are not in the repository.
