@@ -235,3 +235,82 @@ def alaw_decode(codes):
     if not isinstance(codes, (bytes, bytearray, memoryview)):
         raise TypeError("codes must be bytes, bytearray or memoryview")
     return array.array("h", [_ALAW_DEC[c] for c in bytes(codes)])
+
+
+_TAPS3 = _taps(63, 0.14)
+_TAPS3U = [3 * x for x in _TAPS3]
+_L3 = len(_TAPS3)
+
+
+def down3(samples):
+    """48 kHz -> 16 kHz (any rate -> a third): low-pass, then keep every third sample."""
+    pad = _L3 // 2
+    xp = [0] * pad + list(samples) + [0] * pad
+    return array.array("h", [_clip(sum(map(mul, _TAPS3, xp[i:i + _L3]))) for i in range(0, len(samples), 3)])
+
+
+def up3(samples):
+    """16 kHz -> 48 kHz (any rate -> triple): zero insertion, then the low-pass with tripled gain."""
+    pad = _L3 // 2
+    u = [0] * (3 * len(samples))
+    u[::3] = samples
+    xp = [0] * pad + u + [0] * pad
+    return array.array("h", [_clip(sum(map(mul, _TAPS3U, xp[i:i + _L3]))) for i in range(len(u))])
+
+
+class _Resample3Stream:
+    """Stateful 3:1 resampler. Concatenating every process() result and the finish() result equals the one-shot
+    function's output exactly. Keeps less than one filter length of history. Not thread-safe."""
+
+    _taps = None
+    _step = 1
+
+    def __init__(self):
+        self._buf = [0] * (_L3 // 2)
+        self._done = False
+
+    def _prepare(self, samples):
+        return list(samples)
+
+    def _emit(self):
+        buf, taps, out, pos = self._buf, self._taps, [], 0
+        while pos + _L3 <= len(buf):
+            out.append(_clip(sum(map(mul, taps, buf[pos:pos + _L3]))))
+            pos += self._step
+        del buf[:pos]
+        return array.array("h", out)
+
+    def process(self, samples):
+        """Accept a chunk (any length, may be empty); return the output samples that are now complete."""
+        if self._done:
+            raise ValueError("process() called after finish()")
+        self._buf.extend(self._prepare(samples))
+        return self._emit()
+
+    def finish(self):
+        """Flush the tail with the same zero padding as the one-shot function. Later calls return an empty array."""
+        if self._done:
+            return array.array("h")
+        self._done = True
+        self._buf.extend([0] * (_L3 // 2))
+        return self._emit()
+
+
+class Down3Stream(_Resample3Stream):
+    """Streaming version of down3()."""
+
+    _taps = _TAPS3
+    _step = 3
+
+
+class Up3Stream(_Resample3Stream):
+    """Streaming version of up3()."""
+
+    _taps = _TAPS3U
+    _step = 1
+
+    def _prepare(self, samples):
+        samples = list(samples)
+        u = [0] * (3 * len(samples))
+        u[::3] = samples
+        return u
