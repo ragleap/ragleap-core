@@ -5,9 +5,12 @@ Status: pre-alpha, not exported from the package yet.
 - The mu-law encoder is the benchmark prototype's. It is NOT verified against the G.711 standard: on all 65536 16-bit
   inputs it differs from audioop on 381 and from ffmpeg's pcm_mulaw on 851, always by one code and only for negative
   inputs. The noise pilot's telephone path used ffmpeg. Do not rely on bit-exactness with any implementation.
-- The resamplers are 2:1 only: a 31-tap Hamming-windowed sinc, cutoff 0.225 cycles per input sample, unity DC gain, zero
-  history at the clip edges. Their effect on recognition accuracy has not been measured.
-- Down2Stream and Up2Stream are stateful versions of down2 and up2 (chunked output equals one-shot output exactly).
+- The resamplers are 2:1 (down2, up2: a 31-tap Hamming-windowed sinc, cutoff 0.225 cycles per input sample) and 3:1
+  (down3, up3: 63 taps, cutoff 0.14), unity DC gain, zero history at the clip edges. Results are truncated toward zero, so a
+  constant level can come out one step low. The 3:1 filter is about 10 dB down at 7 kHz for a 48 kHz input (computed from
+  the taps, not measured on audio). Their effect on recognition accuracy has not been measured.
+- Down2Stream, Up2Stream, Down3Stream and Up3Stream are stateful versions of down2, up2, down3 and up3 (chunked output
+  equals one-shot output exactly).
 - A-law (alaw_encode, alaw_decode) follows ITU-T G.711 Tables 1a/1b. G.711 section 3.6 leaves the 16-bit scaling and decision-value ties to the
   equipment specification; here the exact magnitude is compared with 8 * decision value and an exact tie goes to the upper interval, the same
   rule as the mu-law encoder. It differs from audioop.lin2alaw on exactly the 127 negative decision values (always one code). Not a conformance claim.
