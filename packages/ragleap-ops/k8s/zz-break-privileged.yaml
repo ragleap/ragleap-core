@@ -1,0 +1,18 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zz-break-privileged
+  namespace: ragleap-core
+spec:
+  selector:
+    matchLabels: {app: zz-break}
+  template:
+    metadata:
+      labels: {app: zz-break}
+    spec:
+      containers:
+        - name: zz
+          image: busybox:1.36
+          securityContext:
+            privileged: true
+            readOnlyRootFilesystem: true
