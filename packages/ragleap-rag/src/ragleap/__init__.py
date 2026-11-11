@@ -42,11 +42,12 @@ from ragleap import transcription as _transcription
 from ragleap import video as _video
 from ragleap.transcription import TranscriptionConfig
 from ragleap import schema as _schema
+from ragleap.tenant import TenantRagLeap, TenantRequiredError
 
 logger = logging.getLogger(__name__)
 
 __version__ = "0.15.0"
-__all__ = ["RagLeap", "ProviderConfig", "EmbeddingConfig", "IngestResult", "TranscriptionConfig", "VectorBackend", "PgVectorBackend"]
+__all__ = ["RagLeap", "ProviderConfig", "EmbeddingConfig", "IngestResult", "TranscriptionConfig", "VectorBackend", "PgVectorBackend", "TenantRagLeap", "TenantRequiredError"]
 
 
 @dataclass
@@ -90,6 +91,7 @@ class RagLeap:
         pricing_table: Optional[Dict] = None,
         budget_usd_per_month: Optional[float] = None,
         budget_fallback: Optional[ProviderConfig] = None,
+        require_tenant: bool = False,
     ):
         """
         database_url is always required - conversation memory is
@@ -110,6 +112,7 @@ class RagLeap:
         self._on_answer = on_answer
         self._cost_tracker = CostTracker(pricing_table=pricing_table, budget_usd_per_month=budget_usd_per_month)
         self._budget_fallback = budget_fallback
+        self._require_tenant = bool(require_tenant)
 
         self._chunker = TextChunker(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
         self._embedder = EmbeddingService(embedder)
@@ -133,6 +136,22 @@ class RagLeap:
             default_max_tokens=default_max_tokens,
             max_context_chars=max_context_chars,
         )
+
+    def for_tenant(self, tenant_id: str) -> "TenantRagLeap":
+        """
+        Return a tenant-scoped view over this instance (same connection
+        pool and vector backend). Everything ingested through it is tagged
+        with metadata {"tenant_id": tenant_id}; every search filters on that
+        tag; session ids are prefixed with the tenant id; documents can only
+        be listed, deleted and updated if they carry the tag. With
+        require_tenant=True on the constructor, unscoped calls raise
+        TenantRequiredError. Documents ingested without a tenant tag are not
+        visible through a view.
+        """
+        import copy
+        inner = copy.copy(self)
+        inner._require_tenant = False
+        return TenantRagLeap(inner, tenant_id)
 
     def init_schema(self) -> None:
         """
@@ -854,3 +873,34 @@ class RagLeap:
                 yield piece
         finally:
             await task
+
+
+def _guard_unscoped(fn, name):
+    import functools
+    import inspect
+
+    message = name + "() needs a tenant scope: use rag.for_tenant(...) (RagLeap was built with require_tenant=True)"
+    if inspect.iscoroutinefunction(fn):
+        @functools.wraps(fn)
+        async def guarded(self, *args, **kwargs):
+            if self._require_tenant:
+                raise TenantRequiredError(message)
+            return await fn(self, *args, **kwargs)
+    else:
+        @functools.wraps(fn)
+        def guarded(self, *args, **kwargs):
+            if self._require_tenant:
+                raise TenantRequiredError(message)
+            return fn(self, *args, **kwargs)
+    return guarded
+
+
+for _name in (
+    "ingest", "ingest_url", "ingest_image", "ingest_audio", "ingest_video", "ingest_text",
+    "ask", "retrieve", "ask_stream", "get_history", "clear_session",
+    "list_documents", "delete_document", "update_document",
+    "aingest", "aingest_text", "aingest_url", "aingest_image", "aingest_audio", "aingest_video",
+    "ingest_batch", "aask", "aask_stream",
+):
+    setattr(RagLeap, _name, _guard_unscoped(getattr(RagLeap, _name), _name))
+del _name
