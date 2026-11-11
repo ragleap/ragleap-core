@@ -15,8 +15,6 @@ All notable changes are listed here. Format: Keep a Changelog.
 ### Fixed
 - The Bridge compared the requester and the approver as exact text, so a requester could approve its own proposal by changing the letter case of its id (#1337). Ids are now compared after Unicode NFKC normalisation and case folding.
 - If `stop()` landed during the dry run, the adapter's `apply()` was still called (#1339). The stop flag is now checked again right before the first adapter call. This narrows the window; it does not close it for a stop from another thread that lands between the check and the call.
-
-### Fixed
 - Intermittent `WinError 10053` on Windows (#1336): a refused request with a body the server did not read could end in a reset that destroyed the answer. After every answer with status 400 or above, the MCP server and the operator console now do a bounded "lingering close": stop sending, then read and discard what the client still sends, for at most 0.5 s and 1 MiB. Ten new tests (`tests/test_lingering_close.py`). This is a likely cause found by reading the code; it is **not verified on Windows**, and the console failure a Windows tester saw is not explained by it. The 0.0.3 refusal fix was not enough.
 
 ## [0.0.5] - 2026-11-08
