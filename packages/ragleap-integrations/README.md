@@ -10,7 +10,7 @@ pip install ragleap-integrations
 
 ## What this is (and isn't)
 
-v0.4.0 is an MCP client over **Streamable HTTP only**, and (new in 0.4.0) a UTCP
+v0.5.0 is an MCP client over **Streamable HTTP only**, and (since 0.4.0) a UTCP
 client for `http` manuals (`connect_utcp`, below). The *owner* configures
 servers and an exact `server.tool` allowlist; the model only supplies a tool's
 JSON arguments, never a URL, a token or a tool outside the allowlist. It does
@@ -151,7 +151,10 @@ allowlisted `http` tools as `ragleap_tools.Tool` objects with the same
 governance as `connect()`: an exact allowlist (no wildcard), every tool flagged
 for approval unless pre-approved, an optional `approve` hook, `on_event` audit
 events (marked `"protocol": "utcp"`, never carrying arguments or results) and
-constant error text. It returns the same `Connection`. See `docs/design/utcp.md`.
+constant error text. It returns the same `Connection`. See `docs/design/utcp.md`
+and `docs/design/utcp-auth.md`.
+
+New in 0.5.0: `allowed_query=[...]` and one accepted `auth` shape (below).
 
 - The owner names the manual URL, the tool names and the approved origins
   (`origins=[...]`; the manual's own origin is always approved). A tool whose
@@ -163,16 +166,25 @@ constant error text. It returns the same `Connection`. See `docs/design/utcp.md`
   the argument named by `body_field` becomes a JSON body, and the remaining
   arguments go in the query string, as UTCP defines. The owner's `token` is
   sent as a bearer token to approved origins only.
+- Auth block (0.5.0): a template may declare exactly this one shape: `auth_type`
+  "api_key", `location` "header", `var_name` "Authorization", `api_key` exactly
+  `Bearer ${NAME}`, no other key. It is accepted only because it describes what
+  this client already does; `NAME` is never looked up. Without a `token` the tool
+  is skipped. Any other auth block, and `auth_tools`, are skipped.
+- Static query (0.5.0): a URL may carry a query string only if you list each
+  parameter name in `allowed_query=["format"]` (at most 8 names; values are plain
+  tokens of letters, digits, `_`, `.`, `-`). A call argument with the same name is
+  refused. The default is empty: no query string, as in 0.4.0.
 - Skipped with a stated reason, never silently mis-called: any other call
-  template type (cli, text, file, ...), `header_fields`, a template with an
-  `auth` block, a `${NAME}` or `$NAME` placeholder anywhere (nothing is ever
+  template type (cli, text, file, ...), `header_fields`, a template with any
+  other `auth` block, a `${NAME}` or `$NAME` placeholder anywhere (nothing is ever
   substituted and nothing is read from the environment), a template field this
   version does not understand (for example `query_params`), a non-JSON request
-  body, a query string in the URL, and anything that is not an https URL on a
+  body, a query string you did not allow, and anything that is not an https URL on a
   public host. A document that is not a UTCP manual (an OpenAPI document, for
   example) is refused.
-- Not here: multi-tenant use (a `UtcpHub` would follow `McpHub`), OAuth, API
-  keys declared by a manual, OpenAPI conversion and every transport but `http`.
+- Not here: multi-tenant use (a `UtcpHub` would follow `McpHub`), OAuth, basic
+  auth, other API-key shapes, OpenAPI conversion and every transport but `http`.
 
 ## Trust model
 
@@ -217,8 +229,8 @@ handshake with protocol version 2025-06-18 only (an explicit allowlist, not
 
 ## Known limitations
 
-- UTCP (0.4.0): only `http` call templates of UTCP manuals; no OpenAPI
-  conversion, no auth blocks, no `header_fields`, no OAuth, no multi-tenant hub
+- UTCP (0.5.0): only `http` call templates of UTCP manuals; no OpenAPI
+  conversion, only one auth shape, no `header_fields`, no OAuth, no multi-tenant hub
   yet. The result is the response body text (capped); it is not parsed. The
   normative text of the UTCP specification was not read, only the project's
   documentation and reference clients (see `docs/design/utcp.md`).
@@ -245,7 +257,7 @@ handshake with protocol version 2025-06-18 only (an explicit allowlist, not
 
 ## Verification status
 
-- 0.4.0, not yet live-verified against a real UTCP server (see the changelog): 545 tests (the 331 earlier ones unchanged plus 184 for the UTCP client and 30 for the new request methods of the transport, which run against a real local TLS server; 541 passed and 4 skipped without `ragleap-security`); 127 of 127 deliberate breaks of the new code caught, plus one equivalent mutant.
+- 0.5.0: no tool call has been verified against a real UTCP server; discovery of a public manual was read on 2026-11-07, 08 and 09 (see the changelog). 626 tests in the development sandbox (545 earlier plus 81 new); 48 of 52 deliberate breaks of the new code caught, the other 4 equivalent. For 0.4.0 (kept for the record): 545 tests (the 331 earlier ones unchanged plus 184 for the UTCP client and 30 for the new request methods of the transport, which run against a real local TLS server; 541 passed and 4 skipped without `ragleap-security`); 127 of 127 deliberate breaks of the new code caught, plus one equivalent mutant.
 - 331 tests (the 275 earlier ones unchanged plus 56 new in 0.3.0: scope and
   token isolation, allowlists, policies, limits, events, audit, threads; 327
   passed and 4 skipped without `ragleap-security`); 40 of 40 deliberate breaks

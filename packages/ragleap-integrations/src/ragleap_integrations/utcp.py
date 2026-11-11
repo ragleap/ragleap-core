@@ -24,15 +24,27 @@ Trust model (the same as the MCP client in mcp.py):
   type is skipped with a stated reason.
 - No ${NAME} or $NAME placeholder is ever substituted, and nothing is read from
   the environment: a tool whose template contains one is skipped. Credentials
-  come only from the owner's code (token).
+  come only from the owner's code (token). The one place a placeholder may
+  appear is the exact auth block described next, where it is recognised and
+  never looked up.
+- Auth (0.5.0): a template may declare exactly one auth shape: auth_type
+  "api_key", location "header", var_name "Authorization", api_key "Bearer
+  ${NAME}" (NAME is ignored). It is accepted only because it describes what this
+  client already does: the owner's token is sent as "Authorization: Bearer
+  <token>" to approved origins. Without a token the tool is skipped. Any other
+  auth block is skipped.
+- Static query parameters (0.5.0): a URL may carry a query string only when the
+  owner lists each allowed parameter name in allowed_query. Values must be plain
+  tokens, a name is not repeated, and a name that is also an input property (or
+  an argument at call time) is refused. The default is empty: no query string.
 - Everything a manual says is untrusted text. It is not screened for prompt
   injection. Server error text is never put in a result; failures carry a
   constant message plus, at most, an HTTP status.
 
 Not supported in this version: OpenAPI documents (only UTCP manuals), call
-template types other than http, header_fields, auth blocks in a tool's
-template (the owner's token is sent as a bearer token to approved origins),
-non-JSON request bodies, variables, OAuth, streaming.
+template types other than http, header_fields, auth blocks other than the one
+exact shape above, query strings the owner did not allow, non-JSON request
+bodies, variables, OAuth, streaming.
 """
 
 from __future__ import annotations
@@ -44,7 +56,7 @@ import re
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
-from urllib.parse import quote, urlencode, urlsplit
+from urllib.parse import quote, urlencode, urlsplit, urlunsplit
 
 from ragleap_tools import Tool, ToolResult
 
@@ -70,6 +82,10 @@ _PLACEHOLDER = re.compile(r"\$\{|\$[A-Za-z_]")
 _IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _PATH_PARAM = re.compile(r"\{([^{}]*)\}")
 _HEADER_NAME = re.compile(r"^[A-Za-z0-9-]{1,64}$")
+_QUERY_NAME = re.compile(r"[A-Za-z0-9_.-]{1,32}")
+_QUERY_VALUE = re.compile(r"[A-Za-z0-9_.-]{1,64}")
+_AUTH_VALUE = re.compile(r"Bearer \$\{[A-Za-z_][A-Za-z0-9_]{0,63}\}")
+_AUTH_KEYS = frozenset({"auth_type", "api_key", "var_name", "location"})
 # Static headers a manual may not set: the owner's token, routing and framing are ours.
 _FORBIDDEN_HEADERS = frozenset({
     "authorization", "proxy-authorization", "cookie", "host", "content-length", "transfer-encoding",
@@ -85,6 +101,7 @@ _KNOWN_TEMPLATE_FIELDS = frozenset({
 })
 MAX_STATIC_HEADERS = 16
 MAX_HEADER_VALUE_CHARS = 512
+MAX_STATIC_QUERY = 8
 
 Transport = Callable[..., "_net.HttpResponse"]
 
@@ -148,13 +165,17 @@ class UtcpServerConfig:
     """One UTCP manual. url is where the manual is read (https, public host,
     checked again with DNS on every request). origins lists extra https
     origins its tools may call; the manual's own origin is always approved.
-    token is an optional static bearer token, sent only to approved origins."""
+    token is an optional static bearer token, sent only to approved origins.
+    allowed_query lists the static query parameter names its tools' URLs may
+    carry (default none: a URL with a query string is skipped)."""
 
     name: str
     url: str
     token: Optional[str] = None
     origins: Sequence[str] = ()
+    allowed_query: Sequence[str] = ()
     approved: frozenset = field(init=False, repr=False, default=frozenset())
+    approved_query: frozenset = field(init=False, repr=False, default=frozenset())
 
     def __post_init__(self) -> None:
         if not isinstance(self.name, str) or not _SERVER_NAME_RE.match(self.name):
@@ -172,6 +193,13 @@ class UtcpServerConfig:
         for origin in self.origins:
             approved.add(_origin_key(origin))
         self.approved = frozenset(approved)
+        if isinstance(self.allowed_query, str) or not isinstance(self.allowed_query, (list, tuple)) \
+                or len(self.allowed_query) > MAX_STATIC_QUERY \
+                or not all(isinstance(n, str) and _QUERY_NAME.fullmatch(n) for n in self.allowed_query) \
+                or len(set(self.allowed_query)) != len(self.allowed_query):
+            raise UtcpConfigError("allowed_query must be a list of at most %d distinct parameter names "
+                                  "(1-32 letters, digits, '_', '.' or '-')" % MAX_STATIC_QUERY)
+        self.approved_query = frozenset(self.allowed_query)
 
 
 @dataclass
@@ -188,6 +216,7 @@ class UtcpToolSpec:
     path_params: Tuple[str, ...] = ()
     body_field: Optional[str] = None
     headers: Dict[str, str] = field(default_factory=dict)
+    static_query: Tuple[Tuple[str, str], ...] = ()  # fixed by the manual, each name allowed by the owner
 
 
 @dataclass
@@ -261,6 +290,48 @@ def _check_headers(headers: Any) -> Dict[str, str]:
     return out
 
 
+def _auth_is_owner_bearer(auth: Any) -> bool:
+    """True only for the one auth block that describes what this client already
+    does (the owner's token as a bearer token). The placeholder name is never used."""
+    return (isinstance(auth, dict) and set(auth) == _AUTH_KEYS and auth["auth_type"] == "api_key"
+            and auth["location"] == "header" and auth["var_name"] == "Authorization"
+            and isinstance(auth["api_key"], str) and _AUTH_VALUE.fullmatch(auth["api_key"]) is not None)
+
+
+def _split_query(url: str, server: UtcpServerConfig, props: Dict[str, Any]) -> Tuple[str, Tuple[Tuple[str, str], ...]]:
+    """Take an owner-allowed static query string off a URL and refuse anything else.
+    Without allowed_query (the default) any query string is refused, as in 0.4.0."""
+    if _PLACEHOLDER.search(url):
+        raise _Skip("url contains a variable placeholder (not supported)")
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        raise _Skip("url is not an allowed https url")
+    if not parts.query:  # a bare "?" would be sent on as "??" (a 0.4.0 defect): refuse it
+        raise _Skip("url has a query string or a fragment")
+    if parts.fragment or not server.approved_query:
+        raise _Skip("url has a query string or a fragment")
+    fields = parts.query.split("&")
+    if len(fields) > MAX_STATIC_QUERY:
+        raise _Skip("url has too many query parameters")
+    pairs = []
+    for f in fields:
+        name, sep, value = f.partition("=")
+        if not sep or not _QUERY_NAME.fullmatch(name) or not value:
+            raise _Skip("url has a malformed query string")
+        if name not in server.approved_query:
+            raise _Skip("url has a query parameter the owner did not allow")
+        if not _QUERY_VALUE.fullmatch(value):
+            raise _Skip("url has a query parameter with an unusable value")
+        pairs.append((name, value))
+    names = [n for n, _ in pairs]
+    if len(set(names)) != len(names):
+        raise _Skip("url repeats a query parameter")
+    if any(n in props for n in names):
+        raise _Skip("a query parameter is also an input property")
+    return urlunsplit(parts._replace(query="")), tuple(pairs)
+
+
 def _check_tool(server: UtcpServerConfig, item: Dict[str, Any], cfg: McpConfig) -> UtcpToolSpec:
     template = item.get("tool_call_template")
     if not isinstance(template, dict):
@@ -272,8 +343,11 @@ def _check_tool(server: UtcpServerConfig, item: Dict[str, Any], cfg: McpConfig) 
     method = template.get("http_method")
     if method not in HTTP_METHODS:
         raise _Skip("http_method is missing or not supported")
-    if template.get("auth") is not None or template.get("auth_tools") is not None:
+    auth = template.get("auth")
+    if template.get("auth_tools") is not None or (auth is not None and not _auth_is_owner_bearer(auth)):
         raise _Skip("the template declares auth (not supported; the owner token is sent as a bearer token)")
+    if auth is not None and not server.token:
+        raise _Skip("the template declares auth but no token is configured")
     header_fields = template.get("header_fields")
     if header_fields not in (None, []):
         raise _Skip("header_fields is not supported")
@@ -285,7 +359,11 @@ def _check_tool(server: UtcpServerConfig, item: Dict[str, Any], cfg: McpConfig) 
     props = schema.get("properties", {})
     if not isinstance(props, dict):
         raise _Skip("inputs is not an object schema")
-    url, path_params = _check_url(template.get("url"), server, props)
+    raw_url = template.get("url")
+    static_query: Tuple[Tuple[str, str], ...] = ()
+    if isinstance(raw_url, str) and "?" in raw_url:
+        raw_url, static_query = _split_query(raw_url, server, props)
+    url, path_params = _check_url(raw_url, server, props)
     body_field = template.get("body_field")
     if body_field is not None:
         if not isinstance(body_field, str) or body_field not in props or body_field in path_params:
@@ -299,7 +377,8 @@ def _check_tool(server: UtcpServerConfig, item: Dict[str, Any], cfg: McpConfig) 
     description = item.get("description")
     description = description[: cfg.max_description_chars] if isinstance(description, str) else ""
     return UtcpToolSpec(server=server.name, name=item["name"], description=description, parameters=schema,
-                        method=method, url=url, path_params=path_params, body_field=body_field, headers=headers)
+                        method=method, url=url, path_params=path_params, body_field=body_field, headers=headers,
+                        static_query=static_query)
 
 
 def parse_manual(server: UtcpServerConfig, manual: Any, wanted: Sequence[str], cfg: McpConfig) -> UtcpDiscovery:
@@ -476,11 +555,12 @@ class UtcpClient:
         if spec.body_field is not None and arguments.get(spec.body_field) is not None:
             body = json.dumps(arguments[spec.body_field]).encode("utf-8")
             headers["Content-Type"] = "application/json"
-        pairs: List[Tuple[str, str]] = []
+        static = dict(spec.static_query)
+        pairs: List[Tuple[str, str]] = list(spec.static_query)
         for key, value in arguments.items():
             if key in spec.path_params or key == spec.body_field or value is None:
                 continue
-            if not isinstance(key, str) or isinstance(value, (dict, list)):
+            if not isinstance(key, str) or isinstance(value, (dict, list)) or key in static:
                 raise _Failure("bad_arguments")
             pairs.append((key, _scalar(value)))
         if pairs:
@@ -562,7 +642,7 @@ def make_utcp_tools(config: UtcpConfig, client: UtcpClient, specs: List[UtcpTool
 
 
 def connect_utcp(url: str, *, allow: Sequence[str], name: str = "utcp", token: Optional[str] = None,
-                 origins: Sequence[str] = (),
+                 origins: Sequence[str] = (), allowed_query: Sequence[str] = (),
                  approve: Optional[Callable[[str, str, Dict[str, Any]], bool]] = None,
                  pre_approved: Sequence[str] = (),
                  on_event: Optional[Callable[[Dict[str, Any]], None]] = None,
@@ -570,7 +650,8 @@ def connect_utcp(url: str, *, allow: Sequence[str], name: str = "utcp", token: O
     """Read one UTCP manual and return its allowlisted http tools. allow is a
     non-empty list of exact tool names (no wildcard). name prefixes the exposed
     tool names (name__tool). origins lists extra https origins the tools may
-    call (the manual's own origin is always approved). approve and
+    call (the manual's own origin is always approved). allowed_query lists the
+    static query parameter names a tool's URL may carry (default none). approve and
     pre_approved build an McpPolicy; limits go to the config. Raises
     McpConfigError (UtcpConfigError) or McpDiscoveryError (UtcpDiscoveryError):
     setup problems."""
@@ -579,7 +660,7 @@ def connect_utcp(url: str, *, allow: Sequence[str], name: str = "utcp", token: O
         raise UtcpConfigError("allow must be a non-empty list of tool names")
     if isinstance(pre_approved, str) or not all(isinstance(t, str) for t in pre_approved):
         raise UtcpConfigError("pre_approved must be a list of tool names")
-    server = UtcpServerConfig(name=name, url=url, token=token, origins=origins)
+    server = UtcpServerConfig(name=name, url=url, token=token, origins=origins, allowed_query=allowed_query)
     policy = None
     if approve is not None or pre_approved:
         try:
