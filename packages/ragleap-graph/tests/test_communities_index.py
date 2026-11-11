@@ -93,7 +93,7 @@ GOLDEN = {
     """),
     "member_names": squash("""
         MATCH (e:Entity)-[:IN_COMMUNITY]->(c:Community {composite_key: $community_id})
-        WHERE coalesce(e.user_id, '') = $user_id
+        WHERE e.namespace = $namespace AND coalesce(e.user_id, '') = $user_id
         RETURN e.display_name AS entity_name
         ORDER BY entity_name
         LIMIT $limit
@@ -418,7 +418,7 @@ def test_find_communities_can_include_member_names():
     result = g.find_communities(["Acme Corp"], namespace="ns", user_id="u1", include_members=True)
     assert kinds(g) == ["by_entity", "member_names"]
     assert result[0]["members"] == ["Acme Corp", "Globex Corp"]
-    assert g.driver.calls[1]["params"] == {"community_id": "k1", "user_id": "u1", "limit": 25}
+    assert g.driver.calls[1]["params"] == {"community_id": "k1", "namespace": "ns", "user_id": "u1", "limit": 25}
 
 
 def test_find_communities_with_only_unusable_names_asks_nothing():

@@ -8,6 +8,9 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 - Temporal relation edges, opt-in: `GraphIndex(temporal=True)`. A `RELATES_AS` edge now carries `valid_from`; when no document supports the relation any more it is closed (`valid_to` set) instead of deleted, and it is reopened when support returns (`valid_from` restarts, so an edge keeps one interval). With `temporal=True`, `find_relations()` and the community relation queries read only open edges. `find_relations(..., as_of=<timezone-aware datetime>)` returns the relations valid at that moment (edges without the properties count as always valid). Times are indexing times, not real-world times. With the default `temporal=False` every statement and result is unchanged; keep the same setting for writes and reads.
 
+### Fixed
+- Tenant isolation: `document_entities`, the community member-name lookup and `search_related_entities` now filter every entity or path node by namespace and user_id (they could return another tenant's entities only if an edge crossing tenants existed). New offline and live isolation tests.
+
 ## [0.10.0] - 2026-11-06
 
 ### Added
