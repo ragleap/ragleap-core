@@ -49,7 +49,7 @@ jobs:
       #   grafana/grafana  - base-image CRITICAL (brotli-libs, CVE-2026-111497); needs a Grafana image bump, tracked separately.
       #   grafana/promtail - end of life (Grafana ended Promtail on 2026-03-02); its replacement is Alloy, tracked separately.
       - name: Gate on CRITICAL
-        if: ${{ !startsWith(matrix.image, 'grafana/grafana:') && !startsWith(matrix.image, 'grafana/promtail:') }}
+        if: ${{ !startsWith(matrix.image, 'grafana/promtail:') }}
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ${{ matrix.image }}
