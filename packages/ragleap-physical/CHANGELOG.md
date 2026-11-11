@@ -10,6 +10,11 @@ All notable changes are listed here. Format: Keep a Changelog.
 - A Simplified Chinese README draft (`README.zh-CN.md`): AI-assisted, not reviewed by a native speaker. The language list now names English as the
   original and says that the Hindi and Tamil drafts are older and shorter than the English README.
 - A line in the Hindi and Tamil drafts that points to the English original and says the English text is the one to trust.
+- Known-gap tests (`tests/test_known_gaps.py`): three tests for gaps in the Bridge (#1337, #1338, #1339), written first. The one still open (#1338, a design question) is marked as an expected failure.
+
+### Fixed
+- The Bridge compared the requester and the approver as exact text, so a requester could approve its own proposal by changing the letter case of its id (#1337). Ids are now compared after Unicode NFKC normalisation and case folding.
+- If `stop()` landed during the dry run, the adapter's `apply()` was still called (#1339). The stop flag is now checked again right before the first adapter call. This narrows the window; it does not close it for a stop from another thread that lands between the check and the call.
 
 ## [0.0.5] - 2026-11-08
 
