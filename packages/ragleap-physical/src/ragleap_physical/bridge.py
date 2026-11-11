@@ -14,6 +14,7 @@ import functools
 import math
 import threading
 import time
+import unicodedata
 from collections import deque
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
@@ -43,6 +44,12 @@ class ApplyResult:
 
 class _StopRequested(Exception):
     """Internal: stop was requested while an apply was running."""
+
+
+def _same_identity(a: str, b: str) -> bool:
+    """Ids are the same person if they match after Unicode NFKC and case folding (letter case must not matter)."""
+    fold = lambda s: unicodedata.normalize("NFKC", s).casefold().strip()
+    return fold(a) == fold(b)
 
 
 def _locked(fn):
@@ -208,7 +215,7 @@ class Bridge:
             raise ApprovalError("approver must be a named person id") from None
         if proposal.digest() != rec["digest"]:
             raise ApprovalError("proposal differs from the validated one")
-        if approver == proposal.requested_by:
+        if _same_identity(approver, proposal.requested_by):
             self._log("rejected", proposal_id=proposal.proposal_id, code="self_approval")
             raise ApprovalError("the requester cannot approve its own proposal")
         if self._clock() > proposal.expires_at:
@@ -253,6 +260,8 @@ class Bridge:
             pred = self._adapter.dry_run(proposal.target, proposal.command, proposal.value, o.by_sim_time_s,
                                          self._env.max_steps)
             self._env.check_dry_run(proposal.target, pred)
+            if self._stop_flag.is_set():  # a stop that landed during the dry run: no command reaches the adapter
+                raise _StopRequested()
             rec["state"] = "dry_run_ok"
             self._applied_at.append(self._clock())
             self._adapter.apply(proposal.target, proposal.command, proposal.value)
