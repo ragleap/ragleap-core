@@ -23,7 +23,6 @@ misconfigurations:
       - "ragleap-ops/k8s/app-deployment.yaml"
       - "ragleap-ops/k8s/db-backup-cronjob.yaml"
       - "ragleap-ops/k8s/db-deployment.yaml"
-      - "ragleap-ops/k8s/neo4j-backup-cronjob.yaml"
       - "ragleap-ops/k8s/voice-deployment.yaml"
     statement: "Baseline 2026-11-10: a finding that already existed when this gate was switched on; not reviewed individually yet. Do not add entries to hide a new finding."
   - id: KSV-0118
