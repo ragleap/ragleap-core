@@ -1,0 +1,42 @@
+# Trivy baseline for the config scan in .github/workflows/trivy.yml.
+# The gate fails on any HIGH or CRITICAL finding that is not listed here, so it blocks NEW findings.
+# Limit: an entry is per rule and per file, so a new finding of the same rule inside a file listed below is NOT caught.
+# Entries need a written reason. Removing an entry turns that finding red again.
+misconfigurations:
+  - id: KSV-0014
+    paths:
+      - "ragleap-ops/helm/ragleap-ops/templates/neo4j-deployment.yaml"
+      - "ragleap-ops/k8s/neo4j-deployment.yaml"
+    statement: "The neo4j container: readOnlyRootFilesystem was live-tested on kind and confirmed unsafe, so it is not enabled (packages/ragleap-ops/CHANGELOG.md). Other containers in these files (for example fix-permissions) were not reviewed individually."
+  - id: KSV-0014
+    paths:
+      - "ragleap-app-chart/helm/ragleap-app-chart/templates/deployment.yaml"
+      - "ragleap-observability/helm/ragleap-observability/templates/alertmanager-deployment.yaml"
+      - "ragleap-observability/helm/ragleap-observability/templates/grafana-deployment.yaml"
+      - "ragleap-observability/helm/ragleap-observability/templates/loki-deployment.yaml"
+      - "ragleap-observability/helm/ragleap-observability/templates/postgres-exporter-deployment.yaml"
+      - "ragleap-observability/helm/ragleap-observability/templates/prometheus-deployment.yaml"
+      - "ragleap-observability/helm/ragleap-observability/templates/promtail-daemonset.yaml"
+      - "ragleap-ops/helm/ragleap-ops/templates/app-deployment.yaml"
+      - "ragleap-ops/helm/ragleap-ops/templates/db-deployment.yaml"
+      - "ragleap-ops/helm/ragleap-ops/templates/voice-deployment.yaml"
+      - "ragleap-ops/k8s/app-deployment.yaml"
+      - "ragleap-ops/k8s/db-backup-cronjob.yaml"
+      - "ragleap-ops/k8s/db-deployment.yaml"
+      - "ragleap-ops/k8s/neo4j-backup-cronjob.yaml"
+      - "ragleap-ops/k8s/voice-deployment.yaml"
+    statement: "Baseline 2026-11-10: a finding that already existed when this gate was switched on; not reviewed individually yet. Do not add entries to hide a new finding."
+  - id: KSV-0118
+    paths:
+      - "ragleap-app-chart/helm/ragleap-app-chart/templates/deployment.yaml"
+      - "ragleap-observability/helm/ragleap-observability/templates/postgres-exporter-deployment.yaml"
+      - "ragleap-observability/helm/ragleap-observability/templates/promtail-daemonset.yaml"
+      - "ragleap-ops/helm/ragleap-ops/templates/app-deployment.yaml"
+      - "ragleap-ops/helm/ragleap-ops/templates/db-deployment.yaml"
+      - "ragleap-ops/helm/ragleap-ops/templates/neo4j-deployment.yaml"
+      - "ragleap-ops/helm/ragleap-ops/templates/voice-deployment.yaml"
+      - "ragleap-ops/k8s/app-deployment.yaml"
+      - "ragleap-ops/k8s/db-backup-cronjob.yaml"
+      - "ragleap-ops/k8s/neo4j-backup-cronjob.yaml"
+      - "ragleap-ops/k8s/voice-deployment.yaml"
+    statement: "Baseline 2026-11-10: a finding that already existed when this gate was switched on; not reviewed individually yet. Do not add entries to hide a new finding."
