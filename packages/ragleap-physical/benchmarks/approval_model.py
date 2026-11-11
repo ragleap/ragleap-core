@@ -8,13 +8,18 @@ The conformance replay is intentionally limited to one proposal and real
 Bridge operations. Multiple-proposal sequences, idempotent clear calls made
 while the model is not stopped, and the test-only change_digest and expire
 events are outside that comparison domain and can produce mapping differences.
-The model abstracts time as a discrete expiry event and does not model
-concurrency or adapter/simulation behavior.
+The original P1-P5 model abstracts time as a discrete expiry event. The
+issue #1337-#1339 extension adds identity normalization, stop invalidation as
+a pending design property, and explicit stop-race slots. The adapter-call
+boundary race is modelled explicitly; general concurrency and simulator
+dynamics remain outside the model.
 
 Run with: python benchmarks/approval_model.py
 Standard library only; no TLA+ or simulator is required.
 """
 from collections import deque
+import dataclasses
+import unicodedata
 from dataclasses import dataclass, replace
 from typing import Optional, Tuple
 
@@ -206,6 +211,129 @@ def main():
     print("Exploration: breadth-first; events:", ", ".join(EVENTS))
     print("Coverage limits: time is a discrete expire event; concurrency/races are not modeled;")
     print("the adapter, simulation dynamics, and outcome verification are abstracted away.")
+
+
+
+# ---- Issue #1337-#1339: identity and stop semantics extension
+
+def identity_key(value: str) -> str:
+    """Canonical comparison key: compatibility normalization + caseless match."""
+    if not isinstance(value, str):
+        raise TypeError("identity must be text")
+    return unicodedata.normalize("NFKC", value).casefold()
+
+
+@dataclass(frozen=True)
+class Approval:
+    proposal_id: str
+    requester: str
+    approver: str
+    digest: str
+    valid: bool = True
+
+
+@dataclass(frozen=True)
+class StopModel:
+    stopped: bool = False
+    approvals: tuple[Approval, ...] = ()
+    command_after_stop: bool = False
+
+
+def model_event(state: StopModel, event: str, approval: Approval | None = None) -> StopModel:
+    """Apply P6/P7 abstract event; events intentionally expose the P7 race slot."""
+    if event == "stop":
+        return dataclasses.replace(state, stopped=True,
+                                   approvals=tuple(dataclasses.replace(a, valid=False) for a in state.approvals))
+    if event == "clear":
+        return dataclasses.replace(state, stopped=False)
+    if event == "approve":
+        if approval is None:
+            raise ValueError("approval required")
+        if identity_key(approval.requester) == identity_key(approval.approver):
+            return state
+        return dataclasses.replace(state, approvals=state.approvals + (approval,))
+    if event == "dry_run_complete":
+        return state
+    if event == "stop_after_recheck_before_adapter":
+        return dataclasses.replace(state, stopped=True)
+    if event == "adapter_command":
+        return dataclasses.replace(state, command_after_stop=state.command_after_stop or state.stopped)
+    raise ValueError("unknown event: " + event)
+
+
+def p6_violation(state: StopModel) -> bool:
+    """P6 violation: an approval remains valid after stop."""
+    return state.stopped and any(a.valid for a in state.approvals)
+
+
+def p7_violation(state: StopModel) -> bool:
+    """P7 violation: an adapter command occurs while stopped."""
+    return state.command_after_stop
+
+
+def p8_self_approval(requester: str, approver: str) -> bool:
+    """True if identities denote the same person under P8 semantics."""
+    return identity_key(requester) == identity_key(approver)
+
+
+# Small, explicit multi-proposal replay domain. Each row is a sequence of
+# (operation, proposal-slot, actor-override) tuples. Keeping named sequences
+# makes any disagreement directly reproducible and reviewable.
+MULTI_PROPOSAL_SEQUENCES = (
+    ("P8-case-self-approval", ("propose", "A", ""), ("approve", "A", "EMPLOYEE:OPS")),
+    ("P8-form-self-approval", ("propose", "A", "employee:ops"), ("approve", "A", "ｅｍｐｌｏｙｅｅ:ｏｐｓ")),
+    ("P6-stop-invalidates-A", ("propose", "A", ""), ("approve", "A", "person:alice"),
+     ("stop", "", ""), ("clear", "", ""), ("apply", "A", "")),
+    ("P6-stop-invalidates-multiple", ("propose", "A", ""), ("propose", "B", ""),
+     ("approve", "A", "person:alice"), ("approve", "B", "person:bob"),
+     ("stop", "", ""), ("clear", "", ""), ("apply", "A", "")),
+)
+
+
+def replay_multi_proposal(bridge_factory, propose_fn, *, sequences=MULTI_PROPOSAL_SEQUENCES):
+    """Run named multi-proposal sequences; return exact model/Bridge disagreements.
+
+    `bridge_factory()` returns (bridge, adapter, clock). `propose_fn(bridge)`
+    creates a real proposal. Each scenario gets a fresh Bridge.
+    """
+    from ragleap_physical import ApprovalError, SafetyStop
+    findings = []
+    for named in sequences:
+        name, *events = named
+        bridge, adapter, _clock = bridge_factory()
+        proposals = {}
+        approvals = {}
+        invalidated = set()
+        stopped = False
+        for index, (event, slot, actor) in enumerate(events, 1):
+            model_answer = "accept"
+            bridge_answer = "accept"
+            try:
+                if event == "propose":
+                    proposals[slot] = propose_fn(bridge)
+                elif event == "approve":
+                    p = proposals[slot]
+                    requester = p.requested_by
+                    model_answer = "reject" if p8_self_approval(requester, actor) else "accept"
+                    bridge.approve(p, actor)
+                    approvals[slot] = actor
+                elif event == "stop":
+                    bridge.stop(); stopped = True; invalidated.update(approvals)
+                elif event == "clear":
+                    bridge.clear_stop(); stopped = False
+                elif event == "apply":
+                    p = proposals[slot]
+                    model_answer = "reject" if stopped or slot in invalidated else "accept"
+                    if stopped:
+                        raise SafetyStop("model expects stopped")
+                    bridge.apply(p)
+            except (ApprovalError, SafetyStop):
+                bridge_answer = "reject"
+            if model_answer != bridge_answer:
+                findings.append({"sequence": name, "step": index, "event": event,
+                                 "proposal": slot or None, "model": model_answer,
+                                 "bridge": bridge_answer})
+    return findings
 
 
 if __name__ == "__main__":
