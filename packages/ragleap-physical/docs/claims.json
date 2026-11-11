@@ -263,6 +263,106 @@
    "evidence": [],
    "note": "External text. The English README does not say it; the wiki does.",
    "external": true
+  },
+  {
+   "id": "C19",
+   "claim": "compared after Unicode NFKC normalisation and case folding",
+   "where": "CHANGELOG.md",
+   "status": "verified",
+   "evidence": [
+    {
+     "type": "test",
+     "ref": "tests/test_known_gaps.py::test_self_approval_with_other_letter_case_is_refused"
+    }
+   ],
+   "note": "Fixed in PR 1340 (issue 1337). Deliberate break checked: restoring the exact-text comparison fails the test. REAL, 2026-11-11, simulation only."
+  },
+  {
+   "id": "C20",
+   "claim": "The stop flag is now checked again right before the first adapter call",
+   "where": "CHANGELOG.md",
+   "status": "verified",
+   "evidence": [
+    {
+     "type": "test",
+     "ref": "tests/test_known_gaps.py::test_no_adapter_command_when_stop_lands_during_the_dry_run"
+    }
+   ],
+   "note": "PR 1340 (issue 1339). Narrowed, not closed: see the next row. Deliberate break checked. REAL, 2026-11-11."
+  },
+  {
+   "id": "C21",
+   "claim": "it does not close it for a stop from another thread that lands between the check and the call",
+   "where": "CHANGELOG.md",
+   "status": "limitation",
+   "evidence": [],
+   "note": "A full answer needs adapters to refuse commands while stopped. Issue 1339 stays open."
+  },
+  {
+   "id": "C22",
+   "claim": "The one still open (#1338, a design question) is marked as an expected failure.",
+   "where": "CHANGELOG.md",
+   "status": "limitation",
+   "evidence": [
+    {
+     "type": "test",
+     "ref": "tests/test_known_gaps.py::test_stop_invalidates_an_approval_given_before_it"
+    }
+   ],
+   "note": "An approval given before stop() can still be used after clear_stop(). The maintainer decides the design."
+  },
+  {
+   "id": "C23",
+   "claim": "read and discard what the client still sends, for at most 0.5 s and 1 MiB",
+   "where": "CHANGELOG.md",
+   "status": "verified",
+   "evidence": [
+    {
+     "type": "test",
+     "ref": "tests/test_lingering_close.py::test_mcp_server_discards_an_oversize_refused_body_after_answering"
+    },
+    {
+     "type": "test",
+     "ref": "tests/test_lingering_close.py::test_console_discards_an_oversize_refused_body_after_answering"
+    },
+    {
+     "type": "test",
+     "ref": "tests/test_lingering_close.py::test_linger_is_bounded_in_bytes"
+    },
+    {
+     "type": "test",
+     "ref": "tests/test_lingering_close.py::test_linger_is_bounded_in_time_when_the_peer_stays_silent"
+    },
+    {
+     "type": "test",
+     "ref": "tests/test_lingering_close.py::test_an_answer_that_is_not_an_error_does_not_linger"
+    }
+   ],
+   "note": "PR 1341 (issue 1336). Checked on Linux only: five deliberate breaks caught. REAL, 2026-11-11. This row says nothing about Windows."
+  },
+  {
+   "id": "C24",
+   "claim": "not verified on Windows",
+   "where": "CHANGELOG.md",
+   "status": "limitation",
+   "evidence": [],
+   "note": "Linux keeps the answer after the close, so it cannot show the symptom. A Windows retest of commit 99c47b1b or later is requested (issue 1114)."
+  },
+  {
+   "id": "C25",
+   "claim": "the console failure a Windows tester saw is not explained by it",
+   "where": "CHANGELOG.md",
+   "status": "limitation",
+   "evidence": [],
+   "note": "The console path drains small bodies, so the oversize-body cause does not explain it. Open."
+  },
+  {
+   "id": "C26",
+   "claim": "The 0.0.3 refusal fix was not enough.",
+   "where": "CHANGELOG.md",
+   "status": "limitation",
+   "evidence": [],
+   "note": "A Windows tester still saw WinError 10053 on 0.0.3 and 0.0.5."
   }
  ]
 }
