@@ -24,6 +24,7 @@ from .bridge import Bridge
 from .errors import (ApprovalError, CapabilityError, ConfigError, EnvelopeViolation, PhysicalError, SafetyStop,
                      ValidationError)
 from .observation import actor
+from ._linger import linger
 
 MAX_BODY = 4096
 MIN_TOKEN = 24
@@ -71,8 +72,8 @@ def make_console(bridge: Bridge, tokens: Mapping[str, str], host: str = "127.0.0
             pass
 
         def _drain(self) -> None:
-            """Read and discard a small unread request body before a refusal, so the client gets the answer and not a connection reset
-            (Windows clients report WinError 10053 when a server closes a socket that still holds unread data)."""
+            """Read and discard a small unread request body before a refusal. A body larger than the cap is not read here: after the refusal is
+            sent, the lingering close (see _linger.py) discards it, so the client gets the answer and not a connection reset."""
             if getattr(self, "_body_done", False):
                 return
             self._body_done = True
@@ -100,6 +101,11 @@ def make_console(bridge: Bridge, tokens: Mapping[str, str], host: str = "127.0.0
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
+            if status >= 400:
+                # lingering close: the client can read the refusal even when it is still sending a body we did not read
+                # (Windows clients report WinError 10053 when the socket is closed with unread data)
+                self.server.lingered_bytes = getattr(self.server, "lingered_bytes", 0) + linger(self.connection)
+                self.server.lingered_calls = getattr(self.server, "lingered_calls", 0) + 1
 
         def _err(self, status: int, code: str, message: str, extra: Optional[dict] = None) -> None:
             self._send(status, {"error": {"code": code, "message": message}}, extra)
