@@ -1,4 +1,4 @@
-"""Acoustic measurements of the Parler `description` option, English and Hindi (Colab GPU, gated model). Not a listening test.
+"""Acoustic measurements of the Parler `description` option, English and Hindi by default (STYLE_LANGS adds ta, te, ml and kn) (Colab GPU, gated model). Not a listening test.
 Needs: ragleap-voice installed, indic-parler-tts pulled (python -m ragleap_voice models pull indic-parler-tts --allow-unverified, with your own
 Hugging Face token), then the token DELETED and the session restarted, and a Python 3.11 worker environment as in issue 990:
 uv venv --python 3.11 /content/parler-env, then install parler-tts at the commit named there into it. On the 2026-11-09 Colab run the worker failed
@@ -6,7 +6,7 @@ at the tokenizer with "cannot import name runtime_version from google.protobuf" 
 that was tried once, on one install. The script refuses to run while a token variable is set (Colab's own COLAB_JUPYTER_TOKEN is ignored).
 For each style (neutral, happy, sad, angry, calm) and language (en, hi) it generates STYLE_TAKES takes (default 2) with the engine's description option,
 saves the WAVs, and prints duration, RMS level and a median F0 from a plain autocorrelation estimate over voiced 40 ms frames.
-The sentences and descriptions are the author's own wording, and the Hindi sentence has not been reviewed by a fluent speaker. No seed is set.
+The sentences and descriptions are the author's own wording, and none of the Hindi, Tamil, Telugu, Malayalam or Kannada sentences has been reviewed by a fluent speaker. No seed is set.
 One run, one sentence per language: this separates nothing from the model's sampling randomness and says nothing about whether a clip sounds
 like the emotion asked for. That needs listeners (issue 756)."""
 import io, json, os, sys, wave, zipfile
@@ -29,6 +29,16 @@ STYLES = {
     "calm": "A female speaker delivers speech in a calm, relaxed tone with a slow speed and a steady pitch. " + BASE,
 }
 TEXT = {"en": "The meeting has been moved to tomorrow morning.", "hi": "बैठक कल सुबह के लिए टाल दी गई है।"}
+TEXT.update({
+    "ta": "கூட்டம் நாளை காலைக்கு மாற்றப்பட்டுள்ளது.",
+    "te": "సమావేశం రేపు ఉదయానికి వాయిదా వేయబడింది.",
+    "ml": "യോഗം നാളെ രാവിലത്തേക്ക് മാറ്റിയിരിക്കുന്നു.",
+    "kn": "ಸಭೆಯನ್ನು ನಾಳೆ ಬೆಳಿಗ್ಗೆಗೆ ಮುಂದೂಡಲಾಗಿದೆ.",
+})
+LANGS = [l.strip() for l in os.environ.get("STYLE_LANGS", "en,hi").split(",") if l.strip()]
+_unknown = [l for l in LANGS if l not in TEXT]
+if _unknown:
+    sys.exit("unknown language(s) in STYLE_LANGS: %s" % _unknown)
 os.makedirs(OUT, exist_ok=True)
 
 
@@ -68,7 +78,7 @@ def f0_stats(x, rate):
 
 
 rows = []
-for lang, text in TEXT.items():
+for lang, text in [(l, TEXT[l]) for l in LANGS]:
     for style, desc in STYLES.items():
         for take in range(1, TAKES + 1):
             b = wav_bytes(synthesize(text, language=lang, engine="parler", allow_unverified=True, options={"description": desc}))
