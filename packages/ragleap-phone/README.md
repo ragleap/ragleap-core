@@ -1,6 +1,6 @@
 # ragleap-phone (planned)
 
-**Status: planned.** Only a package skeleton exists: a frame type and the adapter interfaces, with unit tests. No backend, no calls, nothing released.
+**Status: planned.** Only a package skeleton exists: a frame type, the adapter interfaces and a sample-rate converter, with unit tests. No backend, no calls, nothing released.
 
 The goal: phone calls for RagLeap without Twilio, as independent of any single provider as possible. This package would handle calls, SIP and audio. Speech stays in `ragleap-voice`.
 
