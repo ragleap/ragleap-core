@@ -5,6 +5,73 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-11
+
+### Added
+
+- `allowed_query` on `UtcpServerConfig` and `connect_utcp`: the owner lists the
+  static query parameter names a tool's URL may carry (at most 8 names, each
+  1-32 of letters, digits, `_`, `.`, `-`, all distinct; a string, a set or bad
+  names raise `UtcpConfigError`). Default empty: exactly the 0.4.0 behavior.
+  Each pair in the URL must be `name=value` with a value of 1-64 of letters,
+  digits, `_`, `.`, `-`; a repeated name, a name that is also an input property
+  and any placeholder are refused. `UtcpToolSpec.static_query` keeps the pairs;
+  they are sent first, then the arguments. An argument with the same name as a
+  static parameter is refused at call time (`bad_arguments`, nothing sent).
+- One accepted `auth` shape: `auth_type` "api_key", `location` "header",
+  `var_name` "Authorization", `api_key` exactly `Bearer ${NAME}` and no other
+  key. It is accepted only because it describes what this client already does
+  (the owner's `token` as `Authorization: Bearer <token>` to approved origins).
+  `NAME` is never looked up, in the environment or anywhere. Without a `token`
+  the tool is skipped ("the template declares auth but no token is configured",
+  hint "pass token"). Any other auth block, and `auth_tools`, are skipped as in
+  0.4.0. A query parameter the owner did not allow has the hint "list the name
+  in allowed_query".
+- 81 tests (`tests/test_utcp_auth.py`), including a fixture of the shape observed
+  on every tool of a real public manual on 2026-11-08 and 2026-11-09.
+
+### Fixed
+
+- A tool URL ending in a bare `?` was accepted by 0.4.0 and a call went out as
+  `.../o??x=1`. It is now skipped ("url has a query string or a fragment").
+
+### Verified
+
+- 626 tests pass in the development sandbox (the 545 of 0.4.0 unchanged plus 81 new).
+- 48 of 52 deliberate breaks of the new code are caught by the tests. The other
+  4 are equivalent mutants: another check on the same path gives the identical
+  outcome (empty query value; fragment after a query, which the URL check also
+  refuses; a missing `=`, which the empty-value check also refuses; a string
+  `allowed_query`, which the list/tuple check also refuses).
+- A first round found one real test gap (a call argument named like a static
+  parameter was only stopped by the toolkit's schema check, not by the client);
+  it is closed.
+
+### Verified (after 0.4.0, recorded here because published files cannot change)
+
+- 2026-11-07 15:39 UTC: the public manual at https://api.unified.to/utcp was read
+  (HTTP 200, 33 tools, all `http`); 0.4.0 offered none of the 20 tried, every
+  one skipped because the template declares auth. 2026-11-08 13:05 UTC: 35 tools,
+  one uniform shape (POST, the auth block above, a `?format=...` query,
+  `body_field` `arguments`). 2026-11-09 03:19 UTC: 37 tools, each input schema one
+  required object property `arguments`. Counts and shapes only; no credential and
+  no tool call.
+- Correction: the 0.4.0 statement that no manual in the current format was found
+  was wrong after 2026-11-07; one was found.
+
+### Not verified
+
+- Any tool call against a real UTCP server. Discovery only was observed.
+- The normative text of the UTCP specification (not read).
+- Whether a vendor returns the same manual when a bearer token is sent.
+
+### Known limitations
+
+- Not supported: other auth types (basic, OAuth2, other `api_key` shapes),
+  `header_fields`, OpenAPI conversion, variable substitution, a multi-tenant
+  UTCP hub. Tools whose input schema exceeds `max_schema_chars` are still skipped.
+- `scripts/utcp_live.py` makes two GET requests (its 0.4.0 docstring said one).
+
 ## [0.4.0] - 2026-11-04
 
 ### Added

@@ -3,9 +3,10 @@
 
     python scripts/utcp_live.py https://api.example.com/utcp
     python scripts/utcp_live.py URL --allow get_order,list_orders --origins https://data.example.net
+    python scripts/utcp_live.py URL --allowed-query format
     python scripts/utcp_live.py URL --allow get_order --call get_order --args '{"id": "1"}'
 
-Without --call it only reads the manual (one GET) and prints what connect_utcp() would offer;
+Without --call it only reads the manual (two GETs: a raw one, then one inside connect_utcp) and prints what connect_utcp() would offer;
 nothing else is requested. With --call it makes exactly one tool call, which you chose, so only
 use it on a tool that is safe to call. The check is repository-only (not in the wheel). Everything
 a server sends is printed with repr(): it is untrusted text. No token is read from the environment.
@@ -22,6 +23,7 @@ def main(argv=None):
     ap.add_argument("url")
     ap.add_argument("--allow", help="comma-separated tool names (default: every http tool in the manual, at most 20)")
     ap.add_argument("--origins", default="", help="comma-separated extra https origins the tools may call")
+    ap.add_argument("--allowed-query", default="", help="comma-separated static query parameter names the URLs may carry")
     ap.add_argument("--call", help="call this one tool after discovery")
     ap.add_argument("--args", default="{}", help="JSON arguments for --call")
     a = ap.parse_args(argv)
@@ -55,7 +57,7 @@ def main(argv=None):
         print("no allowlist to try"); return 1
     origins = [x for x in a.origins.split(",") if x]
     try:
-        conn = connect_utcp(a.url, allow=allow, origins=origins)
+        conn = connect_utcp(a.url, allow=allow, origins=origins, allowed_query=[x for x in a.allowed_query.split(",") if x])
     except (McpConfigError, McpDiscoveryError) as e:
         print("connect_utcp refused:", e); return 1
     print(conn.report())

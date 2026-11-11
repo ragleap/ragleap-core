@@ -40,6 +40,8 @@ _HINTS = {
     "not offered by the manual": "check the tool name",
     "inputs schema is too large": "raise max_schema_chars",
     "url is outside the approved origins": "list the origin in origins",
+    "the template declares auth but no token is configured": "pass token",
+    "url has a query parameter the owner did not allow": "list the name in allowed_query",
 }
 
 

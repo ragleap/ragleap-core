@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ragleap-integrations"
-version = "0.4.0"
+version = "0.5.0"
 description = "MCP and UTCP clients that turn allowlisted tools on remote servers into ragleap-tools Tool objects. Streamable HTTP for MCP, http call templates for UTCP, standard library plus ragleap-tools, owner-configured allowlist, pinned and bounded network access. BYOK, no vendor lock-in."
 readme = "README.md"
 license = "MIT"

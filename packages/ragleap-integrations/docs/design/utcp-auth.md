@@ -84,3 +84,18 @@ One more read-only GET (no credential, no tool call, counts only) was made on 20
 - Size: the `inputs` schemas range from 221 to 14,799 characters (median 528). The 0.4.0 check skips a schema larger than `max_schema_chars` (line 283 of `utcp.py`). The default for the MCP client is 10,000 characters and `UtcpConfig` extends `McpConfig`, so the same default is expected here (not read). At least the largest tool would then be skipped with "inputs schema is too large" until the limit is raised, whatever is decided above. This is an expected, stated skip, not a blocker for the other tools. How many tools exceed 10,000 characters was not counted.
 - What a model would supply is therefore one nested object, `arguments`, which 0.4.0 would send as the JSON body. Whether that is useful to a model was not assessed.
 - Still not verified: any tool call against a real UTCP server, the normative specification, the full known-fields set.
+
+## Addendum 2026-11-11: decisions taken and what 0.5.0 implements
+
+The maintainer decided on 2026-11-09 (the assistant's recommendations were accepted): **Decision 1 = B** (accept exactly one auth shape), **Decision 2 = D** (the owner lists the allowed static query parameter names, `allowed_query`), **Decision 3 = no test credential** (discovery only). 0.5.0 implements B and D.
+
+- **B.** An `auth` block is accepted only when it has exactly the keys `auth_type`, `api_key`, `var_name`, `location` with `api_key`, `header`, `Authorization` and a value that fully matches `Bearer ${NAME}`. The name is never looked up. Without a configured token the tool is skipped ("the template declares auth but no token is configured"). Every other block and `auth_tools` keep the 0.4.0 reason. `auth: null` means no auth.
+- **D.** `allowed_query` (default empty, so 0.4.0 behavior). Static pairs are stored in `UtcpToolSpec.static_query`, sent before the arguments; an argument with a static name is refused at call time. The rules and the skip reasons are listed in the CHANGELOG.
+- A defect found while testing: a URL ending in a bare `?` was accepted by 0.4.0 and sent as `??`. 0.5.0 skips it.
+
+**Corrections to this note (found 2026-11-08, recorded here instead of editing the text above):**
+
+1. The order of checks given above (the `body_field` rule before the URL check) is wrong. In 0.4.0 the order is: template present, type `http`, known fields, method, auth, `header_fields`, `inputs` is an object, size, URL check (`_check_url`: placeholder, query or fragment, parameter outside the path, approved origin), then the `body_field` rules, then headers. In 0.5.0 the auth check also covers the no-token case, and the static-query split runs just before `_check_url`.
+2. The note says the call path of the token was not read. It was: the token is sent as `Authorization: Bearer <token>` at discovery and on every call (`utcp.py` lines 405-406 and 494-495 in 0.4.0).
+
+**Still not verified:** any tool call against a real UTCP server; the normative specification; the full known-fields set. With no token, a live check of 0.5.0 against the manual can show only the "no token configured" outcome.
