@@ -94,6 +94,7 @@ with Transcriber() as tr:
                 hyp = normalize(tr.transcribe(to_wav(audios[c]), language=code, allow_unverified=True, options=OPTS).text).split()
                 e = edits(ref, hyp); E[c].append(e)
                 rows.append({"language": lang, "condition": c, "clip": len(W) - 1, "errors": e, "words": len(ref)})
+            print("%s clip %d/%d done, %.0f s elapsed" % (lang, len(W), len(clips), time.time() - t0), flush=True)
         Wn = np.array(W, float); idx = rng.integers(0, len(W), (B, len(W))); den = Wn[idx].sum(1)
         En = {c: np.array(E[c], float) for c in COND}
         for c in COND:
