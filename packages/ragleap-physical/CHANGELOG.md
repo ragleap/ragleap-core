@@ -11,6 +11,9 @@ All notable changes are listed here. Format: Keep a Changelog.
   original and says that the Hindi and Tamil drafts are older and shorter than the English README.
 - A line in the Hindi and Tamil drafts that points to the English original and says the English text is the one to trust.
 
+### Fixed
+- Intermittent `WinError 10053` on Windows (#1336): a refused request with a body the server did not read could end in a reset that destroyed the answer. After every answer with status 400 or above, the MCP server and the operator console now do a bounded "lingering close": stop sending, then read and discard what the client still sends, for at most 0.5 s and 1 MiB. Ten new tests (`tests/test_lingering_close.py`). This is a likely cause found by reading the code; it is **not verified on Windows**, and the console failure a Windows tester saw is not explained by it. The 0.0.3 refusal fix was not enough.
+
 ## [0.0.5] - 2026-11-08
 
 ### Added
