@@ -43,6 +43,7 @@ ACTION_TOOLS = {
     "fetch_page": {"channel": "fetch"},
     "list_files": {"channel": "files_list"},
     "read_file": {"channel": "files_read"},
+    "preview_change": {"channel": "files_preview"},
     "request_access": {"channel": "files_request"},
 }
 
@@ -199,6 +200,19 @@ def available_tools() -> Dict[str, str]:
             "about 12000 bytes at most). target must be exactly one of these grant names: " + grant_list + ". "
             "content is the file path inside the grant, for example reports/q3.txt."
         )
+    # A preview of a change to a text file, only for grants made with write mode. It changes nothing.
+    try:
+        from core import file_access as _fa_write
+        writable = _fa_write.write_grant_names()
+    except Exception:
+        writable = []
+    if writable:
+        tools["preview_change"] = (
+            "Show what replacing the whole text of one file inside a folder the owner granted with write access "
+            "would change, as a diff. It only shows a preview: nothing is written. target must be exactly one of "
+            "these grant names: " + ", ".join(writable) + ". content is the file path inside the grant on the first "
+            "line, then the complete new text of the file from the second line. At most 2000 characters in total."
+        )
     # Opt-in: FILE_TOOLS_ENABLED=true plus SANDBOX_TOKEN. Offered even when no folder is granted yet.
     try:
         from core import file_access as _file_access
@@ -332,6 +346,18 @@ def _validate_plan(plan: Dict, tools: Dict[str, str]) -> Optional[Dict]:
         content = "".join(c for c in content if c.isprintable())[:300].strip()
         if not content:
             return None
+    elif tool == "preview_change":
+        from core import file_access
+        if target not in file_access.write_grant_names():
+            return None
+        raw = str(plan.get("content", "") or "").strip()
+        if len(raw) > MAX_ACTION_CONTENT:
+            return None  # never preview a silently truncated text
+        first, _, text = raw.partition("\n")
+        cleaned = file_access.clean_rel("preview", first)
+        if cleaned is None:
+            return None
+        content = cleaned + "\n" + text
     elif tool in ("list_files", "read_file"):
         from core import file_access
         if target not in file_access.grant_names():

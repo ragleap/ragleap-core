@@ -172,7 +172,11 @@ GRANTS_FILE = os.environ.get("SANDBOX_GRANTS_FILE", "/grants/grants.json")
 FILE_READ_BYTES = 12000
 FILE_LIST_MAX = 100
 MAX_REL_CHARS = 300
-FILE_OPS = ("list", "read")
+FILE_OPS = ("list", "read", "preview")
+PREVIEW_TEXT_MAX = 8000      # characters of proposed text a preview accepts (a request body is capped at 16 KiB)
+PREVIEW_OLD_MAX = 200000     # bytes of the existing file a preview will read
+PREVIEW_DIFF_LINES = 200
+PREVIEW_DIFF_CHARS = 6000
 GRANT_NAME_RE = re.compile(r"[a-z0-9][a-z0-9_-]{0,31}")
 DENY_NAMES = frozenset({".env", ".netrc", ".pgpass", ".git-credentials", ".htpasswd", "credentials",
                         "credentials.json", ".ssh", ".gnupg", ".aws", ".kube", ".docker", ".git"})
@@ -299,6 +303,9 @@ OP = os.environ.get("OP", "")
 REL = os.environ.get("REL", "")
 MAXB = int(os.environ.get("MAXB", "12000"))
 MAXN = int(os.environ.get("MAXN", "100"))
+OLDMAX = int(os.environ.get("OLDMAX", "200000"))
+DIFFL = int(os.environ.get("DIFFL", "200"))
+DIFFC = int(os.environ.get("DIFFC", "6000"))
 
 def out(obj, code=0):
     sys.stdout.write(json.dumps(obj, ensure_ascii=False))
@@ -350,6 +357,50 @@ try:
             res["text"] = res["text"][: len(res["text"]) // 2]
             res["truncated"] = True
         out(res)
+    if OP == "preview":
+        # Read-only: shows what writing NEW to this file would change. Nothing is written.
+        import difflib
+        new_text = os.environ.get("NEW", "")
+        if target == BASE or os.path.isdir(target):
+            out({"error": "not a file"}, 3)
+        old_b = None
+        old_text = ""
+        if os.path.exists(target):
+            if not os.path.isfile(target):
+                out({"error": "not a file"}, 3)
+            if os.stat(target).st_size > OLDMAX:
+                out({"error": "that file is too large to preview (limit %d bytes)" % OLDMAX}, 3)
+            with open(target, "rb") as f:
+                old_b = f.read(OLDMAX + 1)
+            if len(old_b) > OLDMAX:
+                out({"error": "that file is too large to preview (limit %d bytes)" % OLDMAX}, 3)
+            if b"\x00" in old_b[:2048]:
+                out({"error": "that is a binary file"}, 3)
+            try:
+                old_text = old_b.decode("utf-8")
+            except UnicodeDecodeError:
+                out({"error": "that file is not UTF-8 text"}, 3)
+        elif not os.path.isdir(os.path.dirname(target)):
+            out({"error": "the folder does not exist"}, 3)
+        added_nl = False
+        if old_text.endswith("\n") and new_text and not new_text.endswith("\n"):
+            new_text += "\n"
+            added_nl = True
+        new_b = new_text.encode("utf-8")
+        shown_rel = "".join(ch if ch.isprintable() else "?" for ch in REL)[:200]
+        diff = list(difflib.unified_diff(old_text.splitlines(True), new_text.splitlines(True),
+                                         ("a/" + shown_rel) if old_b is not None else "/dev/null", "b/" + shown_rel, n=2))
+        body = diff[2:]
+        added = sum(1 for ln in body if ln.startswith("+"))
+        removed = sum(1 for ln in body if ln.startswith("-"))
+        text = "".join(ln if ln.endswith("\n") else ln + "\n" for ln in diff[:DIFFL])
+        cut = len(diff) > DIFFL
+        if len(text) > DIFFC:
+            text, cut = text[:DIFFC], True
+        out({"op": "preview", "exists": old_b is not None, "old_size": None if old_b is None else len(old_b),
+             "new_size": len(new_b), "old_sha256": None if old_b is None else hashlib.sha256(old_b).hexdigest(),
+             "new_sha256": hashlib.sha256(new_b).hexdigest(), "identical": old_b is not None and old_b == new_b,
+             "added_final_newline": added_nl, "added": added, "removed": removed, "diff": text, "diff_truncated": cut})
     out({"error": "unknown operation"}, 2)
 except OSError as e:
     out({"error": "could not read: " + e.__class__.__name__}, 3)
@@ -360,11 +411,14 @@ FILE_READER = (_READER_TEMPLATE
                .replace("__SUFFIXES__", json.dumps(list(DENY_SUFFIXES))))
 
 
-def build_file_spec(grant, op, rel):
+def build_file_spec(grant, op, rel, text=None):
     """build_spec() plus exactly one read-only bind mount of the granted folder. Nothing else changes."""
     spec = build_spec("")
     spec["Cmd"] = ["python", "-I", "-B", "-c", FILE_READER]
     spec["Env"] = ["OP=" + op, "REL=" + rel, "MAXB=%d" % FILE_READ_BYTES, "MAXN=%d" % FILE_LIST_MAX]
+    if op == "preview":
+        spec["Env"] += ["NEW=" + (text or ""), "OLDMAX=%d" % PREVIEW_OLD_MAX, "DIFFL=%d" % PREVIEW_DIFF_LINES,
+                        "DIFFC=%d" % PREVIEW_DIFF_CHARS]
     spec["HostConfig"]["Mounts"] = [{"Type": "bind", "Source": grant["path"], "Target": "/data", "ReadOnly": True}]
     return spec
 
@@ -383,10 +437,15 @@ def file_op(payload):
     problem = rel_problem(rel, allow_empty=(op == "list"))
     if problem:
         return 400, {"error": problem}
+    text = payload.get("text")
+    if op == "preview" and (not isinstance(text, str) or "\x00" in text or len(text) > PREVIEW_TEXT_MAX):
+        return 400, {"error": "text must be text, at most %d characters" % PREVIEW_TEXT_MAX}
     grant = next((g for g in active_grants() if g["name"] == name), None)
     if grant is None:
         return 404, {"error": "unknown or expired grant"}
-    res = _run_spec(build_file_spec(grant, op, rel))
+    if op == "preview" and grant["mode"] != "write":
+        return 403, {"error": "this grant is read-only"}
+    res = _run_spec(build_file_spec(grant, op, rel, text if op == "preview" else None))
     try:
         parsed = json.loads(res.get("stdout") or "")
     except ValueError:
