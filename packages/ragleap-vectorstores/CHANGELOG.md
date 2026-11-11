@@ -5,6 +5,16 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- Tenant filtering: `tenant_id` is now a filterable field in `RedisBackend` (TAG field), `OpenSearchBackend` (keyword, also mapped on existing indexes) and `LanceDBBackend` (nullable column, added to existing tables). Chunks without a tenant tag never match a `tenant_id` filter.
+
+### Changed
+- `RedisBackend` and `OpenSearchBackend` now raise `ValueError` for filter keys they cannot filter on. Before, Redis ignored them (so a filter such as `{"tenant_id": ...}` searched every tenant) and OpenSearch silently matched nothing. `LanceDBBackend` and `UpstashBackend` validate filter keys too.
+- A Redis index created before this change has no `tenant_id` field: filtering by `tenant_id` on it raises `RuntimeError`; use a new `index_name`.
+
+### Fixed
+- `ChromaBackend.insert_chunk`: caller metadata can no longer overwrite `document_id`, `document_name`, `chunk_index` or `token_count`.
+
 ## [0.6.0] - 2026-10-22
 
 ### Upgrade note

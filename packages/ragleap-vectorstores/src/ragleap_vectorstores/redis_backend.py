@@ -41,12 +41,11 @@ Design notes:
 - KNOWN LIMITATION, stated honestly rather than silently ignored: RediSearch
   requires fields to be declared in the index schema up front - unlike
   Chroma's `where=` which accepts arbitrary metadata keys, this backend can
-  only filter search_dense() by `document_id` (declared as a TAG field,
-  since that's the actual filter used by update/delete flows elsewhere in
-  ragleap-rag). Additional keys in metadata_filter are accepted but ignored
-  for filtering purposes - they do NOT raise an error, but they also do not
-  narrow results. This mirrors supports_sparse()'s "don't claim a capability
-  that isn't there" rule rather than pretending full metadata filtering.
+  only filter search_dense() by `document_id` and `tenant_id` (both TAG fields).
+  Any other key in metadata_filter raises ValueError: such keys used to be
+  ignored silently, which is unsafe for tenant isolation. An index created
+  before tenant_id existed has no such field; filtering by tenant_id on it
+  raises RuntimeError (use a new index_name).
 - TAG field values must have RediSearch's special characters escaped in
   query strings (verified: unescaped hyphens in a UUID document_id inside a
   TAG query silently return zero results rather than erroring, since RediSearch
@@ -127,6 +126,7 @@ class RedisBackend(VectorBackend):
         self.key_prefix = key_prefix or f"ragleap:{index_name}:chunk:"
         self._client = None
         self._dimensions = None
+        self._tenant_field = True  # False only when an existing index was created without the tenant_id field
         self._lock = threading.Lock()
 
         registry_path = registry_path or os.path.join(
@@ -185,7 +185,8 @@ class RedisBackend(VectorBackend):
             )
 
         try:
-            self._client.ft(self.index_name).info()
+            info = self._client.ft(self.index_name).info()
+            self._tenant_field = "tenant_id" in repr(info)
             logger.info(f"RedisBackend: index '{self.index_name}' already exists, reusing it")
             return
         except Exception:
@@ -193,6 +194,7 @@ class RedisBackend(VectorBackend):
 
         schema = (
             TagField("document_id"),
+            TagField("tenant_id"),
             TextField("document_name"),
             NumericField("chunk_index"),
             NumericField("token_count"),
@@ -236,6 +238,7 @@ class RedisBackend(VectorBackend):
                     "text": text,
                     "vector": vector_bytes,
                     "metadata": json.dumps(metadata or {}),
+                    **({"tenant_id": str(metadata["tenant_id"])} if metadata and metadata.get("tenant_id") is not None else {}),
                 },
             )
 
@@ -246,8 +249,22 @@ class RedisBackend(VectorBackend):
             return []
 
         filter_clause = "*"
-        if metadata_filter and "document_id" in metadata_filter:
-            filter_clause = f"(@document_id:{{{_escape_tag(metadata_filter['document_id'])}}})"
+        if metadata_filter:
+            unknown = sorted(set(metadata_filter) - {"document_id", "tenant_id"})
+            if unknown:
+                raise ValueError(
+                    f"RedisBackend can only filter by document_id and tenant_id, got {unknown}; "
+                    "other keys used to be ignored silently, which is unsafe for tenant isolation"
+                )
+            if "tenant_id" in metadata_filter and not self._tenant_field:
+                raise RuntimeError(
+                    f"RedisBackend: index '{self.index_name}' was created without a tenant_id field; "
+                    "use a new index_name to enable tenant filtering"
+                )
+            filter_clause = " ".join(
+                f"(@{key}:{{{_escape_tag(metadata_filter[key])}}})"
+                for key in ("document_id", "tenant_id") if key in metadata_filter
+            )
 
         query_vec = np.array(embedding, dtype=np.float32).tobytes()
         q = (
