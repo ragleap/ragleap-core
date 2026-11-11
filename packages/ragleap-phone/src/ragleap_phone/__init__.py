@@ -2,6 +2,7 @@
 
 from .adapter import Adapter, Call, Capabilities, Event, EVENT_KINDS, new_call_id
 from .frame import Frame
+from .resample import Resampler, SUPPORTED_RATE_PAIRS
 
 __version__ = "0.0.0"
-__all__ = ["Adapter", "Call", "Capabilities", "Event", "EVENT_KINDS", "Frame", "new_call_id", "__version__"]
+__all__ = ["Adapter", "Call", "Capabilities", "Event", "EVENT_KINDS", "Frame", "Resampler", "SUPPORTED_RATE_PAIRS", "new_call_id", "__version__"]
