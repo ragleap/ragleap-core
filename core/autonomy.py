@@ -246,6 +246,9 @@ def _send_via_channel(channel: str, target: str, content: str) -> str:
         elif channel == "files_read":
             from core.file_access import read_file
             return read_file(target, content)
+        elif channel == "files_preview":
+            from core.file_access import preview_change
+            return preview_change(target, content)
         elif channel == "files_request":
             from core.file_access import access_request_text
             return access_request_text(target)
