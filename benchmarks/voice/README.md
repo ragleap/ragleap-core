@@ -532,3 +532,29 @@ What it shows: at the default the Hindi clips were split into more utterances th
 Coverage is the share of each clip's duration between a `speech_start` and its `speech_end`. A segment ends at its last speech window, so the hangover itself is not counted, but a segment still open when the stream ends is closed at the end of the stream, so at long hangovers trailing silence is counted: coverage is not a measure of speech kept.
 
 Limits: 30 clean read-speech clips per language, one run; it counts utterances only and assumes that one read sentence should be one utterance, which was not checked (a merged pause may have been a real break); no noise, no real calls, and no other languages; untuned probability and window count. No default is recommended: what suits real speech and real calls has not been measured.
+
+## 3:1 resampling round trip: word error on FLEURS (one run)
+
+Question: does the 3:1 low-pass in `down3` and `up3` (63 taps, cutoff 0.14 cycles per input sample) change Whisper large-v3 word error? Script: `colab_resample3_benchmark.py`. It needs ragleap-voice from the main branch, because `down3` and `up3` are not in a PyPI release.
+
+Setup (2026-11-11): the first 30 FLEURS `test` clips (CC-BY-4.0) each of en_us, es_419 and ru_ru; Whisper large-v3 through `Transcriber`, device auto, Tesla T4 on Colab, Python 3.13.16; ragleap-voice installed from main at commit bf53076a2f3e8bc7fa846f68228489bbe5a4b471 (version string 0.3.6). Conditions: `clean`; `round_48k` is `up3` (16 to 48 kHz) then `down3` (48 to 16 kHz); `round_8k` is `down2` then `up2` with no codec, as a reference for the 2:1 pair. Intervals are 95% bootstrap intervals over clips (2000 resamples). Self-check on the first English clip: SNR against the clean clip 39.0 dB (48 kHz round trip) and 30.0 dB (8 kHz round trip).
+
+| Language | Clean WER (interval) | 48 kHz round trip, change vs clean | 8 kHz round trip, change vs clean |
+|---|---|---|---|
+| English | 5.5% (3.9 to 7.6) | 5.2% (3.6 to 7.3), -0.3 [-1.1, +0.3] | 6.4% (4.6 to 8.8), +0.9 [-0.1, +2.4] |
+| Spanish | 2.5% (0.9 to 5.1) | 2.8% (1.0 to 5.5), +0.3 [+0.0, +0.9] | 2.8% (1.0 to 5.6), +0.3 [+0.0, +0.6] |
+| Russian | 5.7% (3.5 to 8.6) | 5.8% (3.4 to 9.0), +0.2 [-0.4, +0.7] | 12.8% (4.4 to 25.6), +7.1 [-0.7, +20.5] |
+
+What it shows:
+
+- The 48 kHz round trip changed word error by 0.3 points or less in each language, and every interval includes zero or touches it. No effect of the 3:1 filter was measurable here.
+- The filter is about 10 dB down at 7 kHz and about 50 dB down at 8 kHz for a 48 kHz input (computed from the taps, not measured on audio), so it removes the top of the band. On these clips that did not change the word error measurably.
+- The 8 kHz reference shows small changes in English and Spanish. The Russian change (+7.1, interval -0.7 to +20.5) comes from one clip: clip 29 went from 0 errors clean to 45 errors on 52 words at 8 kHz, and the only other positive change among the 30 clips is one error in clip 27 (4 of 30 clips changed at all). What the recogniser wrote for clip 29 was not read and the audio was not listened to, so the cause is unknown. Whether the Russian jump in the phone-line section above has the same source was not checked.
+- The clean numbers equal those of the phone-line section above (English 5.5, Spanish 2.5, Russian 5.7).
+
+Limits (read before quoting any number):
+
+- One run, one recogniser (Whisper large-v3), three languages, 30 clips per language: intervals are wide, and the Russian 8 kHz cell shows how one clip moves a result.
+- Read speech, clean recordings. The round trips are filters applied by our own pure-Python code to 16 kHz clips: no Opus, no codec, no packet loss, not real LiveKit audio. No noise was added.
+- Word error only. No latency, no listening test. The per-clip CSV and the JSON summary are kept by the maintainer and are not in the repository.
+- No comparison with any other system.
