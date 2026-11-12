@@ -35,6 +35,10 @@ class InboundAudio:
         decoded = self._decode(bytes(payload))
         return self._rs.process(Frame(_to_pcm(decoded), PHONE_RATE, timestamp_ns))
 
+    def silence(self, n_samples, timestamp_ns):
+        """Feed n_samples of digital silence at 8 kHz, for packets that were lost. Independent of the law."""
+        return self._rs.process(Frame(bytes(2 * n_samples), PHONE_RATE, timestamp_ns))
+
     def finish(self):
         """Flush the filter tail as a last Frame (possibly empty)."""
         return self._rs.finish()
