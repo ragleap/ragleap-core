@@ -204,3 +204,23 @@ def test_inbound_silence_is_law_independent_zeros():
         out = ia.silence(160, 5).to_samples()
         out.extend(ia.finish().to_samples())
         assert len(out) == 320 and not any(out)
+
+
+def test_flush_playback_pads_the_partial_packet_with_silence_of_the_law():
+    from ragleap_phone import g711
+    for law, enc in (("ulaw", g711.ulaw_encode), ("alaw", g711.alaw_encode)):
+        async def main():
+            c = RtpCall(_cfg(law=law), Clock())
+            for i in range(5):
+                await c.send_audio(Frame(bytes(640), 16000, i))
+            assert c.has_partial_playback()
+            n = 0
+            while c.pop_datagram() is not None:
+                n += 1
+            assert n == 4
+            c.flush_playback()
+            d = rtp.parse(c.pop_datagram(), rtp.PAYLOAD_TYPES[law])
+            assert len(d.payload) == 160 and d.payload[-1:] == enc([0]) and not c.has_partial_playback()
+            c.flush_playback()
+            assert c.pop_datagram() is None
+        _run(main())
