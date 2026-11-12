@@ -3,7 +3,7 @@
 All notable changes to `ragleap-memory` are documented here. Format
 loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [0.3.1] - 2026-11-11
+## [0.3.1] - 2026-11-12
 
 Design: #1294. Encrypted export and import. No schema change. No new cryptography: every byte is encrypted and decrypted by `ragleap_security.crypto` (AES-256-GCM); this package only frames the file.
 
