@@ -10,7 +10,7 @@ data:
       - name: Prometheus
         type: prometheus
         access: proxy
-        url: http://ragleap-prometheus:9090
+        url: http://ragleap-prometheus:9091
         isDefault: true
       {{- if .Values.loki.enabled }}
       - name: Loki
