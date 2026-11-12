@@ -168,7 +168,7 @@ def parallel_refusals(n):
 
 def test_ten_parallel_refusals_from_clients_that_close_all_get_their_answer():
     results, elapsed = parallel_refusals(10)
-    assert results == ["HTTP/1.0 413 Request Entity Too Large"] * 10, results
+    assert [r[:12] for r in results] == ["HTTP/1.0 413"] * 10, results  # the status code, not the reason phrase (Python 3.13 renamed it)
     assert elapsed < 20.0
 
 
