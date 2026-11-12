@@ -5,6 +5,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.5] - 2026-11-12
+
 ### Changed
 
 - Grafana image pinned to 12.4.15 (was 12.4.12). The 12.4.12 image carried one CRITICAL finding with a fix available, in its Alpine base layer (brotli-libs 1.2.0-r1, CVE-2026-111497, fixed in 1.2.1-r0; Trivy image scan of 2026-11-09). Trivy on 12.4.15 shows no fixable CRITICAL: the CRITICAL gate step passed on this image (workflow run 43199344988), and an earlier scan of the same tag (run 43024362905) printed 2 HIGH and 0 CRITICAL rows with a fix available. Chart install, upgrade and uninstall with the new image on Kubernetes v1.34.11, v1.36.4 and v1.37.0: all checks passed, including Grafana health (database ok), admin login, Prometheus and Loki datasource health, and no panic or fatal lines in the Grafana log, after install and after upgrade, with 0 level=error lines (workflow run 43199378315). Not verified: an in-place upgrade from an existing 12.4.12 database to 12.4.15 (the install test upgrades with the same image, so login on an existing database after the image change was not re-checked), and behaviour on a long-running cluster with real data.
