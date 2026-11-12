@@ -132,3 +132,60 @@ Added by the current owner; the text above is unchanged. Evidence tags as in sec
 - [verified, GitHub, 2026-10-21] The jambonz organisation's python-sdk repository declares no licence, so the line in section 5 saying "a community Python SDK exists" should read: exists, licence not declared (not reusable until one is added).
 - [verified, GitHub, 2026-10-21] heplify-server (AGPL-3.0) and the rtpengine repository in the jambonz organisation (GPL-3.0; whether it is a fork was not checked) are copyleft; Asterisk, Kamailio and OpenSIPS are GPL-licensed (see the design note). None may be bundled without a licence review; running them as separate services is the plan.
 - [unverified] Whether the open 0.9.x line runs without any licence key or online check, and whether it is maintained to parity with the 11.x line. A hands-on test on a throwaway machine is needed.
+
+## Updates (2026-11-11)
+
+Added by the current owner; the text above is unchanged. Evidence tags as in section 0, plus **[tested]** for what unit tests or CI run. Everything tested so far uses synthetic data: nothing has been tested with a real call, a real PBX or a real trunk.
+
+### What exists now
+
+- [verified, repository] `packages/ragleap-phone/` is a package, not only docs: `pyproject.toml` (hatchling, no runtime dependencies), the MIT licence, a changelog, and in `src/ragleap_phone/`:
+  - `frame.py`: `Frame`, PCM 16-bit mono with its own sample rate and timestamp.
+  - `adapter.py`: the adapter contract (`Adapter`, `Call`, `Capabilities`, `Event`); a call id is always made on our side.
+  - `resample.py`: `Resampler` between 16 kHz and 8 kHz and between 16 kHz and 48 kHz.
+  - `g711.py`: mu-law and A-law, copied from `ragleap-voice` with the same caveats: the mu-law encoder and the A-law tables are not verified against the standard, and no conformance is claimed.
+  - `audiopath.py`: `InboundAudio` and `OutboundAudio`, caller G.711 bytes to 16 kHz frames and back.
+  - `rtp.py`: parsing and building of RTP packets for G.711, and a `Receiver` that applies the per-packet rules.
+  - `endpoint.py`: `EndpointConfig` and `RtpCall`, the call logic of an RTP media endpoint (source check before parsing, rate limit, timeouts, gap filling, outbound packets, counters only).
+  - `udp.py`: `RtpMediaEndpoint`, the UDP transport for one call. Loopback by default; another address needs an explicit opt-in and warns that the media is not encrypted or cryptographically authenticated.
+- [tested] 187 unit tests pass on the maintainer's server (Python 3.10, with the opt-in loopback test on and the `ragleap-voice` source on the path). The CI job `ragleap-phone-tests` runs them on Python 3.10 and 3.12 (PR 1364), including a step that compares the copied filters and G.711 code with `ragleap-voice`'s, so the two copies cannot drift unnoticed. The tests use hand-built packets, a fake clock and a fake transport; the one real-socket test (two sockets of our own on 127.0.0.1) is opt-in.
+- [verified, repository] Design notes in `docs/design/`: `phase0-interface.md` (adapter contract, audio and event contract, transport authentication requirement, backend comparison table), `phase0-adapter-mapping.md` (jambonz and LiveKit mapped onto the contract; records a 3:1 resampling gap) and `phase0-rtp-endpoint.md` (the RTP endpoint: what it accepts, refuses and never logs).
+- [tested, one run] A benchmark of the 3:1 resampling filter (`benchmarks/voice/README.md`, section "3:1 resampling round trip") found no measurable change in Whisper large-v3 word error on 30 clean read-speech clips each of English, Spanish and Russian. One run, wide intervals, no codec, not real call audio.
+
+### Decisions since October
+
+1. [plan, decided] The first adapter is a media-only RTP endpoint (no signalling), because it needs no vendor, no licence key and no extra package. A SIP server (Asterisk, FreeSWITCH, Kamailio with rtpengine or another) sets calls up and tells the operator where media goes.
+2. [decided] `ragleap-phone` has no dependency on `ragleap-voice` for audio helpers: the resampling filters and the G.711 code are copies, guarded by comparison tests. Speech models and the engines API (#762) stay in `ragleap-voice`, as in section 2; the copy is only the audio helpers.
+3. [decided] The endpoint accepts media only from an operator-configured address and port, never learns a source from packets, and refuses RTP header extensions in this version. Listening defaults to 127.0.0.1.
+
+### Phases, honestly
+
+| Phase | Status |
+|---|---|
+| 0 Design | Written: the interface, the adapter mapping and the RTP endpoint design are merged. Not complete: latency, authentication behaviour and rate limits of the compared backends are still "to test", and the jambonz licence-key question is open. |
+| 1 Provider interface | The interface exists and is tested. The Twilio code has not been moved into an adapter, so phase 1 is not done. |
+| 2 Self-hosted SIP backend | Not done. A media endpoint exists, but there is no signalling and no real call has been answered. |
+| 3 Local speech | Not started in this package. |
+| 4 On-premises guide | Not started. |
+
+### Not built
+
+- SIP signalling (INVITE, SDP, BYE). Because of this, `hangup()` stops our media and ends the call object but cannot end the phone call; how the endpoint tells the SIP server to hang up is open.
+- Several calls at once, port allocation.
+- DTMF (RFC 4733 telephone-event packets), SRTP, RTCP, a jitter buffer.
+- Any test with real traffic: no PBX, no trunk, no packet capture. Parsing is tested against hand-written bytes, which shows self-consistency and not interoperability.
+- The timing numbers (100 packets per second, 10 s idle timeout, 3600 s maximum call, 100 ms flush) are untested starting points.
+
+### What was read in the backend notes
+
+- [read in documentation, not run] jambonz: the `listen` verb streams call audio over a WebSocket as L16 PCM; jambonz decodes G.711 itself. Details in `phase0-interface.md` section 6.
+- [read in code, not run] LiveKit SIP (`livekit/sip`): decodes G.711 and Opus itself, uses a room rate of 48000 and publishes to the room as an Opus track; the agent side's resampling and the latency are not read.
+- [unverified, a hint only] A code search of the jambonz feature server for licence-key terms found no source file, which is not proof that the open 0.9.x line runs without a key.
+
+### What to do next (suggestion)
+
+1. A throwaway machine with Asterisk or FreeSWITCH (never production): one call into `RtpMediaEndpoint` on loopback or a private network, with a packet capture, to fix parsing against real traffic and to answer the open questions (extensions, SSRC changes, ports behind NAT). Report what was run and what was not.
+2. Check whether the current Twilio channel validates Twilio's request signature (section 7, still [unverified]).
+3. Move the Twilio code behind the adapter contract (phase 1), with existing behaviour unchanged.
+4. Decide with the voice lead whether the copied audio helpers should become one shared module after all (the alternative to decision 2).
+5. Section 13 above still says the README states that the package has no code. The README now says that only a skeleton and the pieces listed here exist, with no SIP signalling and nothing tested against a real PBX or trunk.
