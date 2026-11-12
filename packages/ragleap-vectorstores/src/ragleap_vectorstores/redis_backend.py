@@ -261,10 +261,11 @@ class RedisBackend(VectorBackend):
                     f"RedisBackend: index '{self.index_name}' was created without a tenant_id field; "
                     "use a new index_name to enable tenant filtering"
                 )
-            filter_clause = " ".join(
-                f"(@{key}:{{{_escape_tag(metadata_filter[key])}}})"
+            # One parenthesised prefilter group: RediSearch rejects two groups in front of =>[KNN ...]
+            filter_clause = "(" + " ".join(
+                f"@{key}:{{{_escape_tag(metadata_filter[key])}}}"
                 for key in ("document_id", "tenant_id") if key in metadata_filter
-            )
+            ) + ")"
 
         query_vec = np.array(embedding, dtype=np.float32).tobytes()
         q = (

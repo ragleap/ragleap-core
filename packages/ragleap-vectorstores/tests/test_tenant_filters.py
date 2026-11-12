@@ -303,3 +303,12 @@ def test_chroma_insert_without_metadata_still_stores_the_chunk_fields(chroma):
 def test_lancedb_rejects_unknown_filter_keys(lance, key):
     with pytest.raises(ValueError, match="can only filter by"):
         lance.search_dense(VEC, 10, {key: "v"})
+
+
+def test_redis_combined_filters_are_one_parenthesised_prefilter(redis_backend):
+    """Found by the real-server test: two separate (...) groups before =>[KNN ...] are a RediSearch syntax error."""
+    redis_backend.search_dense(VEC, 5, {"document_id": "d1", "tenant_id": "acme"})
+    assert redis_backend._client.queries[-1].startswith("(@document_id:{d1} @tenant_id:{acme})=>[KNN"), \
+        redis_backend._client.queries[-1]
+    redis_backend.search_dense(VEC, 5, {"tenant_id": "acme"})
+    assert redis_backend._client.queries[-1].startswith("(@tenant_id:{acme})=>[KNN")
