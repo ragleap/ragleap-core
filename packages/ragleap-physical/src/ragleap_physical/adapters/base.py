@@ -26,6 +26,8 @@ class Adapter(ABC):
     not a finite number, and for an unknown target or command, and changes nothing. An observe-only adapter raises
     ``ValueError``, ``PermissionError`` or ``NotImplementedError`` from ``apply()`` and ``dry_run()`` and never returns.
     ``stop()`` and ``clear_stop()`` never raise, and the observation keeps the same entities after both.
+    A stopped control adapter raises ``ValueError`` from ``apply()`` and changes nothing until ``clear_stop()`` is called
+    (checked by tests/test_adapter_stop_refusal.py). The Bridge cannot stop a call it has already made: the adapter must refuse.
     """
 
     @property

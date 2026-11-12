@@ -209,6 +209,8 @@ class MujocoServoAdapter(MujocoAdapter):
                       site_min=tuple(box["lo"]) if box["lo"] else None, site_max=tuple(box["hi"]) if box["hi"] else None)
 
     def apply(self, target: str, command: str, value: float) -> None:
+        if self._stopped:
+            raise ValueError("the adapter is stopped: clear the stop first")
         a, _, value = self._need(target, command, value)
         self._d.ctrl[a] = value
 

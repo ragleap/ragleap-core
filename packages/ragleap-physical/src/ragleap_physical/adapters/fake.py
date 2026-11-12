@@ -76,6 +76,8 @@ class FakeJointAdapter(Adapter):
         return DryRun(pos, max_vel, max_force, step * self.dt >= until_sim_time_s - 1e-9)
 
     def apply(self, target: str, command: str, value: float) -> None:
+        if self.stopped:
+            raise ValueError("the adapter is stopped: clear the stop first")
         if target != "joint_1" or command != "set_position_target":
             raise ValueError("unsupported target or command")
         value = _finite_value(value)
@@ -170,6 +172,8 @@ class FakeArmAdapter(Adapter):
                       site_min=tuple(lo), site_max=tuple(hi))
 
     def apply(self, target: str, command: str, value: float) -> None:
+        if self.stopped:
+            raise ValueError("the adapter is stopped: clear the stop first")
         if target not in self.NAMES or command != "set_position_target":
             raise ValueError("unsupported target or command")
         value = _finite_value(value)
@@ -296,6 +300,8 @@ class FakeArm3Adapter(FakeArmAdapter):
                       site_min=tuple(lo), site_max=tuple(hi))
 
     def apply(self, target: str, command: str, value: float) -> None:
+        if self.stopped:
+            raise ValueError("the adapter is stopped: clear the stop first")
         idx, numeric = self._validated_command(target, command, value)
         self.target[idx] = numeric
         self.applied.append((target, command, numeric))
