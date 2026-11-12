@@ -172,7 +172,8 @@ GRANTS_FILE = os.environ.get("SANDBOX_GRANTS_FILE", "/grants/grants.json")
 FILE_READ_BYTES = 12000
 FILE_LIST_MAX = 100
 MAX_REL_CHARS = 300
-FILE_OPS = ("list", "read", "preview")
+FILE_OPS = ("list", "read", "preview", "write")
+WRITE_TRASH_MAX = 1000       # old versions kept per grant before a write is refused until the owner empties the trash
 PREVIEW_TEXT_MAX = 8000      # characters of proposed text a preview accepts (a request body is capped at 16 KiB)
 PREVIEW_OLD_MAX = 200000     # bytes of the existing file a preview will read
 PREVIEW_DIFF_LINES = 200
@@ -180,11 +181,17 @@ PREVIEW_DIFF_CHARS = 6000
 GRANT_NAME_RE = re.compile(r"[a-z0-9][a-z0-9_-]{0,31}")
 DENY_NAMES = frozenset({".env", ".netrc", ".pgpass", ".git-credentials", ".htpasswd", "credentials",
                         "credentials.json", ".ssh", ".gnupg", ".aws", ".kube", ".docker", ".git"})
-DENY_PREFIXES = (".env", "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519")
+DENY_PREFIXES = (".env", "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519", ".ragleap-")   # ".ragleap-" = the trash and temp files of a write
 DENY_SUFFIXES = (".pem", ".key", ".p12", ".pfx", ".kdbx")
 SYSTEM_PATHS = ("/etc", "/proc", "/sys", "/dev", "/boot", "/run", "/var/run", "/var/lib/docker",
                 "/usr", "/bin", "/sbin", "/lib", "/lib64")
 BROAD_PATHS = frozenset({"/", "/root", "/home", "/Users", "/var", "/tmp", "/opt", "/mnt", "/srv", "/media"})
+
+
+def file_write_on():
+    """Writing is a second switch, and only the owner at the host can flip it: it needs COMPUTER_CONTROL on AND a
+    WRITE_ENABLED file next to the grants (`ragleap files writing on`). Checked on every call, so it is immediate."""
+    return computer_control_on() and os.path.exists(os.path.join(os.path.dirname(GRANTS_FILE), "WRITE_ENABLED"))
 
 
 def computer_control_on():
@@ -411,6 +418,148 @@ FILE_READER = (_READER_TEMPLATE
                .replace("__SUFFIXES__", json.dumps(list(DENY_SUFFIXES))))
 
 
+_WRITER_TEMPLATE = r"""
+import hashlib, json, os, shutil, sys, time
+DN = set(__NAMES__)
+DP = tuple(__PREFIXES__)
+DS = tuple(__SUFFIXES__)
+BASE = os.path.realpath(os.environ.get("RL_DATA", "/data"))
+REL = os.environ.get("REL", "")
+NEW = os.environ.get("NEW", "")
+EXPECT = os.environ.get("EXPECT", "")
+NEWSHA = os.environ.get("NEWSHA", "")
+OLDMAX = int(os.environ.get("OLDMAX", "200000"))
+TRASHMAX = int(os.environ.get("TRASHMAX", "1000"))
+TRASH = ".ragleap-trash"
+
+def out(obj, code=0):
+    sys.stdout.write(json.dumps(obj, ensure_ascii=False))
+    sys.exit(code)
+
+def denied(n):
+    n = n.lower()
+    return n in DN or n.startswith(DP) or n.endswith(DS)
+
+def sha(b):
+    return hashlib.sha256(b).hexdigest()
+
+tmp = None
+trash_path = None
+try:
+    parts = [p for p in REL.split("/") if p not in ("", ".")]
+    if not parts:
+        out({"error": "not a file"}, 3)
+    if any(p == ".." or denied(p) for p in parts):
+        out({"error": "that path is not allowed"}, 3)
+    for i in range(len(parts)):
+        if os.path.islink(os.path.join(BASE, *parts[:i + 1])):
+            out({"error": "a symbolic link is in that path"}, 3)
+    target = os.path.realpath(os.path.join(BASE, *parts))
+    if not target.startswith(BASE + os.sep):
+        out({"error": "that path is outside the granted folder"}, 3)
+    parent = os.path.dirname(target)
+    if not os.path.isdir(parent):
+        out({"error": "the folder does not exist"}, 3)
+    old_b = None
+    old_text = ""
+    if os.path.lexists(target):
+        if not os.path.isfile(target):
+            out({"error": "not a file"}, 3)
+        if os.stat(target).st_size > OLDMAX:
+            out({"error": "that file is too large to change (limit %d bytes)" % OLDMAX}, 3)
+        with open(target, "rb") as f:
+            old_b = f.read(OLDMAX + 1)
+        if len(old_b) > OLDMAX:
+            out({"error": "that file is too large to change (limit %d bytes)" % OLDMAX}, 3)
+        if b"\x00" in old_b[:2048]:
+            out({"error": "that is a binary file"}, 3)
+        try:
+            old_text = old_b.decode("utf-8")
+        except UnicodeDecodeError:
+            out({"error": "that file is not UTF-8 text"}, 3)
+        if EXPECT == "-":
+            out({"error": "the file exists now; preview again"}, 4)
+        if sha(old_b) != EXPECT:
+            out({"error": "the file changed since the preview"}, 4)
+    elif EXPECT != "-":
+        out({"error": "the file is gone; preview again"}, 4)
+    new_text = NEW
+    if old_text.endswith("\n") and new_text and not new_text.endswith("\n"):
+        new_text += "\n"
+    new_b = new_text.encode("utf-8")
+    if sha(new_b) != NEWSHA:
+        out({"error": "the text is not the text that was previewed"}, 4)
+    if old_b is not None and old_b == new_b:
+        out({"op": "write", "changed": False, "created": False, "old_sha256": sha(old_b), "new_sha256": sha(new_b),
+             "bytes": len(new_b), "trash": None})
+    trash_rel = None
+    if old_b is not None:
+        troot = os.path.join(BASE, TRASH)
+        if os.path.islink(troot) or (os.path.exists(troot) and not os.path.isdir(troot)):
+            out({"error": "the trash folder is not usable"}, 3)
+        os.makedirs(troot, mode=0o700, exist_ok=True)
+        if len(os.listdir(troot)) >= TRASHMAX:
+            out({"error": "the trash is full; the owner must empty it"}, 4)
+        stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime()) + "-" + os.urandom(3).hex()
+        trash_path = os.path.join(troot, stamp, *parts)
+        os.makedirs(os.path.dirname(trash_path), exist_ok=True)
+        try:
+            os.link(target, trash_path)
+        except OSError:
+            shutil.copy2(target, trash_path)
+        trash_rel = TRASH + "/" + stamp + "/" + "/".join(parts)
+    tmp = os.path.join(parent, ".ragleap-tmp-" + os.urandom(6).hex())
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, "wb") as f:
+        f.write(new_b)
+        f.flush()
+        os.fsync(f.fileno())
+    os.chmod(tmp, (os.stat(target).st_mode & 0o777) if old_b is not None else 0o644)
+    if old_b is not None:
+        with open(target, "rb") as g:
+            again = g.read(OLDMAX + 1)
+        if sha(again) != EXPECT:
+            raise RuntimeError("changed")
+    elif os.path.lexists(target):
+        raise RuntimeError("changed")
+    os.replace(tmp, target)
+    tmp = None
+    with open(target, "rb") as g:
+        check = g.read(len(new_b) + 1)
+    if sha(check) != NEWSHA:
+        out({"error": "the file does not match after writing; check the trash"}, 5)
+    out({"op": "write", "changed": True, "created": old_b is None, "old_sha256": None if old_b is None else sha(old_b),
+         "new_sha256": sha(new_b), "bytes": len(new_b), "trash": trash_rel})
+except SystemExit:
+    raise
+except RuntimeError:
+    out({"error": "the file changed while writing; nothing was replaced"}, 4)
+except OSError as e:
+    out({"error": "could not write: " + e.__class__.__name__}, 3)
+finally:
+    if tmp is not None:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+"""
+FILE_WRITER = (_WRITER_TEMPLATE
+               .replace("__NAMES__", json.dumps(sorted(DENY_NAMES)))
+               .replace("__PREFIXES__", json.dumps(list(DENY_PREFIXES)))
+               .replace("__SUFFIXES__", json.dumps(list(DENY_SUFFIXES))))
+
+
+def build_write_spec(grant, rel, text, expect, new_sha):
+    """build_spec() plus exactly one WRITABLE bind mount of the one granted folder (mode write, writing switched on
+    by the owner). Same user, no network, no capabilities, read-only root: nothing else changes."""
+    spec = build_spec("")
+    spec["Cmd"] = ["python", "-I", "-B", "-c", FILE_WRITER]
+    spec["Env"] = ["REL=" + rel, "NEW=" + text, "EXPECT=" + expect, "NEWSHA=" + new_sha,
+                   "OLDMAX=%d" % PREVIEW_OLD_MAX, "TRASHMAX=%d" % WRITE_TRASH_MAX]
+    spec["HostConfig"]["Mounts"] = [{"Type": "bind", "Source": grant["path"], "Target": "/data", "ReadOnly": False}]
+    return spec
+
+
 def build_file_spec(grant, op, rel, text=None):
     """build_spec() plus exactly one read-only bind mount of the granted folder. Nothing else changes."""
     spec = build_spec("")
@@ -438,14 +587,24 @@ def file_op(payload):
     if problem:
         return 400, {"error": problem}
     text = payload.get("text")
-    if op == "preview" and (not isinstance(text, str) or "\x00" in text or len(text) > PREVIEW_TEXT_MAX):
+    if op in ("preview", "write") and (not isinstance(text, str) or "\x00" in text or len(text) > PREVIEW_TEXT_MAX):
         return 400, {"error": "text must be text, at most %d characters" % PREVIEW_TEXT_MAX}
+    expect, new_sha = payload.get("expect_sha256"), payload.get("new_sha256")
+    if op == "write":
+        ok_hex = lambda v: isinstance(v, str) and re.fullmatch(r"[0-9a-f]{64}", v) is not None
+        if not (expect == "-" or ok_hex(expect)) or not ok_hex(new_sha):
+            return 400, {"error": "expect_sha256 must be a sha256 or - and new_sha256 a sha256"}
+        if not file_write_on():
+            return 403, {"error": "writing is off"}
     grant = next((g for g in active_grants() if g["name"] == name), None)
     if grant is None:
         return 404, {"error": "unknown or expired grant"}
-    if op == "preview" and grant["mode"] != "write":
+    if op in ("preview", "write") and grant["mode"] != "write":
         return 403, {"error": "this grant is read-only"}
-    res = _run_spec(build_file_spec(grant, op, rel, text if op == "preview" else None))
+    if op == "write":
+        res = _run_spec(build_write_spec(grant, rel, text, expect, new_sha))
+    else:
+        res = _run_spec(build_file_spec(grant, op, rel, text if op == "preview" else None))
     try:
         parsed = json.loads(res.get("stdout") or "")
     except ValueError:
@@ -454,6 +613,11 @@ def file_op(payload):
         and not res.get("timed_out") and not res.get("oom")
     print(json.dumps({"audit": "file", "grant": name, "op": op, "path": rel[:120], "ok": ok,
                       "bytes": (parsed or {}).get("bytes_read") if isinstance(parsed, dict) else None}), flush=True)
+    if op == "write":
+        print(json.dumps({"audit": "file_write", "grant": name, "path": rel[:120], "ok": ok,
+                          "old_sha256": (parsed or {}).get("old_sha256") if isinstance(parsed, dict) else None,
+                          "new_sha256": (parsed or {}).get("new_sha256") if isinstance(parsed, dict) else None,
+                          "trash": (parsed or {}).get("trash") if isinstance(parsed, dict) else None}), flush=True)
     if ok:
         return 200, {"ok": True, "result": parsed}
     if res.get("timed_out"):
@@ -818,12 +982,12 @@ class Handler(BaseHTTPRequestHandler):
             return self._reply(429, {"error": "busy"})
         try:
             code, obj = file_op(payload)
-            self._reply(code, obj)
         except Exception as e:
             print(f"file op failed: {e}", flush=True)
-            self._reply(500, {"error": "sandbox error"})
+            code, obj = 500, {"error": "sandbox error"}
         finally:
-            _lock.release()
+            _lock.release()      # released before replying, so a client's next call is never refused as busy
+        self._reply(code, obj)
 
     def _stage(self, length):
         try:
