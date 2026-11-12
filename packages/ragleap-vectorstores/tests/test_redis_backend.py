@@ -102,14 +102,12 @@ def test_document_id_with_hyphens_is_escaped(backend):
     assert results[0]["document_id"] == uuid_doc_id
 
 
-def test_search_dense_unsupported_filter_keys_are_ignored_not_errored(backend):
-    """Honest documented limitation: RediSearch requires predeclared
-    fields, so only document_id is a real filter here. Extra keys must
-    not raise - they're accepted but don't narrow results, same
-    'don't claim a capability that isn't there' spirit as supports_sparse()."""
+def test_search_dense_unsupported_filter_keys_raise(backend):
+    """RediSearch only has document_id and tenant_id as filterable fields. Any other key used to be ignored silently,
+    which let a tenant filter search every tenant; it now raises instead."""
     _seed(backend)
-    results = backend.search_dense([0.1, 0.2, 0.3], top_k=5, metadata_filter={"nonexistent_field": "x"})
-    assert len(results) >= 1  # filter was ignored, not erroring, not over-narrowing to zero
+    with pytest.raises(ValueError, match="can only filter by"):
+        backend.search_dense([0.1, 0.2, 0.3], top_k=5, metadata_filter={"nonexistent_field": "x"})
 
 
 def test_search_dense_empty_embedding_returns_empty(backend):
@@ -252,3 +250,71 @@ def test_search_dense_scores_are_on_the_zero_to_one_scale(backend):
             break
         time.sleep(0.1)
     assert by_index == {0: 1.0, 1: 0.5, 2: 0.0}
+
+
+def _wait_for_chunks(backend, expected):
+    """RediSearch indexes asynchronously: poll the unfiltered search until every inserted chunk is visible."""
+    import time
+
+    seen = set()
+    for _ in range(50):
+        seen = {r["document_id"] for r in backend.search_dense([1.0, 0.1, 0.0], top_k=20)}
+        if len(seen) >= expected:
+            return seen
+        time.sleep(0.1)
+    return seen
+
+
+def test_redis_tenant_filter_isolates_tenants(backend):
+    vec = [1.0, 0.1, 0.0]
+    for tenant in ("acme", "globex"):
+        backend.insert_document("doc-" + tenant, tenant + ".txt", {"tenant_id": tenant})
+        backend.insert_chunk("doc-" + tenant, tenant + ".txt", 0, "same text", 2, vec, {"tenant_id": tenant})
+    backend.insert_document("doc-legacy", "legacy.txt", {})
+    backend.insert_chunk("doc-legacy", "legacy.txt", 0, "same text", 2, vec, {})
+    assert _wait_for_chunks(backend, 3) == {"doc-acme", "doc-globex", "doc-legacy"}
+    assert {r["document_id"] for r in backend.search_dense(vec, top_k=20, metadata_filter={"tenant_id": "acme"})} == {"doc-acme"}
+    assert {r["document_id"] for r in backend.search_dense(vec, top_k=20, metadata_filter={"tenant_id": "globex"})} == {"doc-globex"}
+    assert backend.search_dense(vec, top_k=20, metadata_filter={"tenant_id": "nobody"}) == []
+
+
+def test_redis_document_id_and_tenant_id_filters_combine(backend):
+    vec = [1.0, 0.1, 0.0]
+    for tenant in ("acme", "globex"):
+        backend.insert_document("doc-" + tenant, tenant + ".txt", {"tenant_id": tenant})
+        backend.insert_chunk("doc-" + tenant, tenant + ".txt", 0, "same text", 2, vec, {"tenant_id": tenant})
+    assert _wait_for_chunks(backend, 2) == {"doc-acme", "doc-globex"}
+    own = backend.search_dense(vec, top_k=20, metadata_filter={"document_id": "doc-acme", "tenant_id": "acme"})
+    assert {r["document_id"] for r in own} == {"doc-acme"}
+    other = backend.search_dense(vec, top_k=20, metadata_filter={"document_id": "doc-acme", "tenant_id": "globex"})
+    assert other == []
+
+
+def test_redis_index_created_before_tenant_id_raises_on_a_tenant_filter(tmp_path):
+    import uuid
+
+    from redis.commands.search.field import NumericField, TagField, TextField, VectorField
+    from redis.commands.search.index_definition import IndexDefinition, IndexType
+
+    suffix = uuid.uuid4().hex[:8]
+    name, prefix = "old_idx_" + suffix, "test:oldchunk:" + suffix + ":"
+    b = RedisBackend(redis_url=REDIS_TEST_URL, index_name=name, key_prefix=prefix, registry_path=str(tmp_path / "r.sqlite3"))
+    b.init_schema(dimensions=3)
+    try:
+        b._client.ft(name).dropindex(delete_documents=True)
+        old_schema = (
+            TagField("document_id"), TextField("document_name"), NumericField("chunk_index"),
+            NumericField("token_count"), TextField("text"),
+            VectorField("vector", "HNSW", {"TYPE": "FLOAT32", "DIM": 3, "DISTANCE_METRIC": "COSINE"}),
+        )
+        b._client.ft(name).create_index(old_schema, definition=IndexDefinition(prefix=[prefix], index_type=IndexType.HASH))
+        b2 = RedisBackend(redis_url=REDIS_TEST_URL, index_name=name, key_prefix=prefix, registry_path=str(tmp_path / "r2.sqlite3"))
+        b2.init_schema(dimensions=3)
+        with pytest.raises(RuntimeError, match="without a tenant_id field"):
+            b2.search_dense([1.0, 0.1, 0.0], top_k=5, metadata_filter={"tenant_id": "acme"})
+        b2.search_dense([1.0, 0.1, 0.0], top_k=5, metadata_filter={"document_id": "x"})
+    finally:
+        try:
+            b._client.ft(name).dropindex(delete_documents=True)
+        except Exception:
+            pass
