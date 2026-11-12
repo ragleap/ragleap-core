@@ -48,7 +48,7 @@ slo:
 
 grafana:
   enabled: true
-  image: grafana/grafana:12.4.12
+  image: grafana/grafana:12.4.15
   # Admin credentials. Never commit real credentials to values.yaml.
   # Preferred: create a Secret yourself (keys admin-user, admin-password)
   # and set existingSecret. Otherwise set password at install time with
