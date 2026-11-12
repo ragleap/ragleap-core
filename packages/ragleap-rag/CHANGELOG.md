@@ -8,6 +8,13 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 - Opt-in multi-tenant scope: `RagLeap.for_tenant(tenant_id)` returns a view that tags every ingest with `tenant_id`, adds it to every search filter, prefixes session ids, and lists, deletes and updates only that tenant's documents. `RagLeap(..., require_tenant=True)` makes unscoped calls raise `TenantRequiredError`. Default behaviour is unchanged; documents ingested without a tenant tag are not visible through a view.
 
+### Fixed
+- `PineconeBackend`, `QdrantBackend`, `MilvusBackend` and `WeaviateBackend`: the stored chunk fields (`document_id`, `document_name`, `chunk_index`, and for Milvus `id` and `vector`) can no longer be overwritten by caller metadata.
+- `MilvusBackend` metadata filter: string values are escaped (a value containing a double quote could change the expression), keys must be plain identifiers, booleans are written as `true` and `false`, and unsupported value types raise `ValueError`.
+
+### Changed
+- `RagLeap.for_tenant`: tenant ids are limited to 1 to 128 characters from `A-Z a-z 0-9 _ . @ -`, because the id is put into filter expressions.
+
 ## [0.15.0] - 2026-11-06
 
 ### Added
