@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ragleap-vectorstores"
-version = "0.6.0"
+version = "0.7.0"
 description = "Pluggable vector backends beyond ragleap-rag core's 6 (PgVector, FAISS, Pinecone, Weaviate, Qdrant, Milvus) - additional VectorBackend implementations as optional extras, no vendor lock-in, no bloated core dependency footprint."
 readme = "README.md"
 license = "MIT"

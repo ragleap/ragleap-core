@@ -5,6 +5,8 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-12
+
 ### Added
 - Tenant filtering: `tenant_id` is now a filterable field in `RedisBackend` (TAG field), `OpenSearchBackend` (keyword, also mapped on existing indexes) and `LanceDBBackend` (nullable column, added to existing tables). Chunks without a tenant tag never match a `tenant_id` filter.
 
