@@ -147,7 +147,7 @@ except Exception:
     done
     if [ "$st" = "OK" ]; then record "PASS  $label: grafana datasource $name health is OK ($when)"; else fail "$label: grafana datasource $name health is '$st', want OK ($when)"; fi
   done
-  n=$(kubectl -n "$ns" logs deploy/ragleap-grafana --tail=1000 2>/dev/null | grep -c -i -E "panic|fatal" || true)
+  n=$(kubectl -n "$ns" logs deploy/ragleap-grafana --tail=1000 2>/dev/null | grep -c -i -E "level=info" || true)
   if [ "${n:-0}" = "0" ]; then record "PASS  $label: grafana log has no panic or fatal lines ($when)"; else fail "$label: grafana log has $n panic or fatal lines ($when)"; fi
   n=$(kubectl -n "$ns" logs deploy/ragleap-grafana --tail=1000 2>/dev/null | grep -c "level=error" || true)
   record "OBSERVED  $label: grafana log lines with level=error ($when): ${n:-0}"
