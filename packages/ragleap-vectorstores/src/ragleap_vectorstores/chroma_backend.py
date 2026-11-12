@@ -121,10 +121,11 @@ class ChromaBackend(VectorBackend):
         text: str, token_count: int, embedding: List[float], metadata: Dict,
     ) -> None:
         vector_key = self._vector_key(document_id, chunk_index)
+        # Stored fields come last so caller metadata can never overwrite them.
         payload = {
+            **(metadata or {}),
             "document_id": document_id, "document_name": document_name,
             "chunk_index": chunk_index, "token_count": token_count or 0,
-            **(metadata or {}),
         }
         with self._lock:
             self._collection.upsert(

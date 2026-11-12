@@ -22,7 +22,11 @@ Design notes:
 - Unlike ChromaBackend, LanceDB's `where=` accepts a native SQL boolean
   expression, so multi-key filters combine directly with ` AND ` -
   no special wrapping needed. String values are quoted and single
-  quotes escaped to build a safe literal.
+  quotes escaped to build a safe literal. Only the table columns can be
+  filtered (id, document_id, document_name, chunk_index, token_count,
+  tenant_id); any other key raises ValueError. tenant_id is a nullable
+  column, added to tables created before it existed; chunks without a
+  tenant tag never match a tenant_id filter.
 - insert_chunk uses merge_insert(...).when_matched_update_all()
   .when_not_matched_insert_all() for real upsert semantics - live-
   verified: re-inserting the same id updates the row in place rather
@@ -61,6 +65,9 @@ def _quote_sql_literal(value) -> str:
     return f"'{escaped}'"
 
 
+_FILTER_KEYS = {"id", "document_id", "document_name", "chunk_index", "token_count", "tenant_id"}
+
+
 class LanceDBBackend(VectorBackend):
     def __init__(
         self,
@@ -89,6 +96,7 @@ class LanceDBBackend(VectorBackend):
         self._db = None
         self._table = None
         self._dimensions = None
+        self._tenant_field = True  # False only when an existing table has no tenant_id column and it could not be added
         self._lock = threading.Lock()
 
         os.makedirs(uri, exist_ok=True)
@@ -108,6 +116,17 @@ class LanceDBBackend(VectorBackend):
     def _build_where(self, metadata_filter: Optional[Dict]) -> Optional[str]:
         if not metadata_filter:
             return None
+        unknown = sorted(set(metadata_filter) - _FILTER_KEYS)
+        if unknown:
+            raise ValueError(
+                f"LanceDBBackend can only filter by {sorted(_FILTER_KEYS)}, got {unknown}: other metadata is not "
+                "stored in table columns"
+            )
+        if "tenant_id" in metadata_filter and not self._tenant_field:
+            raise RuntimeError(
+                f"LanceDBBackend: table '{self.table_name}' has no tenant_id column and it could not be added; "
+                "use a new table_name to enable tenant filtering"
+            )
         clauses = [f"{k} = {_quote_sql_literal(v)}" for k, v in metadata_filter.items()]
         return " AND ".join(clauses)
 
@@ -120,6 +139,13 @@ class LanceDBBackend(VectorBackend):
 
         try:
             self._table = self._db.open_table(self.table_name)
+            self._tenant_field = "tenant_id" in self._table.schema.names
+            if not self._tenant_field:
+                try:
+                    self._table.add_columns({"tenant_id": "cast(NULL as string)"})
+                    self._tenant_field = "tenant_id" in self._table.schema.names
+                except Exception as e:
+                    logger.warning(f"LanceDBBackend: could not add the tenant_id column to '{self.table_name}': {e}")
             logger.info(f"LanceDBBackend: opened existing table '{self.table_name}'")
         except ValueError:
             schema = pa.schema([
@@ -130,6 +156,7 @@ class LanceDBBackend(VectorBackend):
                 pa.field("document_name", pa.string()),
                 pa.field("chunk_index", pa.int64()),
                 pa.field("token_count", pa.int64()),
+                pa.field("tenant_id", pa.string()),
             ])
             self._table = self._db.create_table(self.table_name, schema=schema)
             logger.info(
@@ -160,6 +187,8 @@ class LanceDBBackend(VectorBackend):
             "chunk_index": chunk_index,
             "token_count": token_count or 0,
         }
+        if self._tenant_field:
+            row["tenant_id"] = str(metadata["tenant_id"]) if metadata and metadata.get("tenant_id") is not None else None
         with self._lock:
             (self._table.merge_insert("id")
                 .when_matched_update_all()

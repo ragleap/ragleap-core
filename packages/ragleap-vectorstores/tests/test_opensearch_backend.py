@@ -105,15 +105,11 @@ def test_search_dense_document_id_filter(backend):
     assert all(r["document_id"] == "doc2" for r in results)
 
 
-def test_search_dense_unsupported_filter_key_narrows_to_zero(backend):
-    """Unlike RedisBackend, which silently ignores unrecognized filter
-    keys (documented honest limitation there), OpenSearch's query DSL
-    applies every key in metadata_filter as a real term filter - a
-    nonexistent field narrows results to zero rather than being
-    ignored. This is the correct, documented behavior here, not a bug."""
+def test_search_dense_unsupported_filter_keys_raise(backend):
+    """Other caller metadata is stored unindexed, so a filter on it would silently match nothing: it raises instead."""
     _seed(backend)
-    results = backend.search_dense([0.1, 0.2, 0.3], top_k=5, metadata_filter={"nonexistent_field": "x"})
-    assert results == []
+    with pytest.raises(ValueError, match="can only filter by"):
+        backend.search_dense([0.1, 0.2, 0.3], top_k=5, metadata_filter={"nonexistent_field": "x"})
 
 
 def test_search_dense_empty_embedding_returns_empty(backend):

@@ -43,13 +43,12 @@ Design notes:
   document registry is stored as a second real OpenSearch index
   (`<index_name>_documents`) rather than a sidecar. This is a genuine
   capability difference from Redis, not just a stylistic choice.
-- Metadata filtering: unlike Redis's document_id-only TAG-field
-  limitation, OpenSearch's query DSL supports arbitrary term/range
-  filters over any mapped field - metadata_filter here is applied as a
-  `bool.filter` of `term` queries over whatever keys are passed, without
-  needing a fixed pre-declared schema per filterable field. Only keys
-  actually present in metadata_filter are used; nothing is silently
-  ignored the way Redis ignores non-document_id filter keys.
+- Metadata filtering: metadata_filter is applied as a `bool.filter` of `term`
+  queries, but only on indexed fields (document_id, document_name, tenant_id,
+  chunk_index, token_count). Other caller metadata is stored as an unindexed
+  JSON string, so any other filter key raises ValueError instead of silently
+  matching nothing. tenant_id is also stored as a keyword field and mapped on
+  existing indexes when they are opened.
 - insert_chunk/insert_document/delete_document all pass refresh=True.
   This trades a little indexing throughput for immediate read-after-write
   consistency, which matters for tests and for RagLeap's own
@@ -161,6 +160,7 @@ class OpenSearchBackend(VectorBackend):
                         },
                         "document_id": {"type": "keyword"},
                         "document_name": {"type": "keyword"},
+                        "tenant_id": {"type": "keyword"},
                         "chunk_index": {"type": "integer"},
                         "token_count": {"type": "integer"},
                         "text": {"type": "text"},
@@ -189,6 +189,12 @@ class OpenSearchBackend(VectorBackend):
                     f"requested dimension {dimensions}. Use a different "
                     f"index_name or a matching dimension."
                 )
+            try:
+                self._client.indices.put_mapping(
+                    index=self.index_name, body={"properties": {"tenant_id": {"type": "keyword"}}}
+                )
+            except Exception as e:  # a filter on an unmapped field matches nothing, so this stays safe
+                logger.warning(f"OpenSearchBackend: could not add the tenant_id mapping to '{self.index_name}': {e}")
             logger.info(f"OpenSearchBackend: index '{self.index_name}' already exists, reusing it")
 
         if not self._client.indices.exists(index=self.documents_index_name):
@@ -240,6 +246,7 @@ class OpenSearchBackend(VectorBackend):
                 "token_count": token_count or 0,
                 "text": text,
                 "metadata": json.dumps(metadata or {}),
+                **({"tenant_id": str(metadata["tenant_id"])} if metadata and metadata.get("tenant_id") is not None else {}),
             },
             refresh=True,
         )
@@ -254,6 +261,13 @@ class OpenSearchBackend(VectorBackend):
             # OpenSearch's query DSL supports arbitrary term filters over
             # any mapped field - unlike RedisBackend, every key passed in
             # metadata_filter is used, not just document_id.
+            allowed = {"document_id", "document_name", "tenant_id", "chunk_index", "token_count"}
+            unknown = sorted(set(metadata_filter) - allowed)
+            if unknown:
+                raise ValueError(
+                    f"OpenSearchBackend can only filter by {sorted(allowed)}, got {unknown}: other metadata is "
+                    "stored unindexed, so such a filter would silently match nothing"
+                )
             filters = [{"term": {key: value}} for key, value in metadata_filter.items()]
             query_body = {
                 "size": top_k,

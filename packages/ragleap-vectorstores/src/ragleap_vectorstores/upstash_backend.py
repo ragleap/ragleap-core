@@ -138,6 +138,10 @@ class UpstashBackend(VectorBackend):
         same native-AND convenience as LanceDB, no $and wrapping needed."""
         if not metadata_filter:
             return ""
+        import re as _re
+        for key in metadata_filter:
+            if not isinstance(key, str) or not _re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.]*", key):
+                raise ValueError(f"Invalid metadata filter key: {key!r}")
         clauses = [f"{key} = {_escape_filter_value(value)}" for key, value in metadata_filter.items()]
         return " AND ".join(clauses)
 
