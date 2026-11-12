@@ -22,6 +22,7 @@ HOME = Path(os.environ.get("RAGLEAP_HOME") or HERE.parent).resolve()
 GRANTS_DIR = HOME / "grants"
 GRANTS_FILE = GRANTS_DIR / "grants.json"
 DISABLED_FLAG = GRANTS_DIR / "DISABLED"
+WRITE_FLAG = GRANTS_DIR / "WRITE_ENABLED"
 SCAN_LIMIT = 2000
 
 
@@ -207,10 +208,24 @@ def cmd_on(args):
     return 0
 
 
+def cmd_writing(args):
+    GRANTS_DIR.mkdir(mode=0o755, parents=True, exist_ok=True)
+    if args.state == "on":
+        WRITE_FLAG.write_text("Writing is allowed for grants made with --mode write. Run: ragleap files writing off\n", encoding="utf-8")
+        print("Writing is switched on. It still needs COMPUTER_CONTROL=true and a grant made with --mode write; "
+              "every change also needs your approval. It takes effect immediately.")
+    else:
+        if WRITE_FLAG.exists():
+            WRITE_FLAG.unlink()
+        print("Writing is switched off. It takes effect immediately; your grants are kept.")
+    return 0
+
+
 def cmd_status(args):
     items = read_raw()
     print("COMPUTER_CONTROL in .env: " + ("true" if env_flag() else "off"))
     print("Paused with 'ragleap files off': " + ("yes" if DISABLED_FLAG.exists() else "no"))
+    print("Writing switched on with 'ragleap files writing on': " + ("yes" if WRITE_FLAG.exists() else "no"))
     print("Grants: %d" % len(items))
     return 0
 
@@ -231,6 +246,9 @@ def main(argv=None):
     r.set_defaults(fn=cmd_remove)
     sub.add_parser("off", help="pause all file access now").set_defaults(fn=cmd_off)
     sub.add_parser("on", help="resume file access").set_defaults(fn=cmd_on)
+    w = sub.add_parser("writing", help="allow or stop writing to folders granted with --mode write (off by default)")
+    w.add_argument("state", choices=["on", "off"])
+    w.set_defaults(fn=cmd_writing)
     sub.add_parser("status", help="show the switches").set_defaults(fn=cmd_status)
     args = p.parse_args(argv)
     return args.fn(args)
