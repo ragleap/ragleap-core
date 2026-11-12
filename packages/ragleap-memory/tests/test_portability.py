@@ -256,7 +256,7 @@ def test_an_import_is_audited_with_counts_only(tmp_path):
 # ---------------------------------------------------------------- hostile files
 
 @pytest.mark.parametrize("header", [
-    {"format": "something-else", "version": 1, "count": 0}, {"format": "ragleap-memory-export", "version": 2, "count": 0},
+    {"format": "something-else", "version": 1, "count": 0}, {"format": "ragleap-memory-export", "version": 3, "count": 0},
     {"format": "ragleap-memory-export", "version": True, "count": 0}, {"format": "ragleap-memory-export", "version": 1},
     {"format": "ragleap-memory-export", "version": 1, "count": -1},
     {"format": "ragleap-memory-export", "version": 1, "count": True},

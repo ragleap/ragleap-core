@@ -2,12 +2,13 @@
 
 Durable, tenant-scoped long-term memory for LLM applications. Alpha. **Not independently audited**: see `docs/threat-model.md` for exactly what is and is not defended. Single-tenant use is simply one fixed `Scope`.
 
-## What is in 0.3.0
+## What is in 0.3.1
 
 - `SQLiteStore`: one SQLite file (or memory), FTS5 keyword search, no server. Needs SQLite built with FTS5; the store refuses to start without it.
 - Every call takes a `Scope` (from ragleap-security) and is filtered by it inside the SQL. A tenant-wide scope sees its whole tenant; a narrower scope sees only its own subject, agent and session.
 - Typed entries (`episode`, `fact`, `summary`) with a trust label (`untrusted`, `model`, `owner`). New entries default to `untrusted`.
 - `supersede` for facts that change (history is kept), `forget`, `export`, `erase` (removes the text from the file), `sweep_expired`, and an optional `AuditLog` that records operations without entry text.
+- New in 0.3.1: **encrypted export and import** of a memory file with a key, a key ring or a passphrase, through ragleap-security. Optional extra `crypto`. See below. No schema change.
 - New in 0.3.0: optional **vector and hybrid search** over vectors your own embedder produces, with a per-tenant daily cap on embedding. Opt-in; keyword search stays the default. See below. A 0.2.0 database file is migrated in place on first open.
 - New in 0.2.0: a **token budget** on search (`max_tokens`), **usage counters** and **quotas** per tenant, `ShardedStore` (one SQLite file per tenant), and **download and upload** of a memory (`export_file`, `import_file`). See below. Read the behaviour changes in `CHANGELOG.md` before upgrading: a 0.1.0 file is migrated in place on first open.
 
@@ -84,7 +85,23 @@ print(result)   # ImportResult(imported=..., skipped_duplicates=..., dropped_lin
 - An entry with the same scope, kind and text as one already stored is skipped, so importing the same file twice adds nothing (`skip_duplicates=False` turns this off).
 - Limits: 100,000 entries, 64 MiB and 64 KiB per line by default (`max_entries`, `max_bytes`).
 
-An export file is **plain text with mode 0600**: anyone who can read it can read the memory. There is no encryption in this library yet (planned for 0.3.1, using the `crypto` module of ragleap-security 0.2.0). `export_file` refuses to overwrite an existing file. Import does not check *who* may upload: that is your application's job.
+An export file is **plain text with mode 0600**: anyone who can read it can read the memory. Since 0.3.1 you can encrypt it (next section). `export_file` refuses to overwrite an existing file. Import does not check *who* may upload: that is your application's job.
+
+## Encrypted export and import (0.3.1)
+
+```python
+from ragleap_security import Key
+key = Key.from_env("MEMORY_EXPORT_KEY", "backup-1")            # or Key.generate(...), or a KeyRing for rotation
+store.export_file(alice, "alice-memory.enc", encrypt_with=key, context="2026-11-backup")
+other_store.import_file(alice, "alice-memory.enc", decrypt_with=key, context="2026-11-backup")
+store.export_file(alice, "alice-memory-pass.enc", passphrase=my_passphrase)   # or a passphrase (scrypt, derived once per file)
+```
+
+Install with `pip install ragleap-memory[crypto]`. Every entry is encrypted by `ragleap-security` (AES-256-GCM); this library only lays out the file. Each line is bound to its position, to the file's header and to your own `context` (at most 1,024 bytes; the same value is needed to import). A line that is moved, duplicated or taken from another file, any changed byte in the file, a wrong key and a wrong context all fail with `line N: cannot decrypt`. Dropped or extra lines fail the entry count.
+
+Import is still the single safe path: the lines are decrypted and then go through exactly the same checks as a plain file (trust cap, scope, quotas, one transaction, limits). An encrypted file is refused without a key or passphrase, and a plain file is refused when you give one, so nobody can swap a plain file in. A file on disk may be up to twice `max_bytes`.
+
+**What this does not do.** It protects the export **file**, not the SQLite database. The header shows how many entries there are, and line lengths show roughly how long each entry is. Anyone who holds the key can read and forge a file, and an old file put back in place of a newer one is not noticed. A decrypted file is still untrusted input. See `docs/threat-model.md` row 16.
 
 ## One file per tenant (0.2.0)
 
@@ -99,11 +116,11 @@ store = ShardedStore("memory-dir", max_open=64, quota_entries=100_000)
 ## Verifying it yourself
 
 ```
-pip install -e ../ragleap-security -e ".[test]"
+pip install -e ../ragleap-security -e ".[test]"   # the test extra includes cryptography
 pytest
 python scripts/mutation_check.py   # breaks one protection at a time; every mutation must be killed
 ```
 
-## Not in 0.3.0
+## Not in 0.3.1
 
-Encrypted export and import (planned for 0.3.1), a faster or approximate vector index, consolidation and retention policies, importance-based ranking, Postgres, encryption at rest, a review queue and the ragleap-agents adapter are planned (issue #900). Search quality, keyword or vector, has not been measured on any benchmark.
+A faster or approximate vector index, consolidation and retention policies, importance-based ranking, Postgres, encryption at rest, a review queue and the ragleap-agents adapter are planned (issue #900). Search quality, keyword or vector, has not been measured on any benchmark.
