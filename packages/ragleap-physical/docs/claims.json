@@ -375,15 +375,7 @@
      "ref": "tests/test_adapter_stop_refusal.py::test_apply_refuses_while_stopped"
     }
    ],
-   "note": "PR for issue 1339. Checked on the simulated stand-ins; before the change four of them failed this test. REAL, 2026-11-11. Says nothing about real devices."
-  },
-  {
-   "id": "C28",
-   "claim": "The MuJoCo adapters are not checked yet.",
-   "where": "CHANGELOG.md",
-   "status": "limitation",
-   "evidence": [],
-   "note": "Needs a run with MuJoCo installed. Issue 1339 stays open until then."
+   "note": "PR for issue 1339. Checked on the simulated stand-ins and the MuJoCo servo adapter; before the change four stand-ins and the three MuJoCo servo cases failed this test. REAL, 2026-11-11. Says nothing about real devices."
   }
  ]
 }
