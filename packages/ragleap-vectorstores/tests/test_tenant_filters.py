@@ -3,6 +3,8 @@
 Chroma and LanceDB run for real (embedded). Redis, OpenSearch and Upstash use fake clients that record what the
 backend sends, so no server is needed.
 """
+import importlib
+import sys
 import types
 
 import pytest
@@ -14,6 +16,26 @@ from ragleap_vectorstores.redis_backend import RedisBackend
 from ragleap_vectorstores.upstash_backend import UpstashBackend
 
 VEC = [1.0, 0.1, 0.0]
+
+
+class _StubClient:
+    def __init__(self, *args, **kwargs):
+        pass
+
+
+@pytest.fixture(autouse=True)
+def _client_libs_stubbed(monkeypatch):
+    """CI installs only the chroma, lancedb and redis extras. The Upstash and OpenSearch tests use fake clients, so
+    a stand-in module is put in place only when the real client library is missing; the backend constructors then
+    work and the tests run everywhere."""
+    for name, attrs in (("upstash_vector", {"Index": _StubClient}), ("opensearchpy", {"OpenSearch": _StubClient})):
+        try:
+            importlib.import_module(name)
+        except ImportError:
+            module = types.ModuleType(name)
+            for key, value in attrs.items():
+                setattr(module, key, value)
+            monkeypatch.setitem(sys.modules, name, module)
 
 
 def _seed_two_tenants(b):
