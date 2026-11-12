@@ -5,6 +5,7 @@ given to send_audio() must be at 16 kHz. Not thread-safe: call everything from t
 and ends the Call object; it cannot end the phone call, which needs the signalling side.
 """
 
+import array
 import asyncio
 import collections
 import ipaddress
@@ -12,7 +13,7 @@ import secrets
 import time
 from dataclasses import dataclass
 
-from . import rtp
+from . import g711, rtp
 from .adapter import Call, Event
 from .audiopath import InboundAudio, OutboundAudio
 
@@ -192,6 +193,9 @@ class RtpCall(Call):
         if self._ended:
             raise RuntimeError("the call has ended")
         self._pending += self._out.process(frame)
+        self._queue_packets()
+
+    def _queue_packets(self):
         while len(self._pending) >= PACKET_BYTES:
             chunk = bytes(self._pending[:PACKET_BYTES])
             del self._pending[:PACKET_BYTES]
@@ -199,6 +203,18 @@ class RtpCall(Call):
             self._seq = (self._seq + 1) & 0xFFFF
             self._ts = (self._ts + PACKET_TICKS) & 0xFFFFFFFF
             self._playing = True
+
+    def has_partial_playback(self):
+        """True while less than one whole packet of outbound audio is waiting."""
+        return bool(self._pending)
+
+    def flush_playback(self):
+        """Pad the waiting partial packet with silence of the call's law and queue it. The transport calls this after a short quiet time."""
+        if self._ended or not self._pending:
+            return
+        encode = g711.ulaw_encode if self.config.law == "ulaw" else g711.alaw_encode
+        self._pending += encode(array.array("h", bytes(2 * (PACKET_BYTES - len(self._pending)))))
+        self._queue_packets()
 
     async def clear_playback(self):
         self._send_q.clear()
