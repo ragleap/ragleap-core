@@ -184,8 +184,7 @@ Added by the current owner; the text above is unchanged. Evidence tags as in sec
 
 ### What to do next (suggestion)
 
-1. A throwaway machine with Asterisk or FreeSWITCH (never production): one call into `RtpMediaEndpoint` on loopback or a private network, with a packet capture, to fix parsing against real traffic and to answer the open questions (extensions, SSRC changes, ports behind NAT). Report what was run and what was not.
-2. Check whether the current Twilio channel validates Twilio's request signature (section 7, still [unverified]).
-3. Move the Twilio code behind the adapter contract (phase 1), with existing behaviour unchanged.
-4. Decide with the voice lead whether the copied audio helpers should become one shared module after all (the alternative to decision 2).
-5. Section 13 above still says the README states that the package has no code. The README now says that only a skeleton and the pieces listed here exist, with no SIP signalling and nothing tested against a real PBX or trunk.
+1. A throwaway machine with a SIP server (never production): one call into `RtpMediaEndpoint` on loopback or a private network, with a packet capture, to fix parsing against real traffic and to answer the open questions (extensions, SSRC changes, ports behind NAT). The checklist is `docs/design/real-traffic-test.md`. Report what was run and what was not.
+2. Move the Twilio code behind the adapter contract (phase 1), with existing behaviour unchanged, only after agreeing it with the team that owns `channels/voice/`. This package does not check or change that channel.
+3. Decide with the voice lead whether the copied audio helpers should become one shared module after all (the alternative to decision 2).
+4. Section 13 above still says the README states that the package has no code. The README now says that only a skeleton and the pieces listed here exist, with no SIP signalling and nothing tested against a real PBX or trunk.
