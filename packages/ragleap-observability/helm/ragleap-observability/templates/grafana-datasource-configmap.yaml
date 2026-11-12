@@ -16,6 +16,6 @@ data:
       - name: Loki
         type: loki
         access: proxy
-        url: http://ragleap-loki:{{ .Values.loki.port }}
+        url: http://ragleap-loki-x:{{ .Values.loki.port }}
       {{- end }}
 {{- end }}
