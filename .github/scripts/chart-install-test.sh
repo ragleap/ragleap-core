@@ -106,6 +106,54 @@ gone() { # label kind name [namespace]
   done
   fail "$1: $2 $3 still exists 90 seconds after uninstall"
 }
+grafana_check() { # label namespace when ("after install" or "after upgrade")
+  # Talks to Grafana through a port-forward. The password is the one set at install time below (grafana.admin.password).
+  local label=$1 ns=$2 when=$3 gpw="ci-throwaway-password" lport=${GRAFANA_LOCAL_PORT:-13000}
+  local port pf base out i ok name uid st n
+  port=$(kubectl -n "$ns" get svc ragleap-grafana -o jsonpath='{.spec.ports[0].port}' 2>/dev/null || true)
+  if [ -z "$port" ]; then fail "$label: grafana service port not found ($when)"; return 0; fi
+  kubectl -n "$ns" port-forward svc/ragleap-grafana "$lport:$port" >/tmp/grafana-pf.log 2>&1 &
+  pf=$!
+  base="http://127.0.0.1:$lport"
+  ok=""; out=""
+  for i in $(seq 1 24); do
+    out=$(curl -s --max-time 5 "$base/api/health" 2>/dev/null || true)
+    if grep -q '"database": *"ok"' <<< "$out"; then ok=yes; break; fi
+    sleep 5
+  done
+  if [ "$ok" = yes ]; then record "PASS  $label: grafana health reports the database ok ($when)"; else fail "$label: grafana health did not report the database ok ($when): ${out:0:200}"; fi
+  out=$(curl -s --max-time 5 -u "admin:$gpw" "$base/api/user" 2>/dev/null || true)
+  if grep -q '"login": *"admin"' <<< "$out"; then record "PASS  $label: grafana login works with the admin password set at install ($when)"; else fail "$label: grafana login failed ($when): ${out:0:200}"; fi
+  for name in Prometheus Loki; do
+    uid=$(curl -s --max-time 5 -u "admin:$gpw" "$base/api/datasources" 2>/dev/null | python3 -c 'import sys, json
+name = sys.argv[1]
+try:
+    for d in json.load(sys.stdin):
+        if d.get("name") == name:
+            print(d.get("uid", ""))
+            break
+except Exception:
+    pass' "$name" || true)
+    if [ -z "$uid" ]; then fail "$label: grafana datasource $name is not provisioned ($when)"; continue; fi
+    st=""
+    for i in $(seq 1 12); do
+      st=$(curl -s --max-time 10 -u "admin:$gpw" "$base/api/datasources/uid/$uid/health" 2>/dev/null | python3 -c 'import sys, json
+try:
+    print(json.load(sys.stdin).get("status", ""))
+except Exception:
+    print("")' || true)
+      if [ "$st" = "OK" ]; then break; fi
+      sleep 5
+    done
+    if [ "$st" = "OK" ]; then record "PASS  $label: grafana datasource $name health is OK ($when)"; else fail "$label: grafana datasource $name health is '$st', want OK ($when)"; fi
+  done
+  n=$(kubectl -n "$ns" logs deploy/ragleap-grafana --tail=1000 2>/dev/null | grep -c -i -E "panic|fatal" || true)
+  if [ "${n:-0}" = "0" ]; then record "PASS  $label: grafana log has no panic or fatal lines ($when)"; else fail "$label: grafana log has $n panic or fatal lines ($when)"; fi
+  n=$(kubectl -n "$ns" logs deploy/ragleap-grafana --tail=1000 2>/dev/null | grep -c "level=error" || true)
+  record "OBSERVED  $label: grafana log lines with level=error ($when): ${n:-0}"
+  kill "$pf" 2>/dev/null || true
+  wait "$pf" 2>/dev/null || true
+}
 post_install() { # label namespace
   case "$1" in
     ragleap-ops)
@@ -124,7 +172,14 @@ post_install() { # label namespace
       need_deploy "$1" "$2" ragleap-loki
       need_deploy "$1" "$2" ragleap-alertmanager
       need_deploy "$1" "$2" ragleap-postgres-exporter
-      need_daemonset "$1" ragleap-observability-agents ragleap-promtail ;;
+      need_daemonset "$1" ragleap-observability-agents ragleap-promtail
+      grafana_check "$1" "$2" "after install" ;;
+  esac
+}
+post_upgrade() { # label namespace
+  case "$1" in
+    ragleap-observability)
+      grafana_check "$1" "$2" "after upgrade" ;;
   esac
 }
 post_uninstall() { # label
@@ -154,6 +209,7 @@ chart_test() { # label chart-dir namespace release keep-pattern -- helm args
   post_install "$label" "$ns"
 
   if helm upgrade "$rel" "$dir" -n "$ns" "$@" --wait --timeout 600s; then record "PASS  $label: upgrade with the same values"; else fail "$label: upgrade failed"; diag "$ns"; fi
+  post_upgrade "$label" "$ns"
 
   if helm uninstall "$rel" -n "$ns" --wait --timeout 300s; then record "PASS  $label: uninstall"; else fail "$label: uninstall failed"; diag "$ns"; fi
   local left
