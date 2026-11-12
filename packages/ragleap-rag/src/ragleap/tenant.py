@@ -18,6 +18,7 @@ metadata_filter cannot be passed by position past the scope. Methods the
 view does not define do not exist on it.
 """
 import asyncio
+import re
 
 
 class TenantRequiredError(RuntimeError):
@@ -25,12 +26,15 @@ class TenantRequiredError(RuntimeError):
 
 
 _PAGE = 1000
+_TENANT_ID = re.compile(r"[A-Za-z0-9_.@-]{1,128}")
 
 
 class TenantRagLeap:
     def __init__(self, rag, tenant_id):
-        if not isinstance(tenant_id, str) or not tenant_id or ":" in tenant_id:
-            raise ValueError("tenant_id must be a non-empty string without ':'")
+        if not isinstance(tenant_id, str) or not _TENANT_ID.fullmatch(tenant_id):
+            raise ValueError(
+                "tenant_id must be 1 to 128 characters from A-Z a-z 0-9 _ . @ - (it is put into filter expressions)"
+            )
         self._rag = rag
         self.tenant_id = tenant_id
 

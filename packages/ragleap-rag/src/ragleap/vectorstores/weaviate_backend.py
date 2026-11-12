@@ -220,9 +220,11 @@ class WeaviateBackend(VectorBackend):
             )
             self._conn.commit()
 
+            # Stored fields come last so caller metadata can never overwrite them.
             properties = {
+                **(metadata or {}),
                 "document_id": document_id, "document_name": document_name,
-                "chunk_index": chunk_index, **(metadata or {}),
+                "chunk_index": chunk_index,
             }
             self._collection.data.insert(properties=properties, vector={self._VECTOR_NAME: embedding}, uuid=weaviate_uuid)
 

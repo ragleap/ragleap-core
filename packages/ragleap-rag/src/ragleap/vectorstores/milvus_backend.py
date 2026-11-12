@@ -126,9 +126,22 @@ class MilvusBackend(VectorBackend):
         AND-of-equalities expression."""
         if not metadata_filter:
             return ""
+        import math
+        import re
+
         parts = []
         for k, v in metadata_filter.items():
-            value_repr = f'"{v}"' if isinstance(v, str) else str(v)
+            if not isinstance(k, str) or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", k):
+                raise ValueError(f"Invalid metadata filter key: {k!r}")
+            if isinstance(v, bool):
+                value_repr = "true" if v else "false"
+            elif isinstance(v, str):
+                escaped = v.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r")
+                value_repr = '"' + escaped + '"'
+            elif isinstance(v, (int, float)) and math.isfinite(v):
+                value_repr = str(v)
+            else:
+                raise ValueError(f"Unsupported metadata filter value for {k!r}: {v!r}")
             parts.append(f'{k} == {value_repr}')
         return " and ".join(parts)
 
@@ -155,10 +168,12 @@ class MilvusBackend(VectorBackend):
             )
             self._conn.commit()
 
+            # Stored fields come last so caller metadata can never overwrite them (including id and vector).
             row = {
+                **(metadata or {}),
                 "id": vector_key, "vector": embedding,
                 "document_id": document_id, "document_name": document_name,
-                "chunk_index": chunk_index, **(metadata or {}),
+                "chunk_index": chunk_index,
             }
             self._client.insert(collection_name=self.collection_name, data=[row])
 
