@@ -12,8 +12,8 @@ class RagleapObservabilityTest {
                 "ragleap-observability/Chart.yaml");
 
         assertTrue(chart.contains("name: ragleap-observability"), chart);
-        assertTrue(chart.matches("(?s).*\\bversion:\\s*['\"]?0\\.8\\.4['\"]?.*"), chart);
-        assertTrue(chart.matches("(?s).*\\bappVersion:\\s*['\"]?0\\.8\\.4['\"]?.*"), chart);
+        assertTrue(chart.matches("(?s).*\\bversion:\\s*['\"]?0\\.8\\.5['\"]?.*"), chart);
+        assertTrue(chart.matches("(?s).*\\bappVersion:\\s*['\"]?0\\.8\\.5['\"]?.*"), chart);
     }
 
     @Test

@@ -6,7 +6,7 @@
 
     <groupId>io.github.antonyrag</groupId>
     <artifactId>ragleap-observability</artifactId>
-    <version>0.8.4</version>
+    <version>0.8.5</version>
     <packaging>jar</packaging>
 
     <name>ragleap-observability (jar of the Helm chart)</name>

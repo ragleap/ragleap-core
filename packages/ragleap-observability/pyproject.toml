@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ragleap-observability"
-version = "0.8.4"
+version = "0.8.5"
 description = "Prometheus/Grafana/Loki/AlertManager observability Helm chart for RagLeap Core; the changelog states exactly what each release verified"
 readme = "README.md"
 keywords = ["observability", "monitoring", "prometheus", "grafana", "loki", "promtail", "alloy", "alertmanager", "alerting", "logging", "kubernetes", "helm", "devops", "rag"]
