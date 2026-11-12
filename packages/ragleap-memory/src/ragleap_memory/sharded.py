@@ -120,8 +120,8 @@ class ShardedStore:
     def sweep_expired(self, scope: Scope) -> int:
         return self._run(scope, lambda s, sc: s.sweep_expired(sc))
 
-    def export_file(self, scope: Scope, path: "str | os.PathLike[str]") -> int:
-        return self._run(scope, lambda s, sc: s.export_file(sc, path))
+    def export_file(self, scope: Scope, path: "str | os.PathLike[str]", **options: Any) -> int:
+        return self._run(scope, lambda s, sc: s.export_file(sc, path, **options))
 
     def import_file(self, scope: Scope, path: "str | os.PathLike[str]", **options: Any) -> ImportResult:
         return self._run(scope, lambda s, sc: s.import_file(sc, path, **options))

@@ -3,6 +3,58 @@
 All notable changes to `ragleap-memory` are documented here. Format
 loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.3.1] - 2026-11-11
+
+Design: #1294. Encrypted export and import. No schema change. No new cryptography: every byte is encrypted and decrypted by `ragleap_security.crypto` (AES-256-GCM); this package only frames the file.
+
+### Behaviour changes (read first)
+
+- Plain export files (format version 1) and every call without the new arguments behave exactly as in 0.3.0.
+- `import_file` and `import_stream` now **refuse an encrypted file (format version 2) when no key or passphrase is given**. Before 0.3.1 such a file did not exist.
+- A file whose header says `version` 2 is now read as an encrypted file. In 0.3.0 it was refused as an unsupported version; it is still refused, with a different message, unless you give a key or passphrase.
+- Passing `decrypt_with` or `passphrase` **refuses a file that is not encrypted** (no downgrade: a plain file cannot take the place of an encrypted one).
+- The test extra now includes `cryptography`. A new `crypto` extra installs `ragleap-security[crypto]`. Without it nothing else changes, and asking for encryption raises `MemoryStoreError` that names the extra.
+
+### Added
+
+- `export_file(scope, path, *, encrypt_with=None, passphrase=None, context=None)`. Give a `Key`, a `KeyRing` (its active key is used) or a passphrase, never both. Same rules as a plain export: mode 0600, the file must not exist, a failed write removes the partial file. The audit event `memory.export` gets `"encrypted": true`.
+- `import_file(..., decrypt_with=None, passphrase=None, context=None)` and the same arguments on `import_stream`. `ShardedStore` passes them through. The audit event `memory.import` gets `"encrypted": true` for an encrypted file; the line for a plain file is unchanged.
+- Export format version 2: line 1 is a plain JSON header (`format`, `version` 2, `count`, `file_id` of 16 random bytes, `kdf` of `none` or `scrypt` with its settings and a salt); every other line is one base64 envelope holding one entry. With a passphrase the key is derived once per file (scrypt 2^15, r 8, p 1), not once per line.
+- Each line is bound to its place: the authenticated context is a fixed label, the SHA-256 of the exact header line, the line's position and your own `context` (at most 1,024 bytes). A line that is moved, duplicated or taken from another file, any changed header byte, a wrong key, a wrong context and any changed byte in a line all fail to decrypt. Dropped and extra lines fail the count check.
+- Import stays the single safe path: the lines are decrypted by a small reader that hands the unchanged import code a plain version 1 stream, so the trust cap, the scope check, quotas, the one-transaction rule and every limit still apply. A decrypted file is not a trusted file.
+- `ragleap_memory.exportcrypto`: the file layout in one small module.
+
+### Differences from the design in #1294
+
+- The authenticated context holds a hash of the whole header line instead of `file_id` and `count` separately. The header holds both, so a changed `file_id` or `count` still fails every line, and now every other header byte is authenticated too.
+- Only canonical base64 is accepted (Python's decoder alone accepts a changed padding bit, so a flipped bit could go unnoticed), and every line must end with exactly one newline. Blank lines are tolerated, as in plain files.
+- Limits: an encrypted line may be up to 90,000 bytes; the file on disk may be up to twice `max_bytes`; the decrypted data obeys `max_bytes`, `max_entries` and 64 KiB per line as before.
+- A header that says more entries than `max_entries` is refused before anything is decrypted.
+- Wrong key, wrong context and damaged line all give the same message with the line number (`line 7: cannot decrypt`); a header or count problem gives a different, specific message. Messages never contain entry text.
+
+### What this does not defend
+
+- It protects the export FILE. The SQLite database is still unencrypted at rest, and so is the memory of the process while it exports or imports.
+- The header shows the number of entries, and the length of each line shows roughly how long the entry is. The header of an empty export is not authenticated: there is nothing in the file to protect.
+- Someone who holds the key can read and forge a file. An old file put back in place of a newer one is not noticed (no freshness).
+- A decrypted file is still untrusted input: trust labels are capped on import exactly as before.
+- No independent security review has happened.
+
+### Verified (real output)
+
+- 532 tests pass (472 from 0.3.0 and 60 new) on Python 3.12.3 and on Python 3.10.20 (author's sandbox; SQLite 3.45.1 and 3.53.1; cryptography 50.0.2). They also pass with cryptography 42.0.0, the lowest version allowed. In an environment without cryptography, 476 pass and the encrypted-file tests are skipped.
+- 232 of 232 mutations killed on both Python versions (177 from 0.3.0 and 55 new). One candidate mutation was dropped as equivalent (making the newline optional in the line pattern changes nothing, because a last line without its newline loses a character and fails to decode anyway). One existing test case changed: it used `version: 2` as its example of an unsupported version, which is now the encrypted format, so it uses version 3.
+- Every single bit changed anywhere in a small encrypted file (header and lines) is refused and imports nothing; the same for a sample of positions in a passphrase file.
+- A plain export file written by the released ragleap-memory 0.3.0 from PyPI imports with this code. The released 0.3.0 refuses a 0.3.1 encrypted file with the "unsupported version" message instead of misreading it.
+- The README example was run as written.
+
+### Not verified
+
+- The VPS (Python 3.10.12, SQLite 3.37.2) is checked in the pull request, not here. Windows and macOS were not run.
+- Several processes writing or exporting one file, and network file systems.
+- Timing and memory with very large files: an import decrypts into memory up to `max_bytes` (64 MiB by default).
+- The mutation run on the VPS.
+
 ## [0.3.0] - 2026-11-09
 
 Correction (2026-11-09): the published 0.3.0 package shows 2026-11-08 here, the day this entry was written. It was released on 2026-11-09 (UTC).

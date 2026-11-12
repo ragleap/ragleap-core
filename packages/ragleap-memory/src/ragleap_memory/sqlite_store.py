@@ -23,6 +23,7 @@ from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Sequ
 
 from ragleap_security import (AuditLog, LimitError, Scope, check_json_shape, check_size, require_scope)
 
+from . import exportcrypto
 from .model import (ID_RE, KINDS, SOURCE_RE, TRUSTS, EmbedderError, EmbedResult, InvalidEntryError, MemoryEntry,
                     MemoryStoreError, ImportResult, NotFoundError, QuotaExceededError, SearchHit, estimate_tokens,
                     trust_rank)
@@ -768,32 +769,59 @@ class SQLiteStore:
 
     # -- download and upload ------------------------------------------------------------------------
 
-    def export_file(self, scope: Scope, path: "str | os.PathLike[str]") -> int:
+    def export_file(self, scope: Scope, path: "str | os.PathLike[str]", *, encrypt_with: Any = None,
+                    passphrase: Any = None, context: "str | bytes | None" = None) -> int:
         """Write every entry `scope` can see (superseded and expired too) to a JSON Lines file. Returns the
-        number of entries. The file is created with mode 0600 and must not exist yet. It is PLAIN TEXT:
-        anyone who can read the file can read the memory. Guard it like the database itself."""
-        entries = self.export(scope)
+        number of entries. The file is created with mode 0600 and must not exist yet.
+
+        Without `encrypt_with` or `passphrase` the file is PLAIN TEXT: anyone who can read it can read the memory.
+        Guard it like the database itself. With a Key or KeyRing (the active key is used) or a passphrase, every
+        entry is encrypted by ragleap-security (needs ragleap-memory[crypto]); give one of them, never both.
+        `context` (at most 1,024 bytes) is also authenticated: the same value is needed to import. This protects
+        the export FILE only, not the database."""
+        encrypted = exportcrypto.check_args("encrypt_with", encrypt_with, passphrase, context)
+        if not encrypted:
+            entries = self.export(scope)
+            plan = None
+        else:
+            entries = self._export_encrypted_rows(scope)
+            plan = exportcrypto.prepare_export(len(entries), encrypt_with, passphrase, context)
         fd = os.open(os.fspath(path), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         try:
-            with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
-                f.write(json.dumps({"format": EXPORT_FORMAT, "version": EXPORT_VERSION, "count": len(entries)},
-                                   sort_keys=True) + "\n")
-                for e in entries:
-                    f.write(json.dumps(e, sort_keys=True) + "\n")
+            if plan is None:
+                with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
+                    f.write(json.dumps({"format": EXPORT_FORMAT, "version": EXPORT_VERSION, "count": len(entries)},
+                                       sort_keys=True) + "\n")
+                    for e in entries:
+                        f.write(json.dumps(e, sort_keys=True) + "\n")
+            else:
+                with os.fdopen(fd, "wb") as f:
+                    f.write(plan.header_line)
+                    for i, e in enumerate(entries, 1):
+                        f.write(plan.line(i, e))
         except BaseException:
             with contextlib.suppress(OSError):
                 os.remove(os.fspath(path))
             raise
         return len(entries)
 
+    def _export_encrypted_rows(self, scope: Scope) -> List[Dict[str, Any]]:
+        scope = require_scope(scope)
+        clause, params = _scope_clause(scope)
+        with self._tx() as db:
+            rows = db.execute(f"SELECT * FROM memories WHERE {clause} ORDER BY created_at, id", params).fetchall()
+            self._log("memory.export", scope, {"count": len(rows), "encrypted": True})
+        return [_row_to_entry(r).to_dict() for r in rows]
+
     def import_file(self, scope: Scope, path: "str | os.PathLike[str]", **options: Any) -> ImportResult:
-        """Import an export file. See `import_stream` for the options and the safety rules."""
+        """Import an export file (plain, or encrypted with `decrypt_with` or `passphrase`). See `import_stream`."""
         with open(os.fspath(path), "rb") as f:
             return self.import_stream(scope, f, **options)
 
     def import_stream(self, scope: Scope, stream: Any, *, max_trust: str = "untrusted", rescope: bool = False,
                       skip_duplicates: bool = True, max_entries: int = 100_000,
-                      max_bytes: int = 64 * 1024 * 1024) -> ImportResult:
+                      max_bytes: int = 64 * 1024 * 1024, decrypt_with: Any = None, passphrase: Any = None,
+                      context: "str | bytes | None" = None) -> ImportResult:
         """Import entries from a binary stream of an export file (for example an uploaded file).
 
         An uploaded file is untrusted input, so:
@@ -807,6 +835,11 @@ class SQLiteStore:
         - an entry with the same scope, kind and text as one already stored is skipped (`skip_duplicates`);
         - the whole import is ONE transaction: any error, including a quota, imports nothing;
         - limits: `max_entries`, `max_bytes`, 64 KiB per line.
+        Encrypted files (export format version 2): give the Key or KeyRing as `decrypt_with`, or the `passphrase`,
+        and the same `context` that was used to export. An encrypted file is refused without one of them, and a
+        plain file is refused when one is given (no downgrade). The lines are decrypted first, then every rule
+        above applies unchanged: decrypting does not make a file trusted. A file on disk may be up to twice
+        `max_bytes`; the decrypted data obeys `max_bytes`.
         Error messages name the line number, never entry text."""
         scope = require_scope(scope)
         if max_trust not in TRUSTS:
@@ -814,6 +847,7 @@ class SQLiteStore:
         for name, v in (("max_entries", max_entries), ("max_bytes", max_bytes)):
             if isinstance(v, bool) or not isinstance(v, int) or v < 1:
                 raise InvalidEntryError(f"{name} must be a positive int")
+        stream, encrypted = exportcrypto.open_import(stream, decrypt_with, passphrase, context, max_entries, max_bytes)
         items = [self._prepare_import(n, obj, scope, max_trust, rescope)
                  for n, obj in _read_export(stream, max_entries, max_bytes)]
         imported = skipped = dropped = 0
@@ -860,7 +894,10 @@ class SQLiteStore:
                 if derived or sup is not None:
                     db.execute("UPDATE memories SET derived_from = ?, superseded_by = ? WHERE id = ?",
                                [json.dumps(derived), sup, new_id])
-            self._log("memory.import", scope, {"imported": imported, "skipped": skipped})
+            if encrypted:
+                self._log("memory.import", scope, {"imported": imported, "skipped": skipped, "encrypted": True})
+            else:
+                self._log("memory.import", scope, {"imported": imported, "skipped": skipped})
         return ImportResult(imported, skipped, dropped)
 
     def _prepare_import(self, n: int, obj: Any, target: Scope, max_trust: str, rescope: bool) -> Dict[str, Any]:

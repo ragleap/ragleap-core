@@ -6,7 +6,7 @@ from ragleap_memory.model import (KINDS, TRUSTS, EmbedderError, EmbedResult, Imp
 from ragleap_memory.sharded import ShardedStore
 from ragleap_memory.sqlite_store import SCHEMA_VERSION, SQLiteStore
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 
 __all__ = [
     "EmbedResult", "EmbedderError", "ImportResult", "InvalidEntryError", "KINDS", "MemoryEntry", "MemoryStoreError", "NotFoundError", "QuotaExceededError",
