@@ -108,7 +108,7 @@ gone() { # label kind name [namespace]
 }
 grafana_check() { # label namespace when ("after install" or "after upgrade")
   # Talks to Grafana through a port-forward. The password is the one set at install time below (grafana.admin.password).
-  local label=$1 ns=$2 when=$3 gpw="ci-throwaway-password" lport=${GRAFANA_LOCAL_PORT:-13000}
+  local label=$1 ns=$2 when=$3 gpw="wrong-password" lport=${GRAFANA_LOCAL_PORT:-13000}
   local port pf base out i ok name uid st n
   port=$(kubectl -n "$ns" get svc ragleap-grafana -o jsonpath='{.spec.ports[0].port}' 2>/dev/null || true)
   if [ -z "$port" ]; then fail "$label: grafana service port not found ($when)"; return 0; fi
