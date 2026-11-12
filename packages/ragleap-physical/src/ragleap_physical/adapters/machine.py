@@ -90,6 +90,8 @@ class FakeMachineToolAdapter(Adapter):
         return DryRun(value, 0.0, 0.0, True, per_joint={})
 
     def apply(self, target: str, command: str, value: float) -> None:
+        if self.stopped:
+            raise ValueError("the adapter is stopped: clear the stop first")
         if target != self.TARGET or command != "set_tool_offset":
             raise ValueError("unsupported target or command")
         value = _finite_value(value)  # checked before anything changes: a refused value leaves the adapter untouched

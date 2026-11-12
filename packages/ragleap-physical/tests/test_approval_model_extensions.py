@@ -124,10 +124,9 @@ class StopAtAdapterCallAdapter(StopDuringDryRunAdapter):
         return self.wrapped.apply(*args, **kwargs)
 
 
-@pytest.mark.xfail(strict=True, reason="gap: issue 1339")
 def test_p7_a_stopped_adapter_does_not_move_when_stop_lands_at_the_adapter_call():
     """The Bridge cannot stop a call it has already made; the adapter must refuse a command while stopped.
-    The simulated stand-in does not refuse yet, so the command is applied: the open part of issue 1339."""
+    The simulated stand-ins refuse a command while stopped (issue 1339)."""
     from ragleap_physical.adapters import FakeJointAdapter
     wrapped = FakeJointAdapter()
     hooked = StopAtAdapterCallAdapter(wrapped)
