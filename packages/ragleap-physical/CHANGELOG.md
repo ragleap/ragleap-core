@@ -12,6 +12,7 @@ All notable changes are listed here. Format: Keep a Changelog.
 - A line in the Hindi and Tamil drafts that points to the English original and says the English text is the one to trust.
 - Known-gap tests (`tests/test_known_gaps.py`): three tests for gaps in the Bridge (#1337, #1338, #1339), written first. The one still open (#1338, a design question) is marked as an expected failure.
 - Approval-model extension for issues #1337 to #1339 (`benchmarks/approval_model.py`, `benchmarks/run_approval_model_extensions.py`, `tests/test_approval_model_extensions.py`): identity comparison, stop invalidation (a pending design property, #1338) and the stop races as explicit model events, plus a multi-proposal replay against the real Bridge. It reports two P6 disagreements (#1338) and none for identity. A hand-written model, not a proof.
+- Review tests for the lingering close (`tests/test_lingering_close_review.py`): the half-close, the linger time bound, ten parallel refusals, a client that never reads its answer, and the console not lingering on successful answers. Two gaps are marked as expected failures: the console's stop waiting behind a stalled client (#1367) and answers that bypass the lingering close (#1336).
 
 ### Fixed
 - The Bridge compared the requester and the approver as exact text, so a requester could approve its own proposal by changing the letter case of its id (#1337). Ids are now compared after Unicode NFKC normalisation and case folding.
