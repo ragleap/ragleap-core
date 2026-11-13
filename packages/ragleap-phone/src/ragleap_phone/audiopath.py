@@ -37,7 +37,7 @@ class InboundAudio:
 
     def silence(self, n_samples, timestamp_ns):
         """Feed n_samples of digital silence at 8 kHz, for packets that were lost. Independent of the law."""
-        return self._rs.process(Frame(bytes(2 * n_samples), PHONE_RATE, timestamp_ns))
+        return self._rs.process_zeros(n_samples, timestamp_ns)
 
     def finish(self):
         """Flush the filter tail as a last Frame (possibly empty)."""

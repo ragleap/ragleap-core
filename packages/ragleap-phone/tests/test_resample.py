@@ -124,3 +124,21 @@ def test_matches_ragleap_voice_when_it_is_installed():
     x = _noise(1001)
     for (a, b), fn in zip(PAIRS, (audio.down2, audio.up2, audio.down3, audio.up3)):
         assert _run(x, a, b, 100) == fn(x), (a, b)
+
+
+@pytest.mark.parametrize("a,b", PAIRS)
+@pytest.mark.parametrize("n", [1, 30, 31, 32, 63, 64, 500])
+def test_process_zeros_equals_filtering_zeros(a, b, n):
+    history = _noise(777, seed=3)
+    follow = _noise(400, seed=4)
+    fast, slow = Resampler(a, b), Resampler(a, b)
+    out_fast, out_slow = array.array("h"), array.array("h")
+    out_fast.extend(fast.process(_frame(history, a)).to_samples())
+    out_slow.extend(slow.process(_frame(history, a)).to_samples())
+    out_fast.extend(fast.process_zeros(n, 9).to_samples())
+    out_slow.extend(slow.process(_frame(array.array("h", [0] * n), a, 9)).to_samples())
+    out_fast.extend(fast.process(_frame(follow, a)).to_samples())
+    out_slow.extend(slow.process(_frame(follow, a)).to_samples())
+    out_fast.extend(fast.finish().to_samples())
+    out_slow.extend(slow.finish().to_samples())
+    assert out_fast == out_slow

@@ -149,14 +149,14 @@ class RtpCall(Call):
         got = self._rx.handle(datagram)
         if got is None:
             return
-        packet, missing = got
+        packet, gap = got
         ts_ns = int(now * 1e9)
         if self._started_at is None:
             self._started_at = now
             self._emit("call.started")
         self._last_packet_at = now
-        if missing:
-            self._put_frame(self._in.silence(missing * PACKET_BYTES, ts_ns))
+        if gap:
+            self._put_frame(self._in.silence(gap, ts_ns))
         self._put_frame(self._in.process(packet.payload, ts_ns))
 
     def tick(self):

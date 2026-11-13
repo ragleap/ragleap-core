@@ -224,3 +224,30 @@ def test_flush_playback_pads_the_partial_packet_with_silence_of_the_law():
             c.flush_playback()
             assert c.pop_datagram() is None
         _run(main())
+
+
+def test_silence_suppression_is_filled_from_the_timestamps_up_to_the_cap():
+    async def main():
+        c = RtpCall(_cfg(), Clock())
+        pk = lambda seq, ts: rtp.build(0, seq, ts, 7, PAYLOAD)
+        c.on_datagram(pk(1, 160), SRC)
+        c.on_datagram(pk(2, 320), SRC)
+        c.on_datagram(pk(3, 320 + 16000), SRC)
+        await c.hangup()
+        frames, _ = await _drain(c)
+        assert sum(f.n_samples for f in frames) == 2 * (3 * 160 + 8000)
+        assert c.counts["long_gaps"] == 1 and c.counts["accepted"] == 3
+    _run(main())
+
+
+def test_one_sender_cannot_make_the_gap_fill_expensive():
+    async def main():
+        c = RtpCall(_cfg(), Clock())
+        seq = 1
+        for _ in range(100):
+            c.on_datagram(_pkt(seq), SRC)
+            seq += 51
+        await c.hangup()
+        return c.counts
+    counts = _run(main())
+    assert counts["accepted"] == 100 and counts["queue_full"] == 0 and counts["long_gaps"] == 0

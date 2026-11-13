@@ -99,6 +99,18 @@ class Resampler:
         self._buf.extend(samples)
         return Frame(_to_pcm(self._emit()), self.to_rate, frame.timestamp_ns)
 
+    def process_zeros(self, n_samples, timestamp_ns):
+        """The same result as process() on a Frame of n_samples zeros, much cheaper for a long run. Once one filter length of zeros
+        has gone in, the history is all zeros and every further zero input gives exactly one zero output (conversions that keep every
+        output, that is step 1); the rest is then written out without filtering. Other conversions take the normal path."""
+        if self._done:
+            raise ValueError("process() called after finish()")
+        if self._identity or self._step != 1 or n_samples <= self._len:
+            return self.process(Frame(bytes(2 * n_samples), self.from_rate, timestamp_ns))
+        head = self.process(Frame(bytes(2 * self._len), self.from_rate, timestamp_ns))
+        rest = (n_samples - self._len) * self._up
+        return Frame(head.pcm + bytes(2 * rest), self.to_rate, timestamp_ns)
+
     def finish(self):
         """Flush the tail with zero padding. Returns a Frame (possibly empty). Later calls return an empty Frame."""
         if self._done or self._identity:

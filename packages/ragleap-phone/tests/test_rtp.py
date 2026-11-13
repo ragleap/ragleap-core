@@ -119,8 +119,8 @@ def test_receiver_drops_duplicates_and_late_packets():
 def test_receiver_reports_gaps_and_caps_long_ones():
     r = Receiver(PCMU)
     r.handle(_pkt(100))
-    assert r.handle(_pkt(104))[1] == 3
-    assert r.handle(_pkt(204))[1] == 50
+    assert r.handle(_pkt(104))[1] == 480
+    assert r.handle(_pkt(204))[1] == 8000
     assert r.counts["long_gaps"] == 1
 
 
@@ -144,3 +144,41 @@ def test_counts_hold_no_packet_content():
     r = Receiver(PCMU)
     r.handle(_pkt(1, payload=b"secret-audio" * 10))
     assert all(isinstance(v, int) for v in r.counts.values())
+
+
+def test_a_restarted_sequence_is_taken_up_after_two_consecutive_packets():
+    r = Receiver(PCMU)
+    r.handle(_pkt(5000))
+    assert r.handle(_pkt(0)) is None and r.counts["jump_dropped"] == 1
+    got = r.handle(_pkt(1))
+    assert got is not None and got[1] == 0 and r.counts["resyncs"] == 1
+    assert r.handle(_pkt(2)) is not None and r.handle(_pkt(2)) is None
+
+
+def test_a_large_forward_jump_is_also_resynchronised_and_a_stray_packet_is_not():
+    r = Receiver(PCMU)
+    r.handle(_pkt(100))
+    r.handle(_pkt(101))
+    assert r.handle(_pkt(40000)) is None
+    assert r.handle(_pkt(102)) is not None and r.counts["resyncs"] == 0
+    assert r.handle(_pkt(20000)) is None and r.handle(_pkt(50000)) is None
+    assert r.handle(_pkt(103)) is not None
+    assert r.handle(_pkt(30000)) is None and r.handle(_pkt(30001)) is not None and r.counts["resyncs"] == 1
+
+
+def test_the_gap_comes_from_the_timestamps():
+    r = Receiver(PCMU)
+    r.handle(_pkt(1))
+    # consecutive sequence numbers but the timestamp jumps by 1000 samples (silence suppression): 1000 - 160 samples were not sent
+    got = r.handle(build(PCMU, 2, 160 + 1000, 0x11223344, b"\xff" * 160))
+    assert got[1] == 840 and r.counts["long_gaps"] == 0
+    # a timestamp that goes backwards or stays put gives no gap
+    assert r.handle(build(PCMU, 3, 5, 0x11223344, b"\xff" * 160))[1] == 0
+    assert r.handle(build(PCMU, 4, 5, 0x11223344, b"\xff" * 160))[1] == 0
+
+
+def test_the_timestamp_wraps_around():
+    r = Receiver(PCMU)
+    r.handle(build(PCMU, 1, 0xFFFFFF00, 7, b"\xff" * 160))
+    assert r.handle(build(PCMU, 2, (0xFFFFFF00 + 160) & 0xFFFFFFFF, 7, b"\xff" * 160))[1] == 0
+    assert r.handle(build(PCMU, 3, (0xFFFFFF00 + 320 + 480) & 0xFFFFFFFF, 7, b"\xff" * 160))[1] == 480
