@@ -147,7 +147,7 @@ def log_autonomous_action(action_type: str, channel: str, target: str,
     conn = get_connection()
     try:
         cur = conn.cursor()
-        base = (action_type, channel, target, content[:2000], result[:2000], approved, role)
+        base = (action_type, channel, target, _log_content(channel, content)[:2000], result[:2000], approved, role)
         if decided_by:
             try:
                 cur.execute(
@@ -249,6 +249,9 @@ def _send_via_channel(channel: str, target: str, content: str) -> str:
         elif channel == "files_preview":
             from core.file_access import preview_change
             return preview_change(target, content)
+        elif channel == "files_write":
+            from core.file_access import write_file
+            return write_file(target, content)
         elif channel == "files_request":
             from core.file_access import access_request_text
             return access_request_text(target)
@@ -257,6 +260,54 @@ def _send_via_channel(channel: str, target: str, content: str) -> str:
     except Exception as e:
         logger.error(f"Autonomous send failed on {channel}: {e}")
         return "Send error; see server logs."
+
+
+def _write_bundle(content: str):
+    """The bound JSON of a write_file action as a dict, or None when content is not that."""
+    try:
+        d = json.loads(content)
+    except Exception:
+        return None
+    return d if isinstance(d, dict) and isinstance(d.get("path"), str) and isinstance(d.get("new"), str) else None
+
+
+def _approval_preview(channel: str, content: str, limit: int = 300) -> str:
+    """What a person reads before approving. Normal channels: the start of the content. A file write: grant-less
+    summary with path, what it replaces, lines changed, short hashes and the start of the real diff."""
+    d = _write_bundle(content) if channel == "files_write" else None
+    if d is None:
+        return content[:limit]
+    base = str(d.get("base") or "-")
+    kind = "replaces an existing file" if base != "-" else "creates a new file"
+    head = [f"Write file: {str(d.get('path'))[:200]} ({kind})",
+            f"{int(d.get('added') or 0)} lines added, {int(d.get('removed') or 0)} removed",
+            f"old sha256 {base[:16]}, new sha256 {str(d.get('new'))[:16]}",
+            "--- the change (diff, start) ---"]
+    return "\n".join(head) + "\n" + str(d.get("diff") or "")[:800]
+
+
+def _log_content(channel: str, content: str) -> str:
+    """What the action log and the learning store keep. A file write keeps its path and hashes, never the text."""
+    d = _write_bundle(content) if channel == "files_write" else None
+    if d is None:
+        return content
+    return f"write_file {str(d.get('path'))[:200]} base={str(d.get('base'))[:16]} new={str(d.get('new'))[:16]}"
+
+
+def _bind_file_write(target: str, content: str):
+    """Bind a proposed write to the real preview. content is the path on line 1 and the whole new text after it.
+    Returns (bound JSON string, None) or (None, why not). The runner is only asked for a read-only preview."""
+    from core import file_access
+    first, _, text = (content or "").partition("\n")
+    prev, why = file_access.preview_raw(target, first.strip(), text)
+    if prev is None:
+        return None, f"write_file refused: {why}"
+    if prev.get("identical"):
+        return None, "write_file: the new text is identical to the file, nothing to change"
+    bound = {"path": first.strip(), "base": prev.get("old_sha256") or "-", "new": prev["new_sha256"], "text": text,
+             "exists": bool(prev.get("exists")), "added": int(prev.get("added") or 0), "removed": int(prev.get("removed") or 0),
+             "diff": str(prev.get("diff") or "")}
+    return json.dumps(bound), None
 
 
 def list_pending(limit: int = 50) -> List[Dict]:
@@ -279,6 +330,7 @@ def list_pending(limit: int = 50) -> List[Dict]:
         d = dict(zip(keys, r))
         if d["created_at"] is not None:
             d["created_at"] = d["created_at"].isoformat()
+        d["display"] = _approval_preview(d["channel"], d["content"], limit=10**6)
         out.append(d)
     return out
 
@@ -336,7 +388,7 @@ def request_approval(action_type: str, channel: str, target: str,
         f"{role_line}"
         f"Channel: {channel}\n"
         f"Target: {target}\n\n"
-        f"Message preview:\n{content[:300]}\n\n"
+        f"Message preview:\n{_approval_preview(channel, content)}\n\n"
         f"{_decision_instructions(action_id)}"
     )
     result = _send_via_channel(approval_ch, approval_target, msg)
@@ -380,10 +432,17 @@ def execute_or_request(action_type: str, channel: str, target: str,
         _audit_event("action_skipped", content=content, reason="channel not allowed", action_type=action_type, channel=channel, role=role)
         return {"status": "skipped", "result": f"{channel} not in allowed channels"}
 
-    if mode == "full" and (force_semi or action_type == "request_access"):
+    if channel == "files_write":
+        # Bind the write to the real preview first (read-only). A refused or identical preview creates nothing.
+        content, why = _bind_file_write(target, content)
+        if content is None:
+            _audit_event("action_skipped", content=why, reason="write not possible", action_type=action_type, channel=channel, role=role)
+            return {"status": "skipped", "result": why}
+
+    if mode == "full" and (force_semi or action_type in ("request_access", "write_file")):
         # caller (e.g. a run that has read untrusted web/MCP content) requires approval for this call
         logger.info(f"force_semi: {action_type} forced full->semi")
-        _audit_event("action_forced_approval", content=content, reason="untrusted input or request_access", action_type=action_type, channel=channel, role=role)
+        _audit_event("action_forced_approval", content=content, reason="untrusted input, request_access or write_file", action_type=action_type, channel=channel, role=role)
         mode = "semi"
 
     if mode == "full" and role:
@@ -484,7 +543,7 @@ def process_approval_response(message: str, decided_by: Optional[Dict] = None) -
         log_autonomous_action(action_type, channel, target, content, "REJECTED by owner", approved=False, role=role,
                               decided_by=decided_by, action_id=action_id)
         employee_learning.learn_from_owner_approval(
-            action_type, content, "REJECTED by owner", approved=False
+            action_type, _log_content(channel, content), "REJECTED by owner", approved=False
         )
         _notify_agent_loop(action_id, False, "", action_type)
         return f"Action {action_id} rejected and cancelled."
@@ -493,7 +552,7 @@ def process_approval_response(message: str, decided_by: Optional[Dict] = None) -
     log_autonomous_action(action_type, channel, target, content, result, approved=True, role=role,
                           decided_by=decided_by, action_id=action_id)
     employee_learning.learn_from_owner_approval(
-        action_type, content, result, approved=True
+        action_type, _log_content(channel, content), result, approved=True
     )
     _notify_agent_loop(action_id, True, result, action_type)
     return f"Action {action_id} approved and executed.\n{result}"

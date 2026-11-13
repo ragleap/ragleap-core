@@ -199,7 +199,7 @@
       h("div", { class: "row" }, h("strong", null, p.action_type), p.role ? h("span", { class: "tag" }, p.role) : null,
         h("span", { class: "tag" }, p.channel), h("span", { class: "sub" }, ago(p.created_at))),
       p.target ? h("div", { class: "sub" }, "target: " + clip(p.target, 200)) : null,
-      h("pre", null, p.content),
+      h("pre", null, p.display || p.content),
       h("div", { class: "row" }, approvalButton("Approve", "ok", base + "/approve", msg),
         approvalButton("Reject", "bad", base + "/reject", msg), msg));
   };

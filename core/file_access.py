@@ -3,8 +3,10 @@ Client for the sandbox runner's owner-granted file access (POST /files, GET /gra
 Opt-in: FILE_TOOLS_ENABLED=true AND SANDBOX_TOKEN set. The runner also needs COMPUTER_CONTROL=true
 and at least one grant created on the host with the `ragleap files` command.
 The model names a grant and a path inside it. It never chooses a host path, the URL, the token or
-any container option; the runner decides what is mounted. Read-only. Never raises.
+any container option; the runner decides what is mounted. Reading is read-only; writing needs FILE_WRITE_ENABLED, a write
+grant and owner approval for every change. Never raises.
 """
+import json
 import logging
 import os
 import re
@@ -26,6 +28,11 @@ _cache = {"at": 0.0, "names": [], "modes": {}}
 def enabled() -> bool:
     return (os.environ.get("FILE_TOOLS_ENABLED", "").strip().lower() == "true"
             and bool(os.environ.get("SANDBOX_TOKEN", "").strip()))
+
+
+def write_enabled() -> bool:
+    """The app-side kill switch for writing files. Off unless FILE_WRITE_ENABLED=true, on top of the file tools."""
+    return enabled() and os.environ.get("FILE_WRITE_ENABLED", "").strip().lower() == "true"
 
 
 def _base() -> str:
@@ -239,3 +246,93 @@ def overview() -> dict:
         logger.error("file overview failed: %s", e)
         out["runner"] = "unreachable"
     return out
+
+
+_SHA_RE = re.compile(r"[0-9a-f]{64}")
+
+
+def _post(op, grant, rel, extra):
+    """One call to the runner's /files. Returns (result dict, None) or (None, plain refusal text). Never raises."""
+    try:
+        resp = requests.post(
+            _base() + "/files", json=dict(extra or {}, op=op, grant=grant, path=rel),
+            headers=_headers(), timeout=HTTP_TIMEOUT, allow_redirects=False,
+        )
+        if resp.status_code == 429:
+            return None, "the sandbox is busy, try again"
+        if resp.status_code in (400, 403, 404):
+            return None, str((resp.json() or {}).get("error", "refused"))[:120]
+        if resp.status_code != 200:
+            raise ValueError(f"HTTP {resp.status_code}")
+        d = resp.json()
+        if not d.get("ok"):
+            return None, str(d.get("error", "could not do it"))[:150]
+        res = d.get("result")
+        return (res if isinstance(res, dict) else {}), None
+    except Exception as e:
+        logger.error("sandbox %s call failed: %s", op, e)
+        return None, "failed; see server logs"
+
+
+def preview_raw(grant, rel, text):
+    """The runner's preview of replacing a file with text, as a dict. Returns (dict, None) or (None, reason).
+    Read-only: nothing is written. Used to bind a write to exactly what the owner will be shown."""
+    if not write_enabled():
+        return None, "writing files is not enabled"
+    cleaned = clean_rel("preview", rel)
+    if cleaned is None:
+        return None, "bad path"
+    if not isinstance(text, str) or not text.strip():
+        return None, "the new text is empty"
+    if not isinstance(grant, str) or grant not in write_grant_names():
+        return None, "unknown grant or the grant is read-only"
+    res, err = _post("preview", grant, cleaned, {"text": text})
+    if err:
+        return None, err
+    if not _SHA_RE.fullmatch(str(res.get("new_sha256") or "")):
+        return None, "the preview was incomplete"
+    old = res.get("old_sha256")
+    if res.get("exists") and not _SHA_RE.fullmatch(str(old or "")):
+        return None, "the preview was incomplete"
+    return res, None
+
+
+def write_file(grant, content) -> str:
+    """Write exactly what an approved write_file action holds. content is the bound JSON made when the action
+    was proposed (path, base, new, text). The runner refuses if the file changed since the preview. Never raises."""
+    label = "File write"
+    try:
+        if not write_enabled():
+            return f"{label}: refused (writing files is not enabled)"
+        try:
+            d = json.loads(content)
+        except Exception:
+            return f"{label}: refused (the approved action is not valid)"
+        rel, text, base, new = (d.get("path"), d.get("text"), d.get("base"), d.get("new")) if isinstance(d, dict) else (None,) * 4
+        cleaned = clean_rel("write", rel) if isinstance(rel, str) else None
+        if cleaned is None or not isinstance(text, str) or not (base == "-" or _SHA_RE.fullmatch(str(base))) \
+                or not _SHA_RE.fullmatch(str(new)):
+            return f"{label}: refused (the approved action is not valid)"
+        if not isinstance(grant, str) or grant not in write_grant_names():
+            return f"{label}: refused (unknown grant or the grant is read-only)"
+        res, err = _post("write", grant, cleaned, {"text": text, "expect_sha256": base, "new_sha256": new})
+        if err:
+            return f"{label}: nothing was written ({err})"
+        if res.get("changed") is False:
+            return f"{label}: no change, the file already had this text\ngrant {grant}, file {cleaned}"
+        created = bool(res.get("created"))
+        trash = str(res.get("trash") or "")[:160]
+        try:
+            from core import audit
+            audit.emit("file_write", grant=grant, path=cleaned[:200], old_sha256=res.get("old_sha256"),
+                       new_sha256=res.get("new_sha256"), created=created, trash=trash or None)
+        except Exception:
+            pass
+        lines = [f"File written: {'new file created' if created else 'file replaced'}", f"grant {grant}, file {cleaned}",
+                 f"old sha256 {str(res.get('old_sha256') or '-')[:16]}; new sha256 {str(res.get('new_sha256') or '?')[:16]}"]
+        if trash:
+            lines.append("The old version was kept in the folder's trash: " + trash)
+        return "\n".join(lines)[:MAX_RESULT_CHARS]
+    except Exception as e:
+        logger.error("%s failed: %s", label, e)
+        return f"{label}: failed; see server logs."
