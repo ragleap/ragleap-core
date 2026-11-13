@@ -18,3 +18,11 @@ def test_soupsieve_is_at_a_patched_version():
     # selector matching (fixed in 4.0.0), and versions up to 2.9.2 another one (fixed in 2.10.0).
     v = pinned("soupsieve")
     assert v is not None and v >= (4, 0, 0), "soupsieve in requirements.lock must be 4.0.0 or newer, found %s" % (v,)
+
+
+def test_the_packages_with_fixes_found_by_the_image_scan_are_at_fixed_versions():
+    # Trivy on the published image (first run of the publish workflow) reported these as fixable: certifi (critical),
+    # oauthlib, pyasn1 and pypdf (high). The minimum is the first fixed version.
+    for name, minimum in (("certifi", (2026, 10, 18)), ("oauthlib", (4, 0, 1)), ("pyasn1", (0, 6, 5)), ("pypdf", (6, 21, 4))):
+        v = pinned(name)
+        assert v is not None and v >= minimum, "%s in requirements.lock must be %s or newer, found %s" % (name, minimum, v)

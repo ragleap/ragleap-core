@@ -11,7 +11,7 @@ APScheduler==3.11.3
 attrs==26.1.0
 babel==2.18.0
 beautifulsoup4==4.15.0
-certifi==2026.7.22
+certifi==2026.10.18
 cffi==2.1.1
 charset-normalizer==3.5.2
 click==8.5.0
@@ -51,7 +51,7 @@ lxml_html_clean==0.4.5
 more-itertools==11.2.1
 neo4j==6.4.0
 numpy==2.4.6
-oauthlib==4.0.0
+oauthlib==4.0.1
 odfpy==1.4.1
 openai==3.31.0
 openpyxl==3.1.5
@@ -64,7 +64,7 @@ pluggy==1.6.0
 psycopg2-binary==2.9.13
 pyactiveresource==2.2.2
 pyarrow==26.0.0
-pyasn1==0.6.4
+pyasn1==0.6.5
 pyasn1_modules==0.4.2
 pycparser==3.11
 pydantic==2.14.1
@@ -73,7 +73,7 @@ Pygments==2.21.0
 PyJWT==2.15.1
 pymongo==4.19.0
 PyMySQL==1.2.3
-pypdf==6.21.1
+pypdf==6.21.4
 pytest-asyncio==1.4.0
 pytest==9.1.1
 python-dateutil==2.9.0.post0
