@@ -5,6 +5,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-11-13
+
+### Upgrade note
+- Tenant views (`RagLeap.for_tenant`) on the Redis, OpenSearch and LanceDB backends of `ragleap-vectorstores` need `ragleap-vectorstores>=0.7.0`; on 0.6.x those backends ignore the tenant filter or cannot filter by `tenant_id`.
+
+
 ### Added
 - Opt-in multi-tenant scope: `RagLeap.for_tenant(tenant_id)` returns a view that tags every ingest with `tenant_id`, adds it to every search filter, prefixes session ids, and lists, deletes and updates only that tenant's documents. `RagLeap(..., require_tenant=True)` makes unscoped calls raise `TenantRequiredError`. Default behaviour is unchanged; documents ingested without a tenant tag are not visible through a view.
 
@@ -562,4 +568,4 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ([#35](https://github.com/antonyrag/ragleap-core/pull/35))
 
-[Unreleased]: https://github.com/antonyrag/ragleap-core/compare/main...HEAD
+[Unreleased]: https://github.com/ragleap/ragleap-core/compare/main...HEAD
