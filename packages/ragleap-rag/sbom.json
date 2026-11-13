@@ -179,7 +179,7 @@
       "version": "0.8.0"
     },
     {
-      "bom-ref": "anthropic==2.6.0",
+      "bom-ref": "anthropic==2.8.0",
       "description": "The official Python library for the anthropic API",
       "externalReferences": [
         {
@@ -208,9 +208,9 @@
         }
       ],
       "name": "anthropic",
-      "purl": "pkg:pypi/anthropic@2.6.0",
+      "purl": "pkg:pypi/anthropic@2.8.0",
       "type": "library",
-      "version": "2.6.0"
+      "version": "2.8.0"
     },
     {
       "bom-ref": "anyio==4.16.0",
@@ -1004,7 +1004,7 @@
       "version": "2.0.0"
     },
     {
-      "bom-ref": "faiss-cpu==1.15.1",
+      "bom-ref": "faiss-cpu==1.16.0",
       "description": "A library for efficient similarity search and clustering of dense vectors.",
       "externalReferences": [
         {
@@ -1037,12 +1037,12 @@
         }
       ],
       "name": "faiss-cpu",
-      "purl": "pkg:pypi/faiss-cpu@1.15.1",
+      "purl": "pkg:pypi/faiss-cpu@1.16.0",
       "type": "library",
-      "version": "1.15.1"
+      "version": "1.16.0"
     },
     {
-      "bom-ref": "filelock==4.2.9",
+      "bom-ref": "filelock==4.2.10",
       "description": "A platform independent file lock.",
       "externalReferences": [
         {
@@ -1080,9 +1080,9 @@
         }
       ],
       "name": "filelock",
-      "purl": "pkg:pypi/filelock@4.2.9",
+      "purl": "pkg:pypi/filelock@4.2.10",
       "type": "library",
-      "version": "4.2.9"
+      "version": "4.2.10"
     },
     {
       "bom-ref": "flatbuffers==25.12.19",
@@ -1189,7 +1189,7 @@
       "version": "2026.9.0"
     },
     {
-      "bom-ref": "google-auth==2.62.1",
+      "bom-ref": "google-auth==2.62.2",
       "description": "Google Authentication Library",
       "externalReferences": [
         {
@@ -1213,12 +1213,12 @@
           "value": "requests"
         }
       ],
-      "purl": "pkg:pypi/google-auth@2.62.1",
+      "purl": "pkg:pypi/google-auth@2.62.2",
       "type": "library",
-      "version": "2.62.1"
+      "version": "2.62.2"
     },
     {
-      "bom-ref": "google-genai==3.0.0",
+      "bom-ref": "google-genai==3.3.0",
       "description": "GenAI Python SDK",
       "externalReferences": [
         {
@@ -1236,9 +1236,9 @@
         }
       ],
       "name": "google-genai",
-      "purl": "pkg:pypi/google-genai@3.0.0",
+      "purl": "pkg:pypi/google-genai@3.3.0",
       "type": "library",
-      "version": "3.0.0"
+      "version": "3.3.0"
     },
     {
       "bom-ref": "grpcio==1.78.2",
@@ -1814,7 +1814,7 @@
       "version": "1.8.0"
     },
     {
-      "bom-ref": "jsonpointer==3.10",
+      "bom-ref": "jsonpointer==3.12",
       "description": "Identify specific nodes in a JSON document (RFC 6901) ",
       "externalReferences": [
         {
@@ -1827,14 +1827,14 @@
         {
           "license": {
             "acknowledgement": "declared",
-            "name": "License :: OSI Approved :: BSD License"
+            "id": "BSD-3-Clause"
           }
         }
       ],
       "name": "jsonpointer",
-      "purl": "pkg:pypi/jsonpointer@3.10",
+      "purl": "pkg:pypi/jsonpointer@3.12",
       "type": "library",
-      "version": "3.10"
+      "version": "3.12"
     },
     {
       "bom-ref": "jsonschema==4.26.0",
@@ -2227,7 +2227,7 @@
       "version": "1.31.1"
     },
     {
-      "bom-ref": "openai==3.46.0",
+      "bom-ref": "openai==3.50.0",
       "description": "The official Python library for the openai API",
       "externalReferences": [
         {
@@ -2250,9 +2250,9 @@
         }
       ],
       "name": "openai",
-      "purl": "pkg:pypi/openai@3.46.0",
+      "purl": "pkg:pypi/openai@3.50.0",
       "type": "library",
-      "version": "3.46.0"
+      "version": "3.50.0"
     },
     {
       "bom-ref": "openpyxl==3.1.5",
@@ -2988,7 +2988,7 @@
       "version": "2.50.4"
     },
     {
-      "bom-ref": "pymilvus==3.0.2",
+      "bom-ref": "pymilvus==3.0.3",
       "description": "Python SDK for Milvus",
       "externalReferences": [
         {
@@ -3016,9 +3016,9 @@
         }
       ],
       "name": "pymilvus",
-      "purl": "pkg:pypi/pymilvus@3.0.2",
+      "purl": "pkg:pypi/pymilvus@3.0.3",
       "type": "library",
-      "version": "3.0.2"
+      "version": "3.0.3"
     },
     {
       "bom-ref": "pyparsing==3.3.3",
@@ -3054,7 +3054,7 @@
       "version": "3.3.3"
     },
     {
-      "bom-ref": "pypdf==7.0.0",
+      "bom-ref": "pypdf==7.0.1",
       "description": "A pure-python PDF library capable of splitting, merging, cropping, and transforming PDF files",
       "externalReferences": [
         {
@@ -3087,9 +3087,9 @@
         }
       ],
       "name": "pypdf",
-      "purl": "pkg:pypi/pypdf@7.0.0",
+      "purl": "pkg:pypi/pypdf@7.0.1",
       "type": "library",
-      "version": "7.0.0"
+      "version": "7.0.1"
     },
     {
       "bom-ref": "pytesseract==0.3.13",
@@ -3725,7 +3725,7 @@
       "version": "2.4.0"
     },
     {
-      "bom-ref": "soupsieve==4.0.1",
+      "bom-ref": "soupsieve==4.1",
       "description": "A modern CSS selector implementation for Beautiful Soup.",
       "externalReferences": [
         {
@@ -3743,9 +3743,9 @@
         }
       ],
       "name": "soupsieve",
-      "purl": "pkg:pypi/soupsieve@4.0.1",
+      "purl": "pkg:pypi/soupsieve@4.1",
       "type": "library",
-      "version": "4.0.1"
+      "version": "4.1"
     },
     {
       "bom-ref": "striprtf==0.0.35",
@@ -4462,7 +4462,7 @@
       "dependsOn": [
         "anyio==4.16.0",
         "docstring_parser==0.18.0",
-        "google-auth==2.62.1",
+        "google-auth==2.62.2",
         "httpx2==2.16.0",
         "jiter==0.19.0",
         "opentelemetry-api==1.45.2",
@@ -4470,7 +4470,7 @@
         "sniffio==1.3.1",
         "typing_extensions==4.16.0"
       ],
-      "ref": "anthropic==2.6.0"
+      "ref": "anthropic==2.8.0"
     },
     {
       "dependsOn": [
@@ -4504,7 +4504,7 @@
         "chardet==7.7.0",
         "charset-normalizer==3.5.2",
         "lxml==6.1.3",
-        "soupsieve==4.0.1",
+        "soupsieve==4.1",
         "typing_extensions==4.16.0"
       ],
       "ref": "beautifulsoup4==4.15.0"
@@ -4597,10 +4597,10 @@
         "numpy==2.4.6",
         "packaging==26.3"
       ],
-      "ref": "faiss-cpu==1.15.1"
+      "ref": "faiss-cpu==1.16.0"
     },
     {
-      "ref": "filelock==4.2.9"
+      "ref": "filelock==4.2.10"
     },
     {
       "ref": "flatbuffers==25.12.19"
@@ -4628,13 +4628,13 @@
         "requests==2.34.2",
         "urllib3==2.8.0"
       ],
-      "ref": "google-auth==2.62.1"
+      "ref": "google-auth==2.62.2"
     },
     {
       "dependsOn": [
         "anyio==4.16.0",
         "distro==1.9.0",
-        "google-auth==2.62.1",
+        "google-auth==2.62.2",
         "httpx2==2.16.0",
         "httpx==0.28.1",
         "pillow==13.0.0",
@@ -4646,7 +4646,7 @@
         "typing_extensions==4.16.0",
         "websockets==17.4"
       ],
-      "ref": "google-genai==3.0.0"
+      "ref": "google-genai==3.3.0"
     },
     {
       "dependsOn": [
@@ -4726,7 +4726,7 @@
         "Authlib==1.9.5",
         "PyYAML==6.0.3",
         "click==8.5.1",
-        "filelock==4.2.9",
+        "filelock==4.2.10",
         "fsspec==2026.9.0",
         "hf-xet==1.8.0",
         "httpx2==2.16.0",
@@ -4761,7 +4761,7 @@
       "ref": "joserfc==1.8.0"
     },
     {
-      "ref": "jsonpointer==3.10"
+      "ref": "jsonpointer==3.12"
     },
     {
       "dependsOn": [
@@ -4775,7 +4775,7 @@
         "fqdn==1.6.0",
         "idna==3.20",
         "isoduration==20.11.0",
-        "jsonpointer==3.10",
+        "jsonpointer==3.12",
         "jsonschema-specifications==2025.9.1",
         "referencing==0.37.0",
         "rfc3339-validator==0.1.4",
@@ -4845,7 +4845,7 @@
     {
       "dependsOn": [
         "anyio==4.16.0",
-        "google-auth==2.62.1",
+        "google-auth==2.62.2",
         "httpx2==2.16.0",
         "jiter==0.19.0",
         "numpy==2.4.6",
@@ -4856,7 +4856,7 @@
         "urllib3==2.8.0",
         "websockets==17.4"
       ],
-      "ref": "openai==3.46.0"
+      "ref": "openai==3.50.0"
     },
     {
       "dependsOn": [
@@ -4990,7 +4990,7 @@
         "setuptools==79.0.1",
         "urllib3==2.8.0"
       ],
-      "ref": "pymilvus==3.0.2"
+      "ref": "pymilvus==3.0.3"
     },
     {
       "ref": "pyparsing==3.3.3"
@@ -5001,7 +5001,7 @@
         "pillow==13.0.0",
         "typing_extensions==4.16.0"
       ],
-      "ref": "pypdf==7.0.0"
+      "ref": "pypdf==7.0.1"
     },
     {
       "dependsOn": [
@@ -5102,24 +5102,24 @@
       "dependsOn": [
         "EbookLib==0.21",
         "PyYAML==6.0.3",
-        "anthropic==2.6.0",
+        "anthropic==2.8.0",
         "beautifulsoup4==4.15.0",
-        "faiss-cpu==1.15.1",
-        "google-genai==3.0.0",
+        "faiss-cpu==1.16.0",
+        "google-genai==3.3.0",
         "huggingface_hub==2.4.0",
         "jsonschema==4.26.0",
         "lxml_html_clean==0.4.6",
         "odfpy==1.4.1",
         "onnxruntime==1.31.1",
-        "openai==3.46.0",
+        "openai==3.50.0",
         "openpyxl==3.1.5",
         "pandas==3.1.1",
         "pillow==13.0.0",
         "pinecone==10.3.0",
         "psycopg2-binary==2.9.13",
         "pyarrow==26.0.1",
-        "pymilvus==3.0.2",
-        "pypdf==7.0.0",
+        "pymilvus==3.0.3",
+        "pypdf==7.0.1",
         "pytesseract==0.3.13",
         "python-docx==1.2.0",
         "python-pptx==1.0.2",
@@ -5140,7 +5140,7 @@
     },
     {
       "dependsOn": [
-        "filelock==4.2.9",
+        "filelock==4.2.10",
         "packaging==26.3",
         "pip==26.3"
       ],
@@ -5156,7 +5156,7 @@
       "ref": "sortedcontainers==2.4.0"
     },
     {
-      "ref": "soupsieve==4.0.1"
+      "ref": "soupsieve==4.1"
     },
     {
       "ref": "striprtf==0.0.35"
@@ -5297,9 +5297,9 @@
       ],
       "name": "ragleap-rag",
       "type": "library",
-      "version": "0.15.0"
+      "version": "0.16.0"
     },
-    "timestamp": "2026-11-09T13:30:22.320206+00:00",
+    "timestamp": "2026-11-13T05:37:43.565499+00:00",
     "tools": {
       "components": [
         {
@@ -5403,7 +5403,7 @@
       ]
     }
   },
-  "serialNumber": "urn:uuid:634b8c07-937f-4f9d-95c1-42c0dd714e81",
+  "serialNumber": "urn:uuid:a25e5303-7a1e-4edc-95e6-d0a781025c8f",
   "version": 1,
   "$schema": "http://cyclonedx.org/schema/bom-1.6.schema.json",
   "bomFormat": "CycloneDX",
