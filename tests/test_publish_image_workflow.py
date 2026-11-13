@@ -71,6 +71,7 @@ def test_the_sbom_job_uses_the_lock_file_and_attaches_only_on_tags(wf):
 
 def test_the_docs_page_explains_how_to_check_and_what_it_does_not_say():
     text = (ROOT / "docs" / "supply-chain.md").read_text(encoding="utf-8")
-    assert "cosign verify" in text and "certificate-identity-regexp" in text and "token.actions.githubusercontent.com" in text
+    assert "cosign verify" in text and "certificate-identity-regexp" in text
+    assert any(line.strip() == "--certificate-oidc-issuer https://token.actions.githubusercontent.com" for line in text.splitlines())
     assert "report only" in text and "does not say" in text and "without a live run" in text
     assert "{{" not in text and "{%" not in text
