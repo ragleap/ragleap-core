@@ -18,7 +18,7 @@ Needs: `COMPUTER_CONTROL=true` on the sandbox runner, `FILE_TOOLS_ENABLED=true` 
 All of these must be true before an agent can even propose a write:
 
 1. `COMPUTER_CONTROL=true` and `FILE_TOOLS_ENABLED=true` (as above).
-2. A grant made with `--mode write`.
+2. A grant made with `--mode write`. The `ragleap files add` command still refuses write grants on purpose; that is switched on separately, when you decide to roll writing out.
 3. `ragleap files writing on` on the machine (the runner checks it on every call).
 4. `FILE_WRITE_ENABLED=true` in the app (this is the app-side kill switch).
 
@@ -31,7 +31,18 @@ How a write goes:
 - The old version is kept first in `.ragleap-trash` inside the granted folder, the new file is written atomically, and the result is read back. The trash holds at most 1000 old versions; when it is full, writes are refused until you empty it by hand. The agent cannot list, read or write the trash or any name starting with `.ragleap-`.
 - Logs and the learning store keep the path and hashes, never the file text. A `file_write` audit line carries grant, path, old and new hashes and the trash name.
 
-Not included yet: deleting files, commands to list or restore the trash (planned, host-only), and broad folders.
+## The trash (host only)
+
+Old versions land in `.ragleap-trash` inside the granted folder. You manage them on the machine, never through the agent:
+
+    ragleap files trash list notes
+    ragleap files trash restore notes <id>            # <id> is the first column of the list
+    ragleap files trash restore notes <id> --replace  # also when a file is there now; the current one goes into the trash
+    ragleap files trash empty notes --older-than 7d   # shows what would go; add --yes to remove for good
+
+The runner can also move one file into the trash (operation `delete`, only if the file still matches what was previewed, and only while writing is switched on). Nothing gives the agent a delete tool yet: that is the next step.
+
+Not included yet: the agent tool for deleting files, and broad folders.
 
 ## Folder permissions
 

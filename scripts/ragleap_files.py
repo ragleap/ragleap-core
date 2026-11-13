@@ -11,8 +11,10 @@ import importlib.util
 import json
 import os
 import re
+import shutil
 import stat
 import sys
+import time
 import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -24,6 +26,8 @@ GRANTS_FILE = GRANTS_DIR / "grants.json"
 DISABLED_FLAG = GRANTS_DIR / "DISABLED"
 WRITE_FLAG = GRANTS_DIR / "WRITE_ENABLED"
 SCAN_LIMIT = 2000
+TRASH_NAME = ".ragleap-trash"
+STAMP_RE = re.compile(r"\d{8}T\d{6}Z-[0-9a-f]{6}")
 
 
 def _load_runner():
@@ -221,6 +225,127 @@ def cmd_writing(args):
     return 0
 
 
+def _trash_folder(name):
+    for g in read_raw():
+        if isinstance(g, dict) and g.get("name") == name and isinstance(g.get("path"), str):
+            folder = g["path"]
+            if os.path.islink(folder) or not os.path.isdir(folder):
+                fail("The folder of '%s' is not there: %s" % (name, folder))
+            return os.path.realpath(folder)
+    fail("No grant named '" + name + "'. See: ragleap files list")
+
+
+def _trash_entries(folder):
+    """[(stamp, relative path, size)] oldest first. Real files only; links and other things are ignored."""
+    root = os.path.join(folder, TRASH_NAME)
+    if os.path.islink(root) or not os.path.isdir(root):
+        return []
+    found = []
+    for stamp in sorted(os.listdir(root)):
+        sdir = os.path.join(root, stamp)
+        if not STAMP_RE.fullmatch(stamp) or os.path.islink(sdir) or not os.path.isdir(sdir):
+            continue
+        for dp, _dirs, files in os.walk(sdir, followlinks=False):
+            for f in files:
+                full = os.path.join(dp, f)
+                st = os.lstat(full)
+                if stat.S_ISREG(st.st_mode):
+                    found.append((stamp, os.path.relpath(full, sdir).replace(os.sep, "/"), st.st_size))
+    return found
+
+
+def _stamp_time(stamp):
+    return datetime.strptime(stamp[:16], "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
+
+
+def cmd_trash_list(args):
+    entries = _trash_entries(_trash_folder(args.name))
+    if not entries:
+        print("The trash of '%s' is empty." % args.name)
+        return 0
+    for stamp, rel, size in entries[-200:]:
+        print("%s  %9d bytes  %s" % (stamp, size, rel))
+    if len(entries) > 200:
+        print("(showing the newest 200 of %d)" % len(entries))
+    print("Put one back: ragleap files trash restore %s <id>   (the id is the first column)" % args.name)
+    return 0
+
+
+def _clean_empty_dirs(path, stop):
+    d = path
+    while d.startswith(stop) and d != os.path.dirname(stop):
+        try:
+            os.rmdir(d)
+        except OSError:
+            break
+        d = os.path.dirname(d)
+
+
+def cmd_trash_restore(args):
+    folder = _trash_folder(args.name)
+    found = [e for e in _trash_entries(folder) if e[0] == args.id]
+    if len(found) != 1:
+        fail("No single trashed file with the id '%s'. See: ragleap files trash list %s" % (args.id, args.name))
+    stamp, rel, _size = found[0]
+    parts = rel.split("/")
+    if any(p in ("", ".", "..") for p in parts) or any(runner.name_denied(p) for p in parts):
+        fail("That trashed file has a protected or unsafe name and is not restored by this command.")
+    src = os.path.join(folder, TRASH_NAME, stamp, *parts)
+    dest = os.path.join(folder, *parts)
+    cur = folder
+    for p in parts[:-1]:
+        cur = os.path.join(cur, p)
+        if os.path.islink(cur):
+            fail("A link is in the way at " + os.path.relpath(cur, folder) + ". Nothing was changed.")
+    if os.path.lexists(dest):
+        if not args.replace:
+            fail("A file is there now: " + rel + ". Add --replace to put the trashed version back; the current file "
+                 "then goes into the trash, so nothing is lost. Nothing was changed.")
+        if os.path.islink(dest) or not os.path.isfile(dest):
+            fail("What is there now is not a normal file. Nothing was changed.")
+    cur = folder
+    for p in parts[:-1]:
+        cur = os.path.join(cur, p)
+        if not os.path.isdir(cur):
+            os.mkdir(cur, 0o755)
+    if os.path.lexists(dest):
+        stamp2 = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime()) + "-" + os.urandom(3).hex()
+        keep = os.path.join(folder, TRASH_NAME, stamp2, *parts)
+        os.makedirs(os.path.dirname(keep), exist_ok=True)
+        os.replace(dest, keep)
+        print("The file that was there is now in the trash as " + stamp2)
+    os.replace(src, dest)
+    _clean_empty_dirs(os.path.dirname(src), os.path.join(folder, TRASH_NAME, stamp))
+    print("Restored %s from %s." % (rel, stamp))
+    return 0
+
+
+def cmd_trash_empty(args):
+    folder = _trash_folder(args.name)
+    entries = _trash_entries(folder)
+    if args.older_than:
+        m = re.fullmatch(r"(\d+)([mhd])", args.older_than.strip().lower())
+        if not m:
+            fail("--older-than must look like 30m, 12h or 7d")
+        cutoff = datetime.now(timezone.utc) - timedelta(**{{"m": "minutes", "h": "hours", "d": "days"}[m.group(2)]: int(m.group(1))})
+        entries = [e for e in entries if _stamp_time(e[0]) < cutoff]
+    stamps = sorted({e[0] for e in entries})
+    total = sum(e[2] for e in entries)
+    if not stamps:
+        print("Nothing to remove.")
+        return 0
+    if not args.yes:
+        print("This would remove %d trashed version(s), %d bytes, for good. Nothing was removed. "
+              "Run again with --yes to do it." % (len(stamps), total))
+        return 0
+    for stamp in stamps:
+        sdir = os.path.join(folder, TRASH_NAME, stamp)
+        if not os.path.islink(sdir):
+            shutil.rmtree(sdir)
+    print("Removed %d trashed version(s), %d bytes." % (len(stamps), total))
+    return 0
+
+
 def cmd_status(args):
     items = read_raw()
     print("COMPUTER_CONTROL in .env: " + ("true" if env_flag() else "off"))
@@ -249,6 +374,21 @@ def main(argv=None):
     w = sub.add_parser("writing", help="allow or stop writing to folders granted with --mode write (off by default)")
     w.add_argument("state", choices=["on", "off"])
     w.set_defaults(fn=cmd_writing)
+    t = sub.add_parser("trash", help="old versions kept when a file was changed or deleted (host only)")
+    ts = t.add_subparsers(dest="tcmd", required=True)
+    tl = ts.add_parser("list", help="show what is in the trash of a grant")
+    tl.add_argument("name")
+    tl.set_defaults(fn=cmd_trash_list)
+    tr = ts.add_parser("restore", help="put one trashed version back")
+    tr.add_argument("name")
+    tr.add_argument("id")
+    tr.add_argument("--replace", action="store_true", help="also when a file is there now (it goes into the trash)")
+    tr.set_defaults(fn=cmd_trash_restore)
+    te = ts.add_parser("empty", help="remove trashed versions for good (asks for --yes)")
+    te.add_argument("name")
+    te.add_argument("--older-than", default=None, help="only versions older than 30m, 12h or 7d")
+    te.add_argument("--yes", action="store_true")
+    te.set_defaults(fn=cmd_trash_empty)
     sub.add_parser("status", help="show the switches").set_defaults(fn=cmd_status)
     args = p.parse_args(argv)
     return args.fn(args)

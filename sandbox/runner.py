@@ -172,7 +172,7 @@ GRANTS_FILE = os.environ.get("SANDBOX_GRANTS_FILE", "/grants/grants.json")
 FILE_READ_BYTES = 12000
 FILE_LIST_MAX = 100
 MAX_REL_CHARS = 300
-FILE_OPS = ("list", "read", "preview", "write")
+FILE_OPS = ("list", "read", "preview", "write", "stat", "delete")
 WRITE_TRASH_MAX = 1000       # old versions kept per grant before a write is refused until the owner empties the trash
 PREVIEW_TEXT_MAX = 8000      # characters of proposed text a preview accepts (a request body is capped at 16 KiB)
 PREVIEW_OLD_MAX = 200000     # bytes of the existing file a preview will read
@@ -408,6 +408,28 @@ try:
              "new_size": len(new_b), "old_sha256": None if old_b is None else hashlib.sha256(old_b).hexdigest(),
              "new_sha256": hashlib.sha256(new_b).hexdigest(), "identical": old_b is not None and old_b == new_b,
              "added_final_newline": added_nl, "added": added, "removed": removed, "diff": text, "diff_truncated": cut})
+    if OP == "stat":
+        # Read-only: what a delete would remove (size, sha256, the start of a text file). Nothing is changed.
+        for i in range(len(parts)):
+            if os.path.islink(os.path.join(BASE, *parts[:i + 1])):
+                out({"error": "a symbolic link is in that path"}, 3)
+        if target == BASE or os.path.isdir(target):
+            out({"error": "not a file"}, 3)
+        if not os.path.lexists(target):
+            out({"op": "stat", "exists": False})
+        if not os.path.isfile(target):
+            out({"error": "not a file"}, 3)
+        if os.stat(target).st_size > OLDMAX:
+            out({"error": "that file is too large to delete safely (limit %d bytes)" % OLDMAX}, 3)
+        with open(target, "rb") as f:
+            data = f.read(OLDMAX + 1)
+        if len(data) > OLDMAX:
+            out({"error": "that file is too large to delete safely (limit %d bytes)" % OLDMAX}, 3)
+        binary = b"\x00" in data[:2048]
+        head = "" if binary else data[:300].decode("utf-8", "replace")
+        head = "".join(ch if (ch.isprintable() or ch in "\n\t") else "?" for ch in head)
+        out({"op": "stat", "exists": True, "size": len(data), "sha256": hashlib.sha256(data).hexdigest(),
+             "binary": binary, "head": head})
     out({"error": "unknown operation"}, 2)
 except OSError as e:
     out({"error": "could not read: " + e.__class__.__name__}, 3)
@@ -560,6 +582,112 @@ def build_write_spec(grant, rel, text, expect, new_sha):
     return spec
 
 
+_DELETER_TEMPLATE = r"""
+import hashlib, json, os, sys, time
+DN = set(__NAMES__)
+DP = tuple(__PREFIXES__)
+DS = tuple(__SUFFIXES__)
+BASE = os.path.realpath(os.environ.get("RL_DATA", "/data"))
+REL = os.environ.get("REL", "")
+EXPECT = os.environ.get("EXPECT", "")
+OLDMAX = int(os.environ.get("OLDMAX", "200000"))
+TRASHMAX = int(os.environ.get("TRASHMAX", "1000"))
+TRASH = ".ragleap-trash"
+
+def out(obj, code=0):
+    sys.stdout.write(json.dumps(obj, ensure_ascii=False))
+    sys.exit(code)
+
+def denied(n):
+    n = n.lower()
+    return n in DN or n.startswith(DP) or n.endswith(DS)
+
+def sha(b):
+    return hashlib.sha256(b).hexdigest()
+
+stampdir = None
+trash_path = None
+done = False
+try:
+    parts = [p for p in REL.split("/") if p not in ("", ".")]
+    if not parts:
+        out({"error": "not a file"}, 3)
+    if any(p == ".." or denied(p) for p in parts):
+        out({"error": "that path is not allowed"}, 3)
+    for i in range(len(parts)):
+        if os.path.islink(os.path.join(BASE, *parts[:i + 1])):
+            out({"error": "a symbolic link is in that path"}, 3)
+    target = os.path.realpath(os.path.join(BASE, *parts))
+    if not target.startswith(BASE + os.sep):
+        out({"error": "that path is outside the granted folder"}, 3)
+    if not os.path.lexists(target):
+        out({"error": "the file is gone; preview again"}, 4)
+    if not os.path.isfile(target):
+        out({"error": "not a file"}, 3)
+    if os.stat(target).st_size > OLDMAX:
+        out({"error": "that file is too large to delete safely (limit %d bytes)" % OLDMAX}, 3)
+    with open(target, "rb") as f:
+        old_b = f.read(OLDMAX + 1)
+    if len(old_b) > OLDMAX:
+        out({"error": "that file is too large to delete safely (limit %d bytes)" % OLDMAX}, 3)
+    if sha(old_b) != EXPECT:
+        out({"error": "the file changed since the preview"}, 4)
+    troot = os.path.join(BASE, TRASH)
+    if os.path.islink(troot) or (os.path.exists(troot) and not os.path.isdir(troot)):
+        out({"error": "the trash folder is not usable"}, 3)
+    os.makedirs(troot, mode=0o700, exist_ok=True)
+    if len(os.listdir(troot)) >= TRASHMAX:
+        out({"error": "the trash is full; the owner must empty it"}, 4)
+    stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime()) + "-" + os.urandom(3).hex()
+    stampdir = os.path.join(troot, stamp)
+    trash_path = os.path.join(stampdir, *parts)
+    os.makedirs(os.path.dirname(trash_path), exist_ok=True)
+    with open(target, "rb") as g:
+        again = g.read(OLDMAX + 1)
+    if sha(again) != EXPECT:
+        raise RuntimeError("changed")
+    os.replace(target, trash_path)
+    done = True
+    if os.path.lexists(target) or not os.path.isfile(trash_path):
+        out({"error": "the file is not where it should be after the move; check the trash"}, 5)
+    with open(trash_path, "rb") as g:
+        check = g.read(OLDMAX + 1)
+    if sha(check) != EXPECT:
+        out({"error": "the trashed copy does not match; check the trash"}, 5)
+    out({"op": "delete", "deleted": True, "old_sha256": EXPECT, "size": len(old_b),
+         "trash": TRASH + "/" + stamp + "/" + "/".join(parts)})
+except SystemExit:
+    raise
+except RuntimeError:
+    out({"error": "the file changed while deleting; nothing was moved"}, 4)
+except OSError as e:
+    out({"error": "could not delete: " + e.__class__.__name__}, 3)
+finally:
+    if stampdir is not None and not done:
+        d = os.path.dirname(trash_path)
+        while d.startswith(stampdir):
+            try:
+                os.rmdir(d)
+            except OSError:
+                break
+            d = os.path.dirname(d)
+"""
+FILE_DELETER = (_DELETER_TEMPLATE
+                .replace("__NAMES__", json.dumps(sorted(DENY_NAMES)))
+                .replace("__PREFIXES__", json.dumps(list(DENY_PREFIXES)))
+                .replace("__SUFFIXES__", json.dumps(list(DENY_SUFFIXES))))
+
+
+def build_delete_spec(grant, rel, expect):
+    """build_spec() plus exactly one WRITABLE bind mount of the one granted folder, like the writer: the file is only
+    moved into the folder's trash. Same user, no network, no capabilities, read-only root."""
+    spec = build_spec("")
+    spec["Cmd"] = ["python", "-I", "-B", "-c", FILE_DELETER]
+    spec["Env"] = ["REL=" + rel, "EXPECT=" + expect, "OLDMAX=%d" % PREVIEW_OLD_MAX, "TRASHMAX=%d" % WRITE_TRASH_MAX]
+    spec["HostConfig"]["Mounts"] = [{"Type": "bind", "Source": grant["path"], "Target": "/data", "ReadOnly": False}]
+    return spec
+
+
 def build_file_spec(grant, op, rel, text=None):
     """build_spec() plus exactly one read-only bind mount of the granted folder. Nothing else changes."""
     spec = build_spec("")
@@ -568,6 +696,8 @@ def build_file_spec(grant, op, rel, text=None):
     if op == "preview":
         spec["Env"] += ["NEW=" + (text or ""), "OLDMAX=%d" % PREVIEW_OLD_MAX, "DIFFL=%d" % PREVIEW_DIFF_LINES,
                         "DIFFC=%d" % PREVIEW_DIFF_CHARS]
+    elif op == "stat":
+        spec["Env"] += ["OLDMAX=%d" % PREVIEW_OLD_MAX]
     spec["HostConfig"]["Mounts"] = [{"Type": "bind", "Source": grant["path"], "Target": "/data", "ReadOnly": True}]
     return spec
 
@@ -596,13 +726,20 @@ def file_op(payload):
             return 400, {"error": "expect_sha256 must be a sha256 or - and new_sha256 a sha256"}
         if not file_write_on():
             return 403, {"error": "writing is off"}
+    if op == "delete":
+        if not (isinstance(expect, str) and re.fullmatch(r"[0-9a-f]{64}", expect)):
+            return 400, {"error": "expect_sha256 must be a sha256"}
+        if not file_write_on():
+            return 403, {"error": "writing is off"}
     grant = next((g for g in active_grants() if g["name"] == name), None)
     if grant is None:
         return 404, {"error": "unknown or expired grant"}
-    if op in ("preview", "write") and grant["mode"] != "write":
+    if op in ("preview", "write", "stat", "delete") and grant["mode"] != "write":
         return 403, {"error": "this grant is read-only"}
     if op == "write":
         res = _run_spec(build_write_spec(grant, rel, text, expect, new_sha))
+    elif op == "delete":
+        res = _run_spec(build_delete_spec(grant, rel, expect))
     else:
         res = _run_spec(build_file_spec(grant, op, rel, text if op == "preview" else None))
     try:
@@ -617,6 +754,10 @@ def file_op(payload):
         print(json.dumps({"audit": "file_write", "grant": name, "path": rel[:120], "ok": ok,
                           "old_sha256": (parsed or {}).get("old_sha256") if isinstance(parsed, dict) else None,
                           "new_sha256": (parsed or {}).get("new_sha256") if isinstance(parsed, dict) else None,
+                          "trash": (parsed or {}).get("trash") if isinstance(parsed, dict) else None}), flush=True)
+    if op == "delete":
+        print(json.dumps({"audit": "file_delete", "grant": name, "path": rel[:120], "ok": ok,
+                          "old_sha256": (parsed or {}).get("old_sha256") if isinstance(parsed, dict) else None,
                           "trash": (parsed or {}).get("trash") if isinstance(parsed, dict) else None}), flush=True)
     if ok:
         return 200, {"ok": True, "result": parsed}
