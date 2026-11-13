@@ -26,7 +26,7 @@ A datagram is dropped and counted by reason unless all of these hold [plan]:
 | Payload type equals the one the operator configured (0 or 8), never learned from packets | operator |
 | Payload length between 1 and 480 octets (60 ms) | 480 |
 | SSRC equals the first valid SSRC of the call; a different SSRC is dropped, not adopted | strict |
-| Sequence number is not a duplicate and not older than the last accepted, compared modulo 65536 | fixed |
+| Sequence number: up to 3000 ahead is accepted; up to 100 behind is dropped as late; a larger jump in either direction is dropped until a second packet follows it consecutively, then the call resynchronises (values from memory of RFC 3550 appendix A.1, unverified) | starting values |
 
 Telephone-event packets (DTMF, a dynamic payload type) fail the payload-type rule and are dropped until DTMF is designed. [plan]
 
@@ -46,7 +46,7 @@ Nothing is logged by default except counters: packets accepted, and packets drop
 
 ## 6. Loss and order
 
-No jitter buffer in this version. Duplicates and late packets are dropped (section 3). A gap in the sequence is filled with zero samples, at the PCM level so it does not depend on the law, up to 50 packets (1 s); a longer gap ends the fill and is counted. Whether this sounds acceptable, and whether recognition suffers, is untested. [plan]
+No jitter buffer in this version. Duplicates and late packets are dropped (section 3). A gap is worked out from the timestamps, not from the sequence numbers: the samples not received before a packet are its timestamp step minus the length of the previous packet, so it covers lost packets and also silence suppression, where the sequence continues but the timestamp jumps. The gap is filled with zero samples, at the PCM level so it does not depend on the law, up to 50 packets' worth (1 s); a longer gap is capped and counted. A long run of silence is written out without filtering, which gives the same samples and costs almost nothing. Whether this sounds acceptable, and whether recognition suffers, is untested. [plan] Found by running the code on 2026-11-11: before this change a sequence restart silenced a call for about 100 s, one 50-packet gap cost 0.026 s of CPU (100 such packets in a second cost 2.65 s) and a 2 s silence suppression produced no gap at all. Those are numbers from one scratch run with synthetic packets, not a benchmark.
 
 ## 7. Sending
 

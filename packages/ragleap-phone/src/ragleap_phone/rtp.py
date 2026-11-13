@@ -13,10 +13,13 @@ CLOCK_RATE = 8000
 MAX_DATAGRAM = 1500
 MAX_PAYLOAD = 480
 MAX_GAP = 50
+GAP_UNIT = 160
+MAX_DROPOUT = 3000
+MAX_MISORDER = 100
 
 PARSE_REASONS = ("too_short", "too_long", "bad_version", "bad_header_length", "extension", "bad_padding",
                  "wrong_payload_type", "payload_size")
-STATE_REASONS = ("ssrc_changed", "duplicate_or_late")
+STATE_REASONS = ("ssrc_changed", "duplicate_or_late", "jump_dropped")
 
 
 class RtpError(ValueError):
@@ -91,9 +94,13 @@ def seq_delta(new, last):
 
 
 class Receiver:
-    """The per-packet rules of the design, section 3 and 6. handle() returns (packet, missing) for an accepted datagram and None for a
-    dropped one; every outcome is counted in `counts`. `missing` is the number of packets lost just before this one, capped at
-    max_gap (a longer gap is also counted as long_gaps). The first valid datagram fixes the SSRC of the call. Not thread-safe."""
+    """The per-packet rules of the design, sections 3 and 6. handle() returns (packet, gap) for an accepted datagram and None for a
+    dropped one; every outcome is counted in `counts`. `gap` is the number of 8 kHz samples that were not received just before this
+    packet, worked out from the timestamps (so it covers lost packets and also silence suppression), capped at max_gap packets of
+    160 samples (a longer gap is also counted as long_gaps). The first valid datagram fixes the SSRC of the call. A sequence number
+    up to MAX_DROPOUT ahead is accepted; one up to MAX_MISORDER behind is dropped as late (no reorder buffer); a larger jump in
+    either direction is dropped until a second packet follows it consecutively, and then the call is resynchronised (counted as
+    resyncs). The two limits are starting values. Not thread-safe."""
 
     def __init__(self, payload_type, max_payload=MAX_PAYLOAD, max_gap=MAX_GAP):
         if payload_type not in PAYLOAD_TYPES.values():
@@ -102,9 +109,17 @@ class Receiver:
         self.max_payload = max_payload
         self.max_gap = max_gap
         self.counts = {r: 0 for r in PARSE_REASONS + STATE_REASONS}
-        self.counts.update(accepted=0, long_gaps=0)
+        self.counts.update(accepted=0, long_gaps=0, resyncs=0)
         self._ssrc = None
         self._last_seq = None
+        self._last_ts = 0
+        self._last_len = 0
+        self._probation = None
+
+    def _accept(self, p, gap):
+        self._last_seq, self._last_ts, self._last_len = p.sequence, p.timestamp, len(p.payload)
+        self.counts["accepted"] += 1
+        return p, gap
 
     def handle(self, datagram):
         try:
@@ -113,20 +128,30 @@ class Receiver:
             self.counts[e.reason] += 1
             return None
         if self._ssrc is None:
-            self._ssrc, self._last_seq = p.ssrc, p.sequence
-            self.counts["accepted"] += 1
-            return p, 0
+            self._ssrc = p.ssrc
+            return self._accept(p, 0)
         if p.ssrc != self._ssrc:
             self.counts["ssrc_changed"] += 1
             return None
         delta = seq_delta(p.sequence, self._last_seq)
-        if delta <= 0:
+        if 0 < delta <= MAX_DROPOUT:
+            self._probation = None
+            ts_diff = (p.timestamp - self._last_ts) & 0xFFFFFFFF
+            if ts_diff >= 0x80000000:
+                ts_diff -= 0x100000000
+            gap = max(0, ts_diff - self._last_len)
+            cap = self.max_gap * GAP_UNIT
+            if gap > cap:
+                self.counts["long_gaps"] += 1
+                gap = cap
+            return self._accept(p, gap)
+        if -MAX_MISORDER <= delta <= 0:
             self.counts["duplicate_or_late"] += 1
             return None
-        self._last_seq = p.sequence
-        missing = delta - 1
-        if missing > self.max_gap:
-            self.counts["long_gaps"] += 1
-            missing = self.max_gap
-        self.counts["accepted"] += 1
-        return p, missing
+        if self._probation == p.sequence:
+            self._probation = None
+            self.counts["resyncs"] += 1
+            return self._accept(p, 0)
+        self._probation = (p.sequence + 1) & 0xFFFF
+        self.counts["jump_dropped"] += 1
+        return None
