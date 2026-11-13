@@ -106,8 +106,11 @@ def transition(
         accepted = True
     elif event == "clear":
         if s.stopped:
+            # Ending a stop revokes an approval that was given before it, unless the proposal was already applied.
             s = replace(s, stopped=False, stop_pending=False,
-                        applied_since_stop=False)
+                        applied_since_stop=False,
+                        approver=s.approver if s.applied_count else "",
+                        approval_digest=s.approval_digest if s.applied_count else "")
             accepted = True
     elif event == "expire":
         if s.proposed and not s.expired:

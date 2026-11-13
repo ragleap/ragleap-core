@@ -23,9 +23,8 @@ def test_self_approval_with_other_letter_case_is_refused():
         assert [p.proposal_id for p in bridge.pending_proposals()] == [proposal.proposal_id]
 
 
-@pytest.mark.xfail(strict=True, reason="gap: issue 1338")
 def test_stop_invalidates_an_approval_given_before_it():
-    """Gap 2 (design decision pending): an approval given before a stop must not survive stop and clear."""
+    """An approval given before a stop must not survive stop and clear (issue 1338: a stop invalidates earlier approvals)."""
     bridge, _adapter, _clock = make()
     proposal = propose(bridge)
     bridge.approve(proposal, PERSON)

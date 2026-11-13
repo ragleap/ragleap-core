@@ -22,7 +22,10 @@ An approval is tied to the digest of the exact proposal, can be used once, expir
 - `tests/test_console.py::test_the_approver_comes_from_the_token_never_from_the_request`
 - `tests/test_console.py::test_a_wrong_digest_is_refused_and_nothing_is_applied`
 
-**Open gap (#1338):** an approval given before a stop can still be used after the stop is cleared. It is a design question for the maintainer. Expected failure: `tests/test_known_gaps.py::test_stop_invalidates_an_approval_given_before_it`.
+**A stop invalidates earlier approvals (#1338).** Ending a stop revokes every approval given before the clear; after `clear_stop()` the action needs a fresh approval by a named person, and a clear when nothing was stopped changes nothing.
+- `tests/test_known_gaps.py::test_stop_invalidates_an_approval_given_before_it`
+- `tests/test_stop_revokes_approvals.py::test_a_fresh_approval_after_the_clear_applies`
+- `tests/test_stop_revokes_approvals.py::test_clear_without_a_stop_does_not_revoke`
 
 ### S3 Limits live only in the bridge and the envelope
 A caller cannot change a limit through a tool, a view or an input dictionary. Enforced in `envelope.py` and `bridge.py`.

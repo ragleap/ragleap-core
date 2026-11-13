@@ -299,19 +299,6 @@
    "note": "A full answer needs adapters to refuse commands while stopped. Issue 1339 stays open."
   },
   {
-   "id": "C22",
-   "claim": "The one still open (#1338, a design question) is marked as an expected failure.",
-   "where": "CHANGELOG.md",
-   "status": "limitation",
-   "evidence": [
-    {
-     "type": "test",
-     "ref": "tests/test_known_gaps.py::test_stop_invalidates_an_approval_given_before_it"
-    }
-   ],
-   "note": "An approval given before stop() can still be used after clear_stop(). The maintainer decides the design."
-  },
-  {
    "id": "C23",
    "claim": "read and discard what the client still sends, for at most 0.5 s and 1 MiB",
    "where": "CHANGELOG.md",
@@ -376,6 +363,27 @@
     }
    ],
    "note": "PR for issue 1339. Checked on the simulated stand-ins and the MuJoCo servo adapter; before the change four stand-ins and the three MuJoCo servo cases failed this test. REAL, 2026-11-11. Says nothing about real devices."
+  },
+  {
+   "id": "C28",
+   "claim": "A stop now invalidates every approval given before it",
+   "where": "CHANGELOG.md",
+   "status": "verified",
+   "evidence": [
+    {
+     "type": "test",
+     "ref": "tests/test_known_gaps.py::test_stop_invalidates_an_approval_given_before_it"
+    },
+    {
+     "type": "test",
+     "ref": "tests/test_stop_revokes_approvals.py::test_a_fresh_approval_after_the_clear_applies"
+    },
+    {
+     "type": "test",
+     "ref": "tests/test_stop_revokes_approvals.py::test_clear_without_a_stop_does_not_revoke"
+    }
+   ],
+   "note": "Option A of issue 1338, proposed by the lead engineer; merged only if the maintainer decides so. Deliberate breaks checked. REAL. Simulated adapters only."
   }
  ]
 }

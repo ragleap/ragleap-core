@@ -283,6 +283,7 @@ def test_refused_applies_are_in_the_audit_log():
     with pytest.raises(SafetyStop):
         b.apply(p)
     b.clear_stop()
+    b.approve(p, "person:alice")  # the stop revoked the earlier approval (issue 1338): a fresh one is needed to reach the expiry check
     clock.t += 11.0
     with pytest.raises(ApprovalError):
         b.apply(p)
