@@ -37,7 +37,7 @@ SUMMARY_MAX_TOKENS = 400
 OBS_CAP = 1500
 OBS_PROMPT_CAP = 4000
 TEXT_CAP = 2000
-OUTBOUND_TOOLS = frozenset({"send_webhook", "send_slack", "send_email", "update_crm_record", "schedule_event", "mcp_call", "fetch_page"})
+OUTBOUND_TOOLS = frozenset({"send_webhook", "send_slack", "send_email", "update_crm_record", "schedule_event", "mcp_call", "fetch_page", "write_file"})
 TAINTING_TOOLS = frozenset({"fetch_page", "mcp_call", "list_files", "read_file", "preview_change"})
 RUN_STATUSES = ("running", "waiting_approval", "done", "failed", "rejected", "budget")
 

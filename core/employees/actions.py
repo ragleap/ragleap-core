@@ -44,6 +44,7 @@ ACTION_TOOLS = {
     "list_files": {"channel": "files_list"},
     "read_file": {"channel": "files_read"},
     "preview_change": {"channel": "files_preview"},
+    "write_file": {"channel": "files_write"},
     "request_access": {"channel": "files_request"},
 }
 
@@ -213,6 +214,19 @@ def available_tools() -> Dict[str, str]:
             "these grant names: " + ", ".join(writable) + ". content is the file path inside the grant on the first "
             "line, then the complete new text of the file from the second line. At most 2000 characters in total."
         )
+    # Writing a file: only with FILE_WRITE_ENABLED=true and a write grant. Every write needs the owner's approval.
+    try:
+        write_on = _fa_write.write_enabled()
+    except Exception:
+        write_on = False
+    if writable and write_on:
+        tools["write_file"] = (
+            "Replace the whole text of one file (or create a new one) inside a folder the owner granted with write access. "
+            "The owner always sees the exact diff and must approve before anything is written; the old version is kept. "
+            "target must be exactly one of these grant names: " + ", ".join(writable) + ". content is the file path "
+            "inside the grant on the first line, then the complete new text of the file from the second line. "
+            "At most 2000 characters in total."
+        )
     # Opt-in: FILE_TOOLS_ENABLED=true plus SANDBOX_TOKEN. Offered even when no folder is granted yet.
     try:
         from core import file_access as _file_access
@@ -346,9 +360,11 @@ def _validate_plan(plan: Dict, tools: Dict[str, str]) -> Optional[Dict]:
         content = "".join(c for c in content if c.isprintable())[:300].strip()
         if not content:
             return None
-    elif tool == "preview_change":
+    elif tool in ("preview_change", "write_file"):
         from core import file_access
         if target not in file_access.write_grant_names():
+            return None
+        if tool == "write_file" and not file_access.write_enabled():
             return None
         raw = str(plan.get("content", "") or "").strip()
         if len(raw) > MAX_ACTION_CONTENT:
@@ -357,6 +373,8 @@ def _validate_plan(plan: Dict, tools: Dict[str, str]) -> Optional[Dict]:
         cleaned = file_access.clean_rel("preview", first)
         if cleaned is None:
             return None
+        if tool == "write_file" and not text.strip():
+            return None  # never write an empty file by accident
         content = cleaned + "\n" + text
     elif tool in ("list_files", "read_file"):
         from core import file_access
