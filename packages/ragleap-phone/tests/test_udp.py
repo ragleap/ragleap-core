@@ -208,3 +208,29 @@ def test_real_udp_on_loopback():
         peer.close()
         assert sum(f.n_samples for f in got) == 2 * 160 * 3
     asyncio.run(main())
+
+
+def test_nothing_is_sent_or_accepted_until_the_remote_is_set():
+    async def main():
+        holder = {}
+        ep = RtpMediaEndpoint(EndpointConfig(law="ulaw"), opener=_fake(holder), clock=Clock(), step_seconds=1000)
+        with pytest.raises(RuntimeError):
+            ep.expect_remote("10.0.0.5", 4000)
+        task, got = await _started(ep, holder)
+        t = holder["t"]
+        assert ep.local_address == ("127.0.0.1", 40000) and ep.call.remote is None
+        holder["proto"].datagram_received(_pkt(1), SRC)
+        for i in range(5):
+            await ep.call.send_audio(Frame(bytes(640), 16000, i))
+        for _ in range(8):
+            ep.step()
+        assert t.sent == [] and ep.call.counts["remote_not_set"] == 1 and ep.call.counts["accepted"] == 0
+        ep.expect_remote("10.0.0.5", 4000)
+        holder["proto"].datagram_received(_pkt(1), SRC)
+        for _ in range(4):
+            ep.step()
+        assert ep.call.counts["accepted"] == 1
+        assert len(t.sent) == 4 and all(addr == ("10.0.0.5", 4000) for _, addr in t.sent)
+        await ep.close()
+        await asyncio.wait_for(task, 2)
+    asyncio.run(main())

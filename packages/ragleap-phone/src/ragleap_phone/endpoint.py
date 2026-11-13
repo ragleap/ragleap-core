@@ -26,13 +26,24 @@ def _pos_int(name, v, hi=None):
         raise ValueError("%s must be an integer from 1%s" % (name, "" if hi is None else " to %d" % hi))
 
 
+def _parse_remote(ip, port):
+    try:
+        addr = ipaddress.ip_address(ip)
+    except (ValueError, TypeError):
+        raise ValueError("remote_ip must be an IP address")
+    _pos_int("remote_port", port, 65535)
+    return addr, port
+
+
 @dataclass(frozen=True)
 class EndpointConfig:
-    """Operator settings. The expected remote address and port are required: nothing is learned from packets."""
+    """Operator settings. The expected remote address and port come from the operator, never from packets: give them here, or leave
+    both out and set them once with expect_remote() when they are only known later (Asterisk's externalMedia reports its media
+    port after the channel exists). Until they are set every datagram is dropped."""
 
     law: str
-    remote_ip: str
-    remote_port: int
+    remote_ip: str = None
+    remote_port: int = None
     max_packets_per_second: int = 100
     max_call_seconds: int = 3600
     idle_timeout_seconds: int = 10
@@ -43,12 +54,11 @@ class EndpointConfig:
     def __post_init__(self):
         if self.law not in rtp.PAYLOAD_TYPES:
             raise ValueError("law must be one of %s" % (sorted(rtp.PAYLOAD_TYPES),))
-        try:
-            ip = ipaddress.ip_address(self.remote_ip)
-        except (ValueError, TypeError):
-            raise ValueError("remote_ip must be an IP address")
-        object.__setattr__(self, "remote_ip", str(ip))
-        _pos_int("remote_port", self.remote_port, 65535)
+        if (self.remote_ip is None) != (self.remote_port is None):
+            raise ValueError("remote_ip and remote_port must be given together, or both left out and set later with expect_remote()")
+        if self.remote_ip is not None:
+            ip, port = _parse_remote(self.remote_ip, self.remote_port)
+            object.__setattr__(self, "remote_ip", str(ip))
         _pos_int("max_packets_per_second", self.max_packets_per_second)
         _pos_int("max_call_seconds", self.max_call_seconds)
         _pos_int("idle_timeout_seconds", self.idle_timeout_seconds)
@@ -64,11 +74,11 @@ class RtpCall(Call):
         super().__init__(direction)
         self.config = config
         self._clock = clock
-        self._ip = ipaddress.ip_address(config.remote_ip)
+        self._remote = None if config.remote_ip is None else _parse_remote(config.remote_ip, config.remote_port)
         self._rx = rtp.Receiver(rtp.PAYLOAD_TYPES[config.law], config.max_payload, config.max_gap)
         self._in = InboundAudio(config.law)
         self._out = OutboundAudio(config.law)
-        self._own = {"wrong_source": 0, "rate_limited": 0, "queue_full": 0, "after_end": 0}
+        self._own = {"wrong_source": 0, "remote_not_set": 0, "rate_limited": 0, "queue_full": 0, "after_end": 0}
         now = clock()
         self._win_start, self._win_n = now, 0
         self._started_at = None
@@ -92,6 +102,19 @@ class RtpCall(Call):
     @property
     def ended(self):
         return self._ended
+
+    @property
+    def remote(self):
+        """The expected remote (ip, port) as set by the operator, or None while it is not set."""
+        return None if self._remote is None else (str(self._remote[0]), self._remote[1])
+
+    def expect_remote(self, ip, port):
+        """Set the expected remote address and port, once, when the configuration left them out. Nothing is ever learned from packets."""
+        if self._ended:
+            raise RuntimeError("the call has ended")
+        if self._remote is not None:
+            raise RuntimeError("the remote address is already set")
+        self._remote = _parse_remote(ip, port)
 
     def _ns(self):
         return int(self._clock() * 1e9)
@@ -127,7 +150,7 @@ class RtpCall(Call):
 
     def _source_ok(self, source):
         try:
-            return ipaddress.ip_address(source[0]) == self._ip and source[1] == self.config.remote_port
+            return ipaddress.ip_address(source[0]) == self._remote[0] and source[1] == self._remote[1]
         except (ValueError, TypeError, IndexError, KeyError):
             return False
 
@@ -135,6 +158,9 @@ class RtpCall(Call):
         """Handle one received datagram from `source`, a (ip, port) pair. Order: source, rate limit, then the packet rules."""
         if self._ended:
             self._own["after_end"] += 1
+            return
+        if self._remote is None:
+            self._own["remote_not_set"] += 1
             return
         if not self._source_ok(source):
             self._own["wrong_source"] += 1
