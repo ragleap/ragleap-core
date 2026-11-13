@@ -18,7 +18,7 @@ def main():
     for item in findings:
         print("DISAGREEMENT", item)
     print("Total disagreements:", len(findings))
-    print("P6: pending design decision; expected disagreement until decision/implementation.")
+    print("P6: a stop invalidates approvals given before it (issue 1338).")
     print("P7: stop-during-dry_run and stop-at-adapter-call hooks are covered by pytest tests.")
     print("P8: report only actor forms accepted by Bridge's actor grammar.")
 

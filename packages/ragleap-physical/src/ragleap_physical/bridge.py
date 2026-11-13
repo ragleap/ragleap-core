@@ -340,8 +340,18 @@ class Bridge:
 
     @_locked
     def clear_stop(self) -> None:
-        """Operator only. Do not expose this through any model tool."""
+        """Operator only. Do not expose this through any model tool.
+
+        Ending a stop invalidates every approval given before the clear: an action that was approved before the stop needs a fresh approval by a
+        named person. The proposal itself stays valid until it expires. A clear when nothing was stopped changes no approval.
+        """
+        was_stopped = self._stop_flag.is_set()
         self._adapter.clear_stop()
         self._stop_flag.clear()
         self._adapter_held = False
+        if was_stopped:
+            for pid, rec in self._ledger.items():
+                if rec["state"] == "approved":
+                    rec["state"], rec["approval"] = "validated", None
+                    self._log("approval_revoked_by_stop", proposal_id=pid)
         self._log("stop_cleared")

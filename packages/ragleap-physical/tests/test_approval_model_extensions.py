@@ -153,7 +153,6 @@ def test_multi_proposal_replay_has_no_p8_disagreement():
     assert [f for f in findings if f["sequence"].startswith("P8-")] == []
 
 
-@pytest.mark.xfail(strict=True, reason="gap: issue 1338")
 def test_multi_proposal_replay_has_no_p6_disagreement():
     findings = replay_multi_proposal(make, propose)
     assert [f for f in findings if f["sequence"].startswith("P6-")] == []
