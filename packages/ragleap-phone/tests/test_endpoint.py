@@ -251,3 +251,44 @@ def test_one_sender_cannot_make_the_gap_fill_expensive():
         return c.counts
     counts = _run(main())
     assert counts["accepted"] == 100 and counts["queue_full"] == 0 and counts["long_gaps"] == 0
+
+
+def test_the_remote_can_be_left_out_and_set_once_later():
+    async def main():
+        c = RtpCall(EndpointConfig(law="ulaw"), Clock())
+        assert c.remote is None
+        c.on_datagram(b"garbage", SRC)
+        c.on_datagram(_pkt(1), SRC)
+        assert c.counts["remote_not_set"] == 2 and c.counts["too_short"] == 0 and c.counts["accepted"] == 0
+        c.expect_remote("10.0.0.5", 4000)
+        assert c.remote == ("10.0.0.5", 4000)
+        c.on_datagram(_pkt(1), SRC)
+        c.on_datagram(_pkt(2), ("10.0.0.5", 4001))
+        assert c.counts["accepted"] == 1 and c.counts["wrong_source"] == 1
+        with pytest.raises(RuntimeError):
+            c.expect_remote("10.0.0.6", 5000)
+        assert c.remote == ("10.0.0.5", 4000)
+    _run(main())
+
+
+def test_expect_remote_is_checked_and_refused_after_the_end():
+    async def main():
+        for ip, port in (("not an ip", 4000), (None, 4000), ("10.0.0.5", 0), ("10.0.0.5", 70000), ("10.0.0.5", True)):
+            c = RtpCall(EndpointConfig(law="ulaw"), Clock())
+            with pytest.raises(ValueError):
+                c.expect_remote(ip, port)
+            assert c.remote is None
+        c = RtpCall(EndpointConfig(law="ulaw"), Clock())
+        await c.hangup()
+        with pytest.raises(RuntimeError):
+            c.expect_remote("10.0.0.5", 4000)
+    _run(main())
+
+
+def test_the_config_takes_both_remote_values_or_none():
+    assert EndpointConfig(law="alaw").remote_ip is None
+    with pytest.raises(ValueError):
+        EndpointConfig(law="ulaw", remote_ip="10.0.0.5")
+    with pytest.raises(ValueError):
+        EndpointConfig(law="ulaw", remote_port=4000)
+    assert EndpointConfig("ulaw", "10.0.0.5", 4000).remote_port == 4000

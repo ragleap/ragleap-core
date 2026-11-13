@@ -76,10 +76,11 @@ class RtpMediaEndpoint(Adapter):
         if call is None or call.ended or self._transport is None:
             return
         self._steps += 1
-        datagram = call.pop_datagram()
+        remote = call.remote
+        datagram = call.pop_datagram() if remote is not None else None
         if datagram is not None:
             self._idle = 0
-            self._transport.sendto(datagram, (call.config.remote_ip, call.config.remote_port))
+            self._transport.sendto(datagram, remote)
         elif call.has_partial_playback():
             self._idle += 1
             if self._idle >= FLUSH_AFTER_IDLE_STEPS:
@@ -116,6 +117,13 @@ class RtpMediaEndpoint(Adapter):
             await self.call.hangup()
             self._transport.close()
         await handler
+
+    def expect_remote(self, ip, port):
+        """Set the remote address and port once, when the configuration left them out. Call it after run() has started and
+        local_address is known (the order Asterisk's externalMedia needs). Until it is called every datagram is dropped and nothing is sent."""
+        if self.call is None:
+            raise RuntimeError("call this after run() has started")
+        self.call.expect_remote(ip, port)
 
     async def close(self):
         """Stop the media: end the call and close the socket. Safe to call more than once."""

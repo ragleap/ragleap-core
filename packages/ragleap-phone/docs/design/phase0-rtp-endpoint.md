@@ -34,7 +34,7 @@ Telephone-event packets (DTMF, a dynamic payload type) fail the payload-type rul
 
 RTP over UDP cannot authenticate its sender. This endpoint does not claim to. What it does, as a requirement of phase0-interface.md (transport authentication): [plan]
 
-- The operator configures the expected remote IP address (and optionally the port). Packets from any other source are dropped before parsing. The endpoint never latches onto the first source that sends, because that lets anyone who reaches the port take over the call.
+- The operator configures the expected remote IP address and port, either when creating the endpoint or once afterwards with `expect_remote()` (the order Asterisk's `externalMedia` needs: we listen first and learn the other side's port later). Until the remote is set, every datagram is dropped and counted (`remote_not_set`) before parsing, and nothing is sent. Packets from any other source are dropped before parsing. The endpoint never latches onto the first source that sends, because that lets anyone who reaches the port take over the call.
 - It listens on 127.0.0.1 unless the operator opts in to another address, and an opt-in prints a loud warning that the media is neither encrypted nor cryptographically authenticated. SRTP is out of scope for now (section 10).
 - A missing or invalid configuration (no expected source, no payload type) is a startup error, never a fallback to accepting anything.
 - Limits per call, all configurable: at most 100 packets per second (a 20 ms stream is 50), at most 3600 seconds of call length, and a call ends with a `call.ended` event after 10 seconds without a valid packet. The endpoint also limits concurrent calls (`Capabilities.max_concurrent_calls`). These numbers are untested starting points.
