@@ -186,6 +186,12 @@ DENY_SUFFIXES = (".pem", ".key", ".p12", ".pfx", ".kdbx")
 SYSTEM_PATHS = ("/etc", "/proc", "/sys", "/dev", "/boot", "/run", "/var/run", "/var/lib/docker",
                 "/usr", "/bin", "/sbin", "/lib", "/lib64")
 BROAD_PATHS = frozenset({"/", "/root", "/home", "/Users", "/var", "/tmp", "/opt", "/mnt", "/srv", "/media"})
+# Broad folders can be granted only for a short time, read-only. Never: "/", "/root", "/home", "/Users", "/var", "/tmp".
+BROAD_ALLOWED = frozenset({"/opt", "/mnt", "/srv", "/media"})
+BROAD_MAX_SECONDS = 24 * 3600 + 300      # a broad grant must end within 24 hours (plus a little slack for the clock)
+# A broad grant also hides every dot-name and names that look like secrets. Names are a heuristic, not a guarantee.
+BROAD_WORDS = ("secret", "password", "passwd", "token", "apikey", "api_key", "api-key", "_key", "credential",
+               "keychain", "wallet", "private")
 
 
 def file_write_on():
@@ -207,13 +213,18 @@ def name_denied(name):
     return n in DENY_NAMES or n.startswith(DENY_PREFIXES) or n.endswith(DENY_SUFFIXES)
 
 
-def grant_path_problem(path):
+def is_broad_allowed(path):
+    """True for the folders that may be granted as broad folders: a user's home folder, /opt, /mnt, /srv, /media."""
+    return path in BROAD_ALLOWED or (isinstance(path, str) and re.fullmatch(r"/(home|Users)/[^/]+", path) is not None)
+
+
+def grant_path_problem(path, allow_broad=False):
     """Why a host folder may not be granted, or None. The owner's command checks this too."""
     if not isinstance(path, str) or not path.startswith("/") or "\x00" in path or "\\" in path or len(path) > 500:
         return "the folder must be an absolute path"
     if posixpath.normpath(path) != path:
         return "write the path without .., . or a trailing slash"
-    if path in BROAD_PATHS or re.fullmatch(r"/(home|Users)/[^/]+", path):
+    if (path in BROAD_PATHS or re.fullmatch(r"/(home|Users)/[^/]+", path)) and not (allow_broad and is_broad_allowed(path)):
         return "that folder is too broad"
     for s in SYSTEM_PATHS:
         if path == s or path.startswith(s + "/"):
@@ -232,7 +243,10 @@ def parse_grant(g):
         return None, "bad name"
     if mode not in ("read", "write"):
         return None, "mode must be read or write"
-    problem = grant_path_problem(path)
+    broad = g.get("broad") is True
+    if broad and not is_broad_allowed(path):
+        return None, "not a folder that can be granted as a broad folder"
+    problem = grant_path_problem(path, allow_broad=broad)
     if problem:
         return None, problem
     purpose = g.get("purpose", "use")
@@ -246,7 +260,15 @@ def parse_grant(g):
             return None, "bad expiry"
         if when.tzinfo is None:
             when = when.replace(tzinfo=timezone.utc)
-    return {"name": name, "path": path, "mode": mode, "purpose": purpose, "expires": expires, "_when": when}, None
+    if broad:
+        if mode != "read":
+            return None, "a broad folder can only be read-only"
+        if purpose != "use":
+            return None, "a broad folder can only be granted with purpose use"
+        if when is None or (when - datetime.now(timezone.utc)).total_seconds() > BROAD_MAX_SECONDS:
+            return None, "a broad folder needs an expiry within 24 hours"
+    return {"name": name, "path": path, "mode": mode, "purpose": purpose, "expires": expires, "_when": when,
+            "broad": broad}, None
 
 
 def load_grants():
@@ -318,9 +340,14 @@ def out(obj, code=0):
     sys.stdout.write(json.dumps(obj, ensure_ascii=False))
     sys.exit(code)
 
+BROAD = os.environ.get("BROAD", "") == "1"
+BW = tuple(__BROADWORDS__)
+
 def denied(n):
     n = n.lower()
-    return n in DN or n.startswith(DP) or n.endswith(DS)
+    if n in DN or n.startswith(DP) or n.endswith(DS):
+        return True
+    return BROAD and (n.startswith(".") or n == "library" or any(w in n for w in BW))
 
 try:
     parts = [p for p in REL.split("/") if p not in ("", ".")]
@@ -435,6 +462,7 @@ except OSError as e:
     out({"error": "could not read: " + e.__class__.__name__}, 3)
 """
 FILE_READER = (_READER_TEMPLATE
+               .replace("__BROADWORDS__", json.dumps(list(BROAD_WORDS)))
                .replace("__NAMES__", json.dumps(sorted(DENY_NAMES)))
                .replace("__PREFIXES__", json.dumps(list(DENY_PREFIXES)))
                .replace("__SUFFIXES__", json.dumps(list(DENY_SUFFIXES))))
@@ -693,6 +721,8 @@ def build_file_spec(grant, op, rel, text=None):
     spec = build_spec("")
     spec["Cmd"] = ["python", "-I", "-B", "-c", FILE_READER]
     spec["Env"] = ["OP=" + op, "REL=" + rel, "MAXB=%d" % FILE_READ_BYTES, "MAXN=%d" % FILE_LIST_MAX]
+    if grant.get("broad"):
+        spec["Env"].append("BROAD=1")   # stricter name rules inside the container
     if op == "preview":
         spec["Env"] += ["NEW=" + (text or ""), "OLDMAX=%d" % PREVIEW_OLD_MAX, "DIFFL=%d" % PREVIEW_DIFF_LINES,
                         "DIFFC=%d" % PREVIEW_DIFF_CHARS]
