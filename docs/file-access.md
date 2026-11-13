@@ -40,9 +40,19 @@ Old versions land in `.ragleap-trash` inside the granted folder. You manage them
     ragleap files trash restore notes <id> --replace  # also when a file is there now; the current one goes into the trash
     ragleap files trash empty notes --older-than 7d   # shows what would go; add --yes to remove for good
 
-The runner can also move one file into the trash (operation `delete`, only if the file still matches what was previewed, and only while writing is switched on). Nothing gives the agent a delete tool yet: that is the next step.
+The runner can also move one file into the trash (operation `delete`, only if the file still matches what was previewed, and only while writing is switched on).
 
-Not included yet: the agent tool for deleting files, and broad folders.
+## Deleting (off by default)
+
+The agent tool `delete_file` needs everything writing needs (see above) and, in the app, `FILE_DELETE_ENABLED=true`. It moves one file into the folder's trash; it never erases anything.
+
+- The agent proposes only a path inside a write grant. The app first asks the runner for a read-only check of that file and stores it with the action: size, sha256 and the start of a text file. If the file does not exist or is refused, no action is created.
+- **Every delete needs your approval, also in `full` autonomy mode.** The approval message and the dashboard show the path, size, short hash and the start of the file.
+- After approval the file is moved only if it still has the content you were shown. If it changed in between, nothing is moved.
+- You put it back on the machine with `ragleap files trash restore` (see above). The agent cannot see or reach the trash.
+- Files up to 200000 bytes. Logs and the learning store keep the path and hash, never the file content. A `file_delete` audit line carries grant, path, hash, size and the trash name.
+
+Not included yet: broad folders.
 
 ## Folder permissions
 

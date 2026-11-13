@@ -45,6 +45,7 @@ ACTION_TOOLS = {
     "read_file": {"channel": "files_read"},
     "preview_change": {"channel": "files_preview"},
     "write_file": {"channel": "files_write"},
+    "delete_file": {"channel": "files_delete"},
     "request_access": {"channel": "files_request"},
 }
 
@@ -227,6 +228,18 @@ def available_tools() -> Dict[str, str]:
             "inside the grant on the first line, then the complete new text of the file from the second line. "
             "At most 2000 characters in total."
         )
+    # Deleting a file: also needs FILE_DELETE_ENABLED=true. The file goes into the folder's trash; the owner approves first.
+    try:
+        delete_on = _fa_write.delete_enabled()
+    except Exception:
+        delete_on = False
+    if writable and delete_on:
+        tools["delete_file"] = (
+            "Move one file inside a folder the owner granted with write access into that folder's trash (it is not erased; "
+            "the owner can put it back). The owner sees the file name, size and start and must approve before anything is moved. "
+            "target must be exactly one of these grant names: " + ", ".join(writable) + ". content is only the file path "
+            "inside the grant, for example reports/old.txt."
+        )
     # Opt-in: FILE_TOOLS_ENABLED=true plus SANDBOX_TOKEN. Offered even when no folder is granted yet.
     try:
         from core import file_access as _file_access
@@ -376,6 +389,14 @@ def _validate_plan(plan: Dict, tools: Dict[str, str]) -> Optional[Dict]:
         if tool == "write_file" and not text.strip():
             return None  # never write an empty file by accident
         content = cleaned + "\n" + text
+    elif tool == "delete_file":
+        from core import file_access
+        if target not in file_access.write_grant_names() or not file_access.delete_enabled():
+            return None
+        cleaned = file_access.clean_rel("delete", str(plan.get("content", "") or ""))
+        if cleaned is None:
+            return None
+        content = cleaned
     elif tool in ("list_files", "read_file"):
         from core import file_access
         if target not in file_access.grant_names():

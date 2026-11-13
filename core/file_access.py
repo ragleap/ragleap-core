@@ -336,3 +336,67 @@ def write_file(grant, content) -> str:
     except Exception as e:
         logger.error("%s failed: %s", label, e)
         return f"{label}: failed; see server logs."
+
+
+def delete_enabled() -> bool:
+    """Deleting needs everything writing needs, plus its own app-side switch FILE_DELETE_ENABLED=true."""
+    return write_enabled() and os.environ.get("FILE_DELETE_ENABLED", "").strip().lower() == "true"
+
+
+def stat_raw(grant, rel):
+    """What a delete would remove, from the runner's read-only stat: (dict, None) or (None, reason). Nothing is changed.
+    Used to bind a delete to exactly what the owner will be shown."""
+    if not delete_enabled():
+        return None, "deleting files is not enabled"
+    cleaned = clean_rel("delete", rel)
+    if cleaned is None:
+        return None, "bad path"
+    if not isinstance(grant, str) or grant not in write_grant_names():
+        return None, "unknown grant or the grant is read-only"
+    res, err = _post("stat", grant, cleaned, {})
+    if err:
+        return None, err
+    if not res.get("exists"):
+        return None, "that file does not exist"
+    if not _SHA_RE.fullmatch(str(res.get("sha256") or "")) or not isinstance(res.get("size"), int):
+        return None, "the file check was incomplete"
+    return res, None
+
+
+def delete_file(grant, content) -> str:
+    """Move the file of an approved delete_file action into the folder's trash. content is the bound JSON made when the
+    action was proposed (path, sha, size, head, binary). The runner refuses if the file changed since. Never raises."""
+    label = "File delete"
+    try:
+        if not delete_enabled():
+            return f"{label}: refused (deleting files is not enabled)"
+        try:
+            d = json.loads(content)
+        except Exception:
+            return f"{label}: refused (the approved action is not valid)"
+        rel, sha = (d.get("path"), d.get("sha")) if isinstance(d, dict) else (None, None)
+        cleaned = clean_rel("delete", rel) if isinstance(rel, str) else None
+        if cleaned is None or not _SHA_RE.fullmatch(str(sha)):
+            return f"{label}: refused (the approved action is not valid)"
+        if not isinstance(grant, str) or grant not in write_grant_names():
+            return f"{label}: refused (unknown grant or the grant is read-only)"
+        res, err = _post("delete", grant, cleaned, {"expect_sha256": sha})
+        if err:
+            return f"{label}: nothing was moved ({err})"
+        trash = str(res.get("trash") or "")[:200]
+        try:
+            from core import audit
+            audit.emit("file_delete", grant=grant, path=cleaned[:200], old_sha256=res.get("old_sha256"),
+                       size=res.get("size"), trash=trash or None)
+        except Exception:
+            pass
+        parts = trash.split("/")
+        tid = parts[1] if len(parts) > 2 and parts[0] == ".ragleap-trash" else ""
+        lines = ["File moved to the trash (not erased).", f"grant {grant}, file {cleaned}",
+                 f"sha256 {str(res.get('old_sha256') or '?')[:16]}, {res.get('size')} bytes"]
+        if tid:
+            lines.append(f"Trash id {tid}. The owner can put it back on the server: ragleap files trash restore {grant} {tid}")
+        return "\n".join(lines)[:MAX_RESULT_CHARS]
+    except Exception as e:
+        logger.error("%s failed: %s", label, e)
+        return f"{label}: failed; see server logs."

@@ -252,6 +252,9 @@ def _send_via_channel(channel: str, target: str, content: str) -> str:
         elif channel == "files_write":
             from core.file_access import write_file
             return write_file(target, content)
+        elif channel == "files_delete":
+            from core.file_access import delete_file
+            return delete_file(target, content)
         elif channel == "files_request":
             from core.file_access import access_request_text
             return access_request_text(target)
@@ -274,6 +277,14 @@ def _write_bundle(content: str):
 def _approval_preview(channel: str, content: str, limit: int = 300) -> str:
     """What a person reads before approving. Normal channels: the start of the content. A file write: grant-less
     summary with path, what it replaces, lines changed, short hashes and the start of the real diff."""
+    if channel == "files_delete":
+        dd = _delete_bundle(content)
+        if dd is not None:
+            head = ["Delete file: %s (it is moved to the trash, not erased; the owner can put it back)" % str(dd.get("path"))[:200],
+                    "%s bytes, sha256 %s" % (int(dd.get("size") or 0), str(dd.get("sha"))[:16])]
+            if dd.get("binary"):
+                return "\n".join(head) + "\n(a binary file; its content is not shown)"
+            return "\n".join(head) + "\n--- the start of the file ---\n" + str(dd.get("head") or "")[:300]
     d = _write_bundle(content) if channel == "files_write" else None
     if d is None:
         return content[:limit]
@@ -288,6 +299,10 @@ def _approval_preview(channel: str, content: str, limit: int = 300) -> str:
 
 def _log_content(channel: str, content: str) -> str:
     """What the action log and the learning store keep. A file write keeps its path and hashes, never the text."""
+    if channel == "files_delete":
+        dd = _delete_bundle(content)
+        if dd is not None:
+            return f"delete_file {str(dd.get('path'))[:200]} sha={str(dd.get('sha'))[:16]}"
     d = _write_bundle(content) if channel == "files_write" else None
     if d is None:
         return content
@@ -307,6 +322,28 @@ def _bind_file_write(target: str, content: str):
     bound = {"path": first.strip(), "base": prev.get("old_sha256") or "-", "new": prev["new_sha256"], "text": text,
              "exists": bool(prev.get("exists")), "added": int(prev.get("added") or 0), "removed": int(prev.get("removed") or 0),
              "diff": str(prev.get("diff") or "")}
+    return json.dumps(bound), None
+
+
+def _delete_bundle(content: str):
+    """The bound JSON of a delete_file action as a dict, or None when content is not that."""
+    try:
+        d = json.loads(content)
+    except Exception:
+        return None
+    return d if isinstance(d, dict) and isinstance(d.get("path"), str) and isinstance(d.get("sha"), str) else None
+
+
+def _bind_file_delete(target: str, content: str):
+    """Bind a proposed delete to what the runner reports about the file now (read-only). content is the path.
+    Returns (bound JSON string, None) or (None, why not)."""
+    from core import file_access
+    path = (content or "").strip()
+    st, why = file_access.stat_raw(target, path)
+    if st is None:
+        return None, f"delete_file refused: {why}"
+    bound = {"path": path, "sha": st["sha256"], "size": int(st["size"]), "binary": bool(st.get("binary")),
+             "head": "" if st.get("binary") else str(st.get("head") or "")[:300]}
     return json.dumps(bound), None
 
 
@@ -439,10 +476,17 @@ def execute_or_request(action_type: str, channel: str, target: str,
             _audit_event("action_skipped", content=why, reason="write not possible", action_type=action_type, channel=channel, role=role)
             return {"status": "skipped", "result": why}
 
-    if mode == "full" and (force_semi or action_type in ("request_access", "write_file")):
+    if channel == "files_delete":
+        # Bind the delete to the real file (read-only stat). A missing or refused file creates nothing.
+        content, why = _bind_file_delete(target, content)
+        if content is None:
+            _audit_event("action_skipped", content=why, reason="delete not possible", action_type=action_type, channel=channel, role=role)
+            return {"status": "skipped", "result": why}
+
+    if mode == "full" and (force_semi or action_type in ("request_access", "write_file", "delete_file")):
         # caller (e.g. a run that has read untrusted web/MCP content) requires approval for this call
         logger.info(f"force_semi: {action_type} forced full->semi")
-        _audit_event("action_forced_approval", content=content, reason="untrusted input, request_access or write_file", action_type=action_type, channel=channel, role=role)
+        _audit_event("action_forced_approval", content=content, reason="untrusted input, request_access, write_file or delete_file", action_type=action_type, channel=channel, role=role)
         mode = "semi"
 
     if mode == "full" and role:
