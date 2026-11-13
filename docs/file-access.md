@@ -52,7 +52,16 @@ The agent tool `delete_file` needs everything writing needs (see above) and, in 
 - You put it back on the machine with `ragleap files trash restore` (see above). The agent cannot see or reach the trash.
 - Files up to 200000 bytes. Logs and the learning store keep the path and hash, never the file content. A `file_delete` audit line carries grant, path, hash, size and the trash name.
 
-Not included yet: broad folders.
+## Broad folders (short and read-only)
+
+A user's home folder (`/home/name`, `/Users/name`), `/opt`, `/mnt`, `/srv` and `/media` are too broad to grant normally. For a short time you can grant one read-only:
+
+    ragleap files add /home/name --name tmp-home --broad --for 2h
+
+- `--for` is required: from 1m up to 24h. The runner checks the same limit itself, so a grant file edited by hand to last longer is ignored. Use `ragleap files remove NAME` to end it earlier.
+- Read-only and for use only: never write, delete or knowledge grants.
+- Still refused even with `--broad`: `/`, `/root`, `/home`, `/Users`, `/var`, `/tmp`, system folders and the RagLeap install folder.
+- A broad grant also hides every name that starts with a dot (so `.config`, `.mozilla` and shell histories) and names that look like secrets (`password`, `token`, `_key`, `credential`, `wallet`, `private`, `secret`, and similar), on top of the always-protected names. This is a check on names, not on content: a secret saved under an ordinary name can still be read, and what the AI reads is sent to your model provider. Prefer a narrow folder whenever you can.
 
 ## Folder permissions
 

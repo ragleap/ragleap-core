@@ -127,6 +127,14 @@ def scan(folder):
     return unreadable, example, protected, False
 
 
+def parse_for(text):
+    m = re.fullmatch(r"(\d+)([mh])", (text or "").strip().lower())
+    minutes = int(m.group(1)) * (60 if m and m.group(2) == "h" else 1) if m else 0
+    if not m or minutes < 1 or minutes > 1440:
+        fail("--for must be between 1m and 24h, for example 90m or 2h")
+    return parse_expires(m.group(1) + m.group(2))
+
+
 def cmd_add(args):
     if not runner.GRANT_NAME_RE.fullmatch(args.name):
         fail("The name must be 1 to 32 characters: lower-case letters, digits, - or _, starting with a letter or digit.")
@@ -138,7 +146,22 @@ def cmd_add(args):
     resolved = os.path.realpath(given)
     if not os.path.isdir(resolved):
         fail("That is not a folder. Folders only for now: " + args.path)
-    problem = runner.grant_path_problem(resolved)
+    if args.broad:
+        if not runner.is_broad_allowed(resolved):
+            fail("--broad is only for a user's home folder, /opt, /mnt, /srv or /media. " +
+                 (runner.grant_path_problem(resolved) and "Not granted: " + runner.grant_path_problem(resolved) + " (" + resolved + ")"
+                  or "This folder does not need --broad: add it without."))
+        if not args.for_:
+            fail("A broad folder needs a time limit: add --for 2h (from 1m up to 24h).")
+        if args.expires:
+            fail("Use --for with --broad, not --expires.")
+        if args.purpose != "use":
+            fail("A broad folder can only be granted with --purpose use.")
+        problem = runner.grant_path_problem(resolved, allow_broad=True)
+    else:
+        problem = runner.grant_path_problem(resolved)
+        if problem == "that folder is too broad" and runner.is_broad_allowed(resolved):
+            problem += "; for a short time you can add it read-only with: --broad --for 2h"
     if problem:
         fail("Not granted: " + problem + " (" + resolved + ")")
     home = str(HOME)
@@ -148,7 +171,10 @@ def cmd_add(args):
     if any(isinstance(g, dict) and g.get("name") == args.name for g in items):
         fail("The name '" + args.name + "' is already used. Remove it first: ragleap files remove " + args.name)
     entry = {"name": args.name, "path": resolved, "mode": "read", "purpose": args.purpose,
-             "expires": parse_expires(args.expires), "created": datetime.now(timezone.utc).replace(microsecond=0).isoformat()}
+             "expires": parse_for(args.for_) if args.broad else parse_expires(args.expires),
+             "created": datetime.now(timezone.utc).replace(microsecond=0).isoformat()}
+    if args.broad:
+        entry["broad"] = True
     unreadable, example, protected, truncated = scan(resolved)
     items.append(entry)
     write_raw(items)
@@ -156,6 +182,10 @@ def cmd_add(args):
     if resolved != os.path.abspath(given):
         print("  (the path you gave was a link; the grant uses where it really points)")
     print("  expires: " + (entry["expires"] or "never"))
+    if args.broad:
+        print("  BROAD folder, read-only, ends at the time above. The AI can see every file name and read every file here")
+        print("  except dot-names and names that look like secrets (password, token, _key, ...). That is a name check, not a")
+        print("  guarantee: what it reads is sent to your model provider. Remove it when done: ragleap files remove " + args.name)
     if protected:
         print("  note: %d protected item(s) (such as .env files or keys) exist inside and stay hidden from the AI." % protected)
     if unreadable:
@@ -183,7 +213,7 @@ def cmd_list(args):
             print("%-14s invalid (%s)" % (str(raw.get("name") if isinstance(raw, dict) else raw)[:14], why))
             continue
         state = "expired" if g["_when"] is not None and g["_when"] <= now else "active"
-        print("%-14s %-5s %-9s expires %-25s %s  [%s]" % (g["name"], g["mode"], g["purpose"], g["expires"] or "never", g["path"], state))
+        print("%-14s %-5s %-9s expires %-25s %s  [%s]" % (g["name"], g["mode"], g["purpose"], g["expires"] or "never", g["path"], state + (", broad" if g.get("broad") else "")))
     return 0
 
 
@@ -364,6 +394,8 @@ def main(argv=None):
     a.add_argument("--mode", default="read", choices=["read", "write"])
     a.add_argument("--purpose", default="use", choices=["use", "knowledge"])
     a.add_argument("--expires", default=None, help="30m, 12h, 7d or a date")
+    a.add_argument("--broad", action="store_true", help="a broad folder (a home folder, /opt, /mnt, /srv, /media): read-only, needs --for")
+    a.add_argument("--for", dest="for_", default=None, help="with --broad: how long it lasts, from 1m up to 24h (for example 2h)")
     a.set_defaults(fn=cmd_add)
     sub.add_parser("list", help="show grants").set_defaults(fn=cmd_list)
     r = sub.add_parser("remove", help="remove a grant")
