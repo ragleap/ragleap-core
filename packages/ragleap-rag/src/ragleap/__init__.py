@@ -46,7 +46,7 @@ from ragleap.tenant import TenantRagLeap, TenantRequiredError
 
 logger = logging.getLogger(__name__)
 
-__version__ = "0.15.0"
+__version__ = "0.16.0"
 __all__ = ["RagLeap", "ProviderConfig", "EmbeddingConfig", "IngestResult", "TranscriptionConfig", "VectorBackend", "PgVectorBackend", "TenantRagLeap", "TenantRequiredError"]
 
 
