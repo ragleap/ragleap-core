@@ -185,7 +185,7 @@ pip install ragleap-observability
 uv add ragleap-observability
 ```
 
-The same chart files are also on Maven Central as a jar, `io.github.antonyrag:ragleap-observability` (see the Maven Central badge in the list above for the current version). It is not a code port: it carries the files of the PyPI wheel, and a small class reads them from the classpath, for example `RagleapObservability.openHelm("ragleap-observability/Chart.yaml")`. Helm and Kubernetes are not included.
+The same chart files are also on Maven Central as a jar, `io.github.antonyrag:ragleap-observability` (see the Maven Central badge in the list above for the current version). It is not a code port: it carries the files of the PyPI wheel of the same version (the jar can be behind PyPI, and the badge shows the jar's version), and a small class reads them from the classpath, for example `RagleapObservability.openHelm("ragleap-observability/Chart.yaml")`. Helm and Kubernetes are not included.
 
 Want your agents to call tools on remote MCP servers? `ragleap-integrations` is an MCP client that turns allowlisted tools on remote servers into `ragleap-tools` Tool objects (Streamable HTTP only, alpha) and, since 0.4.0, a UTCP client for `http` manuals (0.5.0 adds owner-listed static query parameters and one accepted auth shape; discovery live-checked, no tool call yet verified against a real UTCP server):
 
