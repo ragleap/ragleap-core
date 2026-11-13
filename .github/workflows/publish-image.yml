@@ -3,6 +3,8 @@ name: Publish app image
 # Builds the repo-root Dockerfile (the app, voice and worker services all build from it)
 # and publishes it to ghcr.io/ragleap/ragleap-app. A core release tag (vX.Y.Z) publishes
 # X.Y.Z, X.Y and latest; a manual run publishes only a short-commit tag.
+# The image is signed by digest (cosign, keyless), built with provenance and SBOM attestations and scanned with
+# Trivy (report only). A second job attaches a CycloneDX SBOM of requirements.lock to the release. See docs/supply-chain.md.
 on:
   push:
     tags:
@@ -12,6 +14,7 @@ on:
 permissions:
   contents: read
   packages: write
+  id-token: write   # keyless signing of the image (cosign uses the GitHub OIDC identity of this run)
 
 jobs:
   publish-app-image:
@@ -32,9 +35,66 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha,format=short
-      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+      - id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # Attestations stored with the image: provenance (how it was built) and an SBOM (what is inside).
+          provenance: mode=max
+          sbom: true
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Sign the image by digest (keyless)
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          case "$DIGEST" in sha256:*) ;; *) echo "No image digest from the build; not signing."; exit 1;; esac
+          cosign sign --yes "ghcr.io/ragleap/ragleap-app@${DIGEST}"
+      # Report only: it never stops a release (a fixable CRITICAL is read in the run log), and a download problem
+      # on the scanner's side must not undo a signed image.
+      - name: Scan the image (report only)
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          TRIVY_USERNAME: ${{ github.actor }}
+          TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          image-ref: ghcr.io/ragleap/ragleap-app@${{ steps.build.outputs.digest }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '0'
+  core-sbom:
+    # A CycloneDX list of the pinned Python packages (requirements.lock), attached to the release on tag runs.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: "3.11"
+      - name: Generate the SBOM
+        run: |
+          python -m venv /tmp/cdx
+          /tmp/cdx/bin/pip install cyclonedx-bom==8.0.1
+          /tmp/cdx/bin/cyclonedx-py requirements requirements.lock --of JSON -o ragleap-core-sbom.cdx.json
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: ragleap-core-sbom
+          path: ragleap-core-sbom.cdx.json
+          retention-days: 90
+      - name: Attach it to the release (tag runs only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              gh release upload "$TAG" ragleap-core-sbom.cdx.json --repo "$GITHUB_REPOSITORY" --clobber && exit 0
+            fi
+            sleep 10
+          done
+          echo "No release for $TAG after two minutes; the SBOM stays a workflow artifact."
