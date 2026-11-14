@@ -37,6 +37,13 @@ jobs:
           - grafana/promtail:3.3.0
           - grafana/alloy:v1.20.1
           - quay.io/prometheuscommunity/postgres-exporter:v0.20.1
+          # Images the ragleap-ops and ragleap-app-chart defaults deploy. The tags are floating (major only),
+          # so a scan shows what each tag holds today.
+          - pgvector/pgvector:pg16
+          - neo4j:5-community
+          - postgres:16-alpine
+          - postgres:16
+          - busybox:1.36
     steps:
       - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
