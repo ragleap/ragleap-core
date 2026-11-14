@@ -5,6 +5,53 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-13
+
+Design: #1395. Tenant scope for runs, approvals and audit. A security fix for shared multi-tenant use.
+
+### The gap this fixes
+
+With 0.5.0, one shared `Agent` and one shared state store let a second tenant who knew only a paused run's id call `resume(run_id, {call_id: True})`. The run finished and its tool executed with the first tenant's arguments. `run()` and `resume()` had no tenant argument, the store was keyed by run id alone, and the run id was 48 bits (`uuid4().hex[:12]`). This was reproduced with the released 0.5.0 from PyPI and is a test now. Single-tenant use was not affected.
+
+### Behaviour changes (read first)
+
+- A caller who passes no scope sees no change, except for two things: **new run ids are 22-character URL-safe tokens (128 bits) instead of 12 hex characters** (code that assumed 12 hex characters breaks; old ids still load and resume), and `RunContext` has a new `scope` field that defaults to `None`.
+- **New dependency: `ragleap-security>=0.2.0`** (standard library only, same project). `Scope`, `AuditLog` and `RateLimiter` come from it, so one scope type is shared with ragleap-memory and ragleap-optimizer.
+- When a scope is given, a damaged stored state raises `ResumeError("unknown run")` like an unknown run (without a scope it keeps its 0.5.0 message).
+
+### Added
+
+- `Agent.run(task, *, scope=None, tainted=False)` and `Agent.resume(run_id, decisions, *, scope=None)`. `scope` must be exactly a `ragleap_security.Scope` (a string, a dict or a subclass raises `ScopeError`).
+- A run saves `scope.key`. `resume` continues it only for exactly the same scope, every part (tenant, subject, agent, session). A wrong scope, an unknown run and a damaged state raise the same `ResumeError("unknown run")`, so nobody learns that another tenant's run exists. The ownership check comes before any decision is read. A run made with a scope cannot be resumed without one, and a run made without a scope cannot be resumed with one.
+- `Agent(..., require_scope=True)`: `run` and `resume` without a scope raise `ValueError`. Default `False`.
+- Sub-agents: a child run gets the scope of the run that started it, exactly. A strict child (`require_scope=True`) does not run for a parent that has no scope.
+- `Agent(..., audit=AuditLog(...))`: events `run.start`, `approval.requested`, `approval.decided`, `tool.executed` and `run.end`, each with the scope, the run id, tool names, statuses and sizes. Never the task, the arguments or the results. If a record cannot be written, nothing continues without it: `run.start` and `run.end` raise; a failed `approval.requested` or `approval.decided` ends the run as `failed` / `internal_error` and the tool does not run. `decided_by` is not recorded because the library cannot verify who decided.
+- `Agent(..., rate_limiter=RateLimiter(...))`: checked with the scope at `run()` and `resume()` before any model call or state change. A refusal raises `ragleap_security.RateLimitError`. A rate limiter needs a scope.
+
+### Differences from the design in #1395
+
+- The new dependency on ragleap-security was not in the issue.
+- The pending approval's `call_id` is still 12 hex characters. It is only honoured together with the run id and the scope.
+- The audit failure behaviour above was not spelled out in the issue.
+
+### What this does not defend
+
+- The caller must pass the right scope. The library does not log users in.
+- A tool that reads another tenant's data by itself is not stopped. Tools must scope their own data.
+- A shared store file: anyone with access to the file sees every tenant. Use one store per tenant for stronger separation.
+- An in-memory rate limiter is lost on restart. No independent security review has happened.
+
+### Verified (real output)
+
+- 251 tests pass (208 from 0.5.0 and 43 new) on Python 3.12.3 and on Python 3.10.20 (author's sandbox).
+- The cross-tenant reproduction: against the released 0.5.0 the second tenant's `resume` executed the first tenant's tool; with this code it raises `unknown run`, nothing runs, and the owner resumes normally.
+- A paused run written by the released ragleap-agents 0.5.0 from PyPI (12-character id, no scope) resumes with this code without a scope, is refused with a scope, and is refused by a strict agent.
+- `scripts/mutation_check.py` (new): 34 of 34 mutations of the 0.5.1 changes killed on both Python versions. It covers only the 0.5.1 changes; the older protections (taint, approval, delegation) have no mutation set yet.
+
+### Not verified
+
+- GitHub CI and the VPS (checked in the pull request). Windows and macOS. A real model provider (all tests use a scripted model). Several processes sharing one store beyond the thread test; store files on network file systems.
+
 ## [0.5.0] - 2026-10-21
 
 ### Behaviour changes

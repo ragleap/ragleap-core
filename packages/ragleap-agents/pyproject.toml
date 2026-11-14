@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ragleap-agents"
-version = "0.5.0"
+version = "0.5.1"
 description = "A small, provider-neutral agent loop over ragleap-tools Tool objects: a step cap, a taint rule that forces approval for outbound actions after untrusted content, pause/resume approval gates, and a per-run transcript. No database. Bring your own model as a plain callable, or use the included standard-library adapter for OpenAI-compatible chat APIs. BYOK, no vendor lock-in."
 readme = "README.md"
 license = "MIT"
@@ -26,6 +26,7 @@ classifiers = [
 
 dependencies = [
     "ragleap-tools>=0.4.0",
+    "ragleap-security>=0.2.0",
 ]
 
 [project.optional-dependencies]
