@@ -43,6 +43,7 @@ RULES = (
     ("GET", "/autonomy/log", "operator"),
     ("GET", "/agent-runs", "operator"),
     ("GET", "/agent-runs/{run_id}", "operator"),
+    ("GET", "/agent-runs/{run_id}/tree", "operator"),
     ("GET", "/employees/{role}", "operator"),
     ("GET", "/employees/{role}/context", "operator"),
     ("GET", "/tasks", "operator"),
@@ -63,6 +64,7 @@ RULES = (
     ("POST", "/autonomy/execute", "operator"),
     ("POST", "/autonomy/pending/{action_id}/approve", "operator"),
     ("POST", "/autonomy/pending/{action_id}/reject", "operator"),
+    ("POST", "/agent-runs/{run_id}/cancel", "operator"),
     # Admins change how the system is set up and what it may spend
     ("GET", "/audit", "admin"),
     ("GET", "/retention", "admin"),

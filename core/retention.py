@@ -4,7 +4,7 @@ Settings (a number of days; empty or 0 means keep forever, which is the default;
 such as 1 instead of 180 cannot wipe the history):
   AUDIT_RETENTION_DAYS        audit_events: who changed what
   ACTION_LOG_RETENTION_DAYS   autonomy_log: what agents did and who approved or rejected it
-  AGENT_RUN_RETENTION_DAYS    agent_runs that are finished (done, failed, rejected, budget); a run that is
+  AGENT_RUN_RETENTION_DAYS    agent_runs that are finished (done, failed, rejected, budget, cancelled); a run that is
                               running or waiting for approval is never deleted
 
 The purge runs in small batches, on the scheduler leader only (see core/scheduler_leader.py), and every table that
@@ -24,7 +24,7 @@ MAX_BATCHES = 50          # per table and run; what is left is taken in the next
 TABLES = (
     ("audit_events", "AUDIT_RETENTION_DAYS", "at", ""),
     ("autonomy_log", "ACTION_LOG_RETENTION_DAYS", "created_at", ""),
-    ("agent_runs", "AGENT_RUN_RETENTION_DAYS", "created_at", " AND status IN ('done', 'failed', 'rejected', 'budget')"),
+    ("agent_runs", "AGENT_RUN_RETENTION_DAYS", "created_at", " AND status IN ('done', 'failed', 'rejected', 'budget', 'cancelled')"),
 )
 
 
