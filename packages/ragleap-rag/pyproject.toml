@@ -69,3 +69,8 @@ Issues = "https://github.com/ragleap/ragleap-core/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/ragleap"]
+
+[tool.uv]
+# The lock file only covers Python 3.11.5 and newer: soupsieve 3.0.2 and later need >=3.11.5. This is a lock-only
+# setting; the published package still declares requires-python >=3.11.
+environments = ["python_full_version >= '3.11.5'"]
