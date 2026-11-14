@@ -105,6 +105,9 @@ class Receiver:
     def __init__(self, payload_type, max_payload=MAX_PAYLOAD, max_gap=MAX_GAP):
         if payload_type not in PAYLOAD_TYPES.values():
             raise ValueError("payload_type must be one of %s" % (sorted(PAYLOAD_TYPES.values()),))
+        for name, v in (("max_payload", max_payload), ("max_gap", max_gap)):
+            if isinstance(v, bool) or not isinstance(v, int) or v < 1:
+                raise ValueError("%s must be an integer of at least 1" % name)
         self.payload_type = payload_type
         self.max_payload = max_payload
         self.max_gap = max_gap
