@@ -26,3 +26,10 @@ def test_the_packages_with_fixes_found_by_the_image_scan_are_at_fixed_versions()
     for name, minimum in (("certifi", (2026, 10, 18)), ("oauthlib", (4, 0, 1)), ("pyasn1", (0, 6, 5)), ("pypdf", (6, 21, 4))):
         v = pinned(name)
         assert v is not None and v >= minimum, "%s in requirements.lock must be %s or newer, found %s" % (name, minimum, v)
+
+
+def test_setuptools_is_pinned_to_a_release_with_fixed_bundled_copies():
+    # The base image ships setuptools 79.0.1, which bundles jaraco.context 5.3.0 and wheel 0.45.1; the image scan flags both.
+    # 81.0.0 is the first release that bundles the fixed copies and still has pkg_resources (82 and later drop it).
+    v = pinned("setuptools")
+    assert v is not None and v >= (81, 0, 0), "setuptools in requirements.lock must be 81.0.0 or newer, found %s" % (v,)

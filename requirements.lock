@@ -92,6 +92,7 @@ requests-toolbelt==1.0.0
 requests==2.34.2
 robust-downloader==0.0.2
 rq==2.12.0
+setuptools==81.0.0
 ShopifyAPI==12.7.0
 simple-salesforce==1.12.10
 six==1.17.0
