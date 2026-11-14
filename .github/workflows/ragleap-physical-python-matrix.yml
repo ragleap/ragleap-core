@@ -1,0 +1,56 @@
+name: ragleap-physical newer Python
+
+# Python 3.13 must pass (blocking). Python 3.14 is informative only (continue-on-error): it tells us early if a dependency has no wheel yet.
+# Additive: this file does not change ci.yml, which the other teams share.
+on:
+  pull_request:
+    paths:
+      - 'packages/ragleap-physical/**'
+      - '.github/workflows/ragleap-physical-python-matrix.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'packages/ragleap-physical/**'
+      - '.github/workflows/ragleap-physical-python-matrix.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ragleap-physical-python-matrix-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: ragleap-physical newer Python (${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    continue-on-error: ${{ matrix.experimental }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - python-version: '3.13'
+            experimental: false
+          - python-version: '3.14'
+            experimental: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install ragleap-physical with test deps
+        working-directory: packages/ragleap-physical
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[test,mujoco,interop]"
+      - name: Show the versions this run used
+        run: |
+          python --version
+          pip list 2>/dev/null | grep -iE '^(mujoco|mcp|numpy|pytest|ragleap-physical) '
+      - name: Run ragleap-physical test suite
+        working-directory: packages/ragleap-physical
+        env:
+          CI: "true"
+        run: |
+          python -m pytest -v
