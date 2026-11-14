@@ -109,4 +109,4 @@ Recording, voice cloning on calls (consent store, issue #763), country telephony
 2. Where does voice activity detection live: in the bridge or in the speech layer?
 3. Echo handling and barge-in: who owns the echo reference?
 4. Which SIP trunk and number serve test calls, and who pays?
-5. Do we need an OpenAI-compatible endpoint in ragleap-voice so existing stacks can use it?
+5. Do we need an HTTP endpoint in ragleap-voice that follows the request shape common hosted speech APIs use, so existing stacks can use it?
