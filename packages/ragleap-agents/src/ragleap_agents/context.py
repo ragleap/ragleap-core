@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import contextvars
 from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 
 @dataclass(frozen=True)
@@ -18,6 +18,7 @@ class RunContext:
     depth: int  # 0 for a root run, parent depth + 1 for a run started inside a tool call
     tainted: bool  # the calling run's taint when the tool call started
     delegation: Dict[str, int]  # the root run's counters: {"delegations": n, "child_steps": m}
+    scope: Optional[Any] = None  # the calling run's Scope (None for a run without one); a child run inherits it
 
 
 _CURRENT: "contextvars.ContextVar[Optional[RunContext]]" = contextvars.ContextVar("ragleap_agents_run", default=None)

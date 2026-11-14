@@ -103,8 +103,23 @@ in-memory store and a SQLite store (`SQLiteStateStore(path)`: one local file, st
 not encrypted) are included; write your own for Redis or a database. If several workers can resume the
 same run, the store needs an atomic `save_if_status(run_id, state, expected_status)`; both shipped
 stores have it, and a store with only `save`/`load` cannot make the claim atomic.
-`resume()` raises `ResumeError` if the run is unknown, not awaiting approval,
+`resume()` raises `ResumeError` if the run is unknown (or belongs to another scope), not awaiting approval,
 or the decision does not match the pending call, so an approval cannot be replayed.
+
+## Tenant scope (0.5.1)
+
+If one process serves several tenants, give every run a scope. A run then belongs to exactly that scope, and nobody else can approve, reject or read it.
+
+    from ragleap_security import Scope
+
+    agent = Agent(llm, tools, policy, store, require_scope=True)      # strict: a scope is mandatory
+    acme = Scope("acme", subject="alice")
+    result = agent.run("pay the invoice", scope=acme)
+    agent.resume(result.run_id, {call["call_id"]: True}, scope=acme)  # any other scope raises ResumeError("unknown run")
+
+A wrong scope, an unknown run and a damaged saved state all raise the same `ResumeError("unknown run")`, so nobody learns that another tenant's run exists. Every part of the scope must match. Sub-agents get their parent's scope. You can add `audit=AuditLog(path)` (ids, tool names and sizes, never text) and `rate_limiter=RateLimiter(...)` (checked per scope before any model call). Without a scope everything works as in 0.5.0, except that new run ids are 128-bit tokens.
+
+**What this does not do.** It does not log users in: you pass the right scope. A tool that reads another tenant's data by itself is not stopped. Anyone with access to a shared store file sees every tenant; use one store per tenant for stronger separation. See the CHANGELOG for the 0.5.0 gap this fixes.
 
 ## The safety model
 
@@ -133,7 +148,7 @@ through them. Approval prompts are only as good as the human reading them.
 
 ## Status
 
-v0.5.0, alpha. 208 tests on Python 3.10, 3.11 and 3.12 (see `tests/`), most with a scripted
+v0.5.1, alpha. 251 tests on Python 3.10, 3.11 and 3.12 (see `tests/`), most with a scripted
 model or a local fake server; each safety property above has a test that fails if the property
 is broken.
 

@@ -18,6 +18,10 @@ mirrors; see docs/design/agent-loop.md for where it differs):
 - run() never raises for model or tool failures; tool exception text never
   reaches the model or the result, only the exception type
 
+- tenant scope (0.5.1): run() and resume() take an optional ragleap_security Scope. A run records its scope;
+  resume() only continues a run for exactly that scope, and a wrong scope, an unknown run and a damaged
+  state all raise the same ResumeError. require_scope=True makes a scope mandatory. Run ids are 128 bits.
+
 None of this stops prompt injection by itself. It limits what an injected
 instruction can do, provided the tool policies you declare are accurate.
 """
@@ -25,14 +29,18 @@ instruction can do, provided the tool policies you declare are accurate.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import logging
 import re
+import secrets
 import time
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
+from ragleap_security import AuditLog, RateLimitError, Scope
+from ragleap_security import require_scope as _require_scope
 from ragleap_tools import Tool, ToolResult
 
 from ragleap_agents.context import RunContext, current_run, enter_run, leave_run
@@ -162,7 +170,20 @@ class Agent:
         store: Optional[StateStore] = None,
         summarize: bool = True,
         prompt_style: Optional[str] = None,
+        *,
+        require_scope: bool = False,
+        audit: Optional[AuditLog] = None,
+        rate_limiter: Optional[Any] = None,
     ) -> None:
+        if not isinstance(require_scope, bool):
+            raise ValueError("require_scope must be True or False")
+        if audit is not None and not isinstance(audit, AuditLog):
+            raise ValueError("audit must be a ragleap_security AuditLog")
+        if rate_limiter is not None and not callable(getattr(rate_limiter, "check", None)):
+            raise ValueError("rate_limiter must have a check(scope) method")
+        self.require_scope = require_scope
+        self.audit = audit
+        self.rate_limiter = rate_limiter
         self.llm = llm
         self.policy = policy or Policy()
         self.store: StateStore = store or InMemoryStateStore()
@@ -184,14 +205,22 @@ class Agent:
 
     # ---- public ----
 
-    def run(self, task: str, *, tainted: bool = False) -> RunResult:
+    def run(self, task: str, *, scope: Optional[Scope] = None, tainted: bool = False) -> RunResult:
         """Run one task. tainted=True starts the run already tainted: every outbound tool needs
         approval from the first step, as it does after a tainting tool has run. Use it when the
-        task comes from an untrusted source (an incoming message, a webhook payload)."""
+        task comes from an untrusted source (an incoming message, a webhook payload).
+
+        scope (a ragleap_security Scope) says whose run this is. The run records it, and resume() will only
+        continue it for exactly that scope. Without a scope the run belongs to nobody in particular, as in
+        0.5.0. With require_scope=True a missing scope raises ValueError. A rate limiter, if set, is checked
+        before anything else and raises RateLimitError."""
         if not isinstance(tainted, bool):
             raise ValueError("tainted must be True or False")
+        scope = self._scope_in(scope)
+        self._limit(scope)
         state = {
-            "run_id": uuid.uuid4().hex[:12],
+            "run_id": secrets.token_urlsafe(16),
+            "scope": None if scope is None else scope.key,
             "task": (task or "")[: self.policy.text_cap],
             "status": "running",
             "stop_reason": "",
@@ -200,6 +229,7 @@ class Agent:
             "pending": None,
             "summary": "",
         }
+        self._audit(state, "run.start", tainted=tainted, task_bytes=len(state["task"].encode("utf-8")))
         try:
             if not state["task"].strip() or not self.tools:
                 return self._finish(state, "stopped", "no_task_or_tools", use_llm=False)
@@ -208,12 +238,18 @@ class Agent:
             logger.error("agent run failed unexpectedly: %s", type(e).__name__)
             return self._finish(state, "failed", "internal_error", use_llm=False)
 
-    def resume(self, run_id: str, decisions: Dict[str, bool]) -> RunResult:
+    def resume(self, run_id: str, decisions: Dict[str, bool], *, scope: Optional[Scope] = None) -> RunResult:
+        """Continue a paused run. Pass the same scope the run was started with: a run made with a scope is
+        only continued for exactly that scope (every part), and a run made without one only without one.
+        A wrong scope, an unknown run and (when a scope is given) a damaged stored state all raise the same
+        ResumeError("unknown run"), so nobody learns that another tenant's run exists."""
+        scope = self._scope_in(scope)
+        self._limit(scope)
         try:
             state = self.store.load(run_id)
         except ValueError:  # a store refused a corrupt stored state: nothing may run from it
-            raise ResumeError("the stored run state is invalid") from None
-        if state is None:
+            raise ResumeError("unknown run" if scope is not None else "the stored run state is invalid") from None
+        if state is None or not self._owns(state, scope):
             raise ResumeError("unknown run")
         pending = state.get("pending")
         if state["status"] != "awaiting_approval" or not pending:
@@ -236,6 +272,7 @@ class Agent:
         else:
             self.store.save(state["run_id"], state)
         try:
+            self._audit(state, "approval.decided", tool=pending["tool"], call_id=call_id, approved=approved)
             if not approved:
                 state["steps"].append({"tool": pending["tool"], "arguments": pending["arguments"], "sig": pending["sig"],
                                        "status": "rejected", "forced_approval": pending["forced"], "observation": ""})
@@ -312,6 +349,7 @@ class Agent:
                 state["status"] = "awaiting_approval"
                 state["stop_reason"] = "awaiting_approval"
                 self.store.save(state["run_id"], state)
+                self._audit(state, "approval.requested", tool=name, call_id=state["pending"]["call_id"])
                 return self._result(state)
             if deadline is not None and _now() >= deadline:
                 return self._finish(state, "stopped", "deadline")
@@ -322,7 +360,8 @@ class Agent:
         shared = parent.delegation if parent is not None else state.setdefault(
             "delegation", {"delegations": 0, "child_steps": 0})
         token = enter_run(RunContext(run_id=state["run_id"], depth=0 if parent is None else parent.depth + 1,
-                                     tainted=bool(state["tainted"]), delegation=shared))
+                                     tainted=bool(state["tainted"]), delegation=shared,
+                                     scope=Scope.parse(state["scope"]) if state.get("scope") else None))
         try:
             res = tool.call(**args)
             if not isinstance(res, ToolResult):
@@ -342,6 +381,42 @@ class Agent:
         if self.policy.for_tool(tool.name).taints:
             state["tainted"] = True
         self.store.save(state["run_id"], state)
+        self._audit(state, "tool.executed", tool=tool.name, status=status, forced=forced, obs_bytes=len(obs.encode("utf-8")))
+
+    # ---- scope, rate limit, audit ----
+
+    def _scope_in(self, scope: Any) -> Optional[Scope]:
+        """The caller's scope argument, checked. A Scope is accepted only as exactly a Scope."""
+        if scope is None:
+            if self.require_scope:
+                raise ValueError("a scope is required")
+            if self.rate_limiter is not None:
+                raise ValueError("a rate limiter needs a scope")
+            return None
+        return _require_scope(scope)
+
+    def _limit(self, scope: Optional[Scope]) -> None:
+        if self.rate_limiter is None or scope is None:
+            return
+        decision = self.rate_limiter.check(scope)
+        if not decision.allowed:
+            raise RateLimitError("rate limit reached", decision.retry_after, decision.reason or "limited")
+
+    @staticmethod
+    def _owns(state: Dict[str, Any], scope: Optional[Scope]) -> bool:
+        """True if the saved run belongs to exactly this scope (both without a scope counts as a match)."""
+        stored = state.get("scope")
+        if scope is None:
+            return stored is None
+        return isinstance(stored, str) and hmac.compare_digest(stored.encode("utf-8"), scope.key.encode("utf-8"))
+
+    def _audit(self, state: Dict[str, Any], event: str, **data: Any) -> None:
+        """One audit record: ids, tool names and sizes, never arguments or text. If the log cannot be
+        written the error is raised, so nothing continues without its record."""
+        if self.audit is None:
+            return
+        key = state.get("scope")
+        self.audit.append(event, {"run_id": state["run_id"], **data}, Scope.parse(key) if key else None)
 
     # ---- prompts ----
 
@@ -425,6 +500,7 @@ class Agent:
         state["pending"] = None
         state["summary"] = (summary or (self._fallback(state, status, reason) if state["steps"] else ""))[: self.policy.text_cap]
         self.store.save(state["run_id"], state)
+        self._audit(state, "run.end", status=status, stop_reason=reason, steps=len(state["steps"]))
         return self._result(state)
 
     @staticmethod

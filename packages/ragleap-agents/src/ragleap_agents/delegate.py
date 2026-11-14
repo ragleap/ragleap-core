@@ -134,7 +134,7 @@ def make_delegate_tool(children: Dict[str, Agent], *, max_depth: int = 1, budget
         if counters["child_steps"] >= budget.max_child_steps:
             return ToolResult(False, error="delegation step budget used up")
         counters["delegations"] += 1
-        res = child.run(task, tainted=ctx.tainted)
+        res = child.run(task, tainted=ctx.tainted, scope=ctx.scope)
         counters["child_steps"] += len(res.steps)
         if res.status == "awaiting_approval":
             res = _stop_unapproved(child, res)
