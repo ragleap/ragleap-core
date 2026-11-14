@@ -342,7 +342,7 @@ CREATE TABLE IF NOT EXISTS agent_runs (
     query TEXT NOT NULL,
     context_answer TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'running'
-        CHECK (status IN ('running', 'waiting_approval', 'done', 'failed', 'rejected', 'budget')),
+        CHECK (status IN ('running', 'waiting_approval', 'done', 'failed', 'rejected', 'budget', 'cancelled')),
     steps JSONB NOT NULL DEFAULT '[]'::jsonb,
     tainted BOOLEAN NOT NULL DEFAULT false,
     pending_action_id TEXT,
@@ -352,6 +352,22 @@ CREATE TABLE IF NOT EXISTS agent_runs (
 );
 CREATE INDEX IF NOT EXISTS agent_runs_pending_idx ON agent_runs (pending_action_id) WHERE pending_action_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS agent_runs_created_idx ON agent_runs (created_at DESC);
+
+-- A run can have child runs (sub-agents) and can be cancelled. Existing rows become top-level runs (depth 0).
+ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS parent_id UUID;
+ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS depth INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS cancel_requested BOOLEAN NOT NULL DEFAULT false;
+CREATE INDEX IF NOT EXISTS agent_runs_parent_idx ON agent_runs (parent_id) WHERE parent_id IS NOT NULL;
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'agent_runs_status_check'
+               AND pg_get_constraintdef(oid) NOT LIKE '%cancelled%') THEN
+        ALTER TABLE agent_runs DROP CONSTRAINT agent_runs_status_check;
+        ALTER TABLE agent_runs ADD CONSTRAINT agent_runs_status_check
+            CHECK (status IN ('running', 'waiting_approval', 'done', 'failed', 'rejected', 'budget', 'cancelled'));
+    END IF;
+END
+$$;
 
 -- Cron-style schedules for proactive triggers: a trigger has EITHER schedule_minutes (every N
 -- minutes) OR cron (5-field crontab evaluated in `timezone`), never both.

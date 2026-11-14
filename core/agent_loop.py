@@ -23,6 +23,7 @@ import logging
 import os
 import threading
 import uuid
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 from core import budget
@@ -39,7 +40,11 @@ OBS_PROMPT_CAP = 4000
 TEXT_CAP = 2000
 OUTBOUND_TOOLS = frozenset({"send_webhook", "send_slack", "send_email", "update_crm_record", "schedule_event", "mcp_call", "fetch_page", "write_file", "delete_file"})
 TAINTING_TOOLS = frozenset({"fetch_page", "mcp_call", "list_files", "read_file", "preview_change"})
-RUN_STATUSES = ("running", "waiting_approval", "done", "failed", "rejected", "budget")
+RUN_STATUSES = ("running", "waiting_approval", "done", "failed", "rejected", "budget", "cancelled")
+FINISHED_STATUSES = ("done", "failed", "rejected", "budget", "cancelled")
+CANCEL_STALE_SECONDS = 900   # a run still "running" this long after its last update has no live thread (for example after a restart)
+MAX_TREE_NODES = 200
+MAX_TREE_DEPTH = 8
 
 
 class _BudgetBlocked(Exception):
@@ -69,12 +74,15 @@ def _service():
 
 # ---------------- storage ----------------
 
-_COLS = "id, role, query, context_answer, status, steps, tainted, pending_action_id, summary, created_at, updated_at"
+_COLS = ("id, role, query, context_answer, status, steps, tainted, pending_action_id, summary, created_at, updated_at, "
+         "parent_id, depth, cancel_requested")
 
 
 def _row(r) -> Dict:
     d = dict(zip(_COLS.split(", "), r))
     d["id"] = str(d["id"])
+    if d.get("parent_id") is not None:
+        d["parent_id"] = str(d["parent_id"])
     if isinstance(d["steps"], str):
         d["steps"] = json.loads(d["steps"])
     for k in ("created_at", "updated_at"):
@@ -91,9 +99,11 @@ def _save(run: Dict) -> None:
         if run.get("id") is None:
             cur.execute(
                 "INSERT INTO agent_runs (role, query, context_answer, status, steps, tainted, "
-                "pending_action_id, summary) VALUES (%s, %s, %s, %s, %s::jsonb, %s, %s, %s) RETURNING id",
+                "pending_action_id, summary, parent_id, depth) "
+                "VALUES (%s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s) RETURNING id",
                 (run.get("role"), run["query"], run["context_answer"], run["status"], steps,
-                 run["tainted"], run.get("pending_action_id"), run.get("summary", "")),
+                 run["tainted"], run.get("pending_action_id"), run.get("summary", ""),
+                 run.get("parent_id"), int(run.get("depth") or 0)),
             )
             run["id"] = str(cur.fetchone()[0])
         else:
@@ -153,6 +163,153 @@ def _get_by_pending(action_id: str) -> Optional[Dict]:
         return _row(r) if r else None
     finally:
         conn.close()
+
+
+# ---------------- cancel and the run tree ----------------
+
+def cancel_requested(run_id: str) -> bool:
+    """True when someone asked to stop this run. A failed read counts as no (the run is not stopped by an error)."""
+    try:
+        conn = get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT cancel_requested FROM agent_runs WHERE id = %s", (str(run_id),))
+            r = cur.fetchone()
+            cur.close()
+            return bool(r and r[0])
+        finally:
+            conn.close()
+    except Exception as e:
+        logger.warning("Could not read the cancel flag (non-fatal): %s", e)
+        return False
+
+
+def _cancelled(run: Dict) -> bool:
+    return bool(run.get("id")) and cancel_requested(run["id"])
+
+
+def _descendant_ids(run_id: str) -> List[str]:
+    """Ids of every run below this one (children, their children, ...), at most MAX_TREE_NODES, nearest first."""
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "WITH RECURSIVE t AS ("
+            " SELECT id, 1 AS lvl FROM agent_runs WHERE parent_id = %s"
+            " UNION ALL"
+            " SELECT r.id, t.lvl + 1 FROM agent_runs r JOIN t ON r.parent_id = t.id WHERE t.lvl < %s"
+            ") SELECT id FROM t ORDER BY lvl LIMIT %s",
+            (str(run_id), MAX_TREE_DEPTH, MAX_TREE_NODES),
+        )
+        ids = [str(r[0]) for r in cur.fetchall()]
+        cur.close()
+        return ids
+    finally:
+        conn.close()
+
+
+def tree(run_id: str) -> Optional[Dict]:
+    """The run with its children nested under "children" (short fields only), or None when there is no such run."""
+    top = get_run(run_id)
+    if top is None:
+        return None
+    ids = [top["id"]] + _descendant_ids(top["id"])
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(f"SELECT {_COLS} FROM agent_runs WHERE id::text IN %s", (tuple(ids),))
+        rows = {r["id"]: r for r in (_row(x) for x in cur.fetchall())}
+        cur.close()
+    finally:
+        conn.close()
+
+    def node(r: Dict) -> Dict:
+        kids = sorted((x for x in rows.values() if x.get("parent_id") == r["id"]), key=lambda x: x["created_at"] or "")
+        return {"id": r["id"], "role": r["role"], "status": r["status"], "depth": r.get("depth", 0), "tainted": r["tainted"],
+                "steps": len(r["steps"]), "summary": (r["summary"] or "")[:200], "created_at": r["created_at"],
+                "cancel_requested": bool(r.get("cancel_requested")), "children": [node(k) for k in kids]}
+    return node(rows[top["id"]])
+
+
+def _end_cancelled(run_id: str, expected_status: str) -> bool:
+    """Mark a run cancelled only if it still has the status we saw (a decision made at the same moment wins)."""
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE agent_runs SET status = 'cancelled', pending_action_id = NULL, summary = %s, updated_at = now() "
+            "WHERE id = %s AND status = %s",
+            ("Stopped: cancelled by the owner.", str(run_id), expected_status),
+        )
+        done = cur.rowcount == 1
+        conn.commit()
+        cur.close()
+        return done
+    finally:
+        conn.close()
+
+
+def _flag_cancel(run_id: str) -> None:
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("UPDATE agent_runs SET cancel_requested = true WHERE id = %s", (str(run_id),))
+        conn.commit()
+        cur.close()
+    finally:
+        conn.close()
+
+
+def _is_stale(r: Dict) -> bool:
+    try:
+        when = datetime.fromisoformat(r["updated_at"])
+    except Exception:
+        return False
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    return r["status"] == "running" and (datetime.now(timezone.utc) - when).total_seconds() > CANCEL_STALE_SECONDS
+
+
+def cancel_run(run_id: str, decided_by: Optional[Dict] = None) -> Optional[Dict]:
+    """Stop a run and every run below it. None when there is no such run. Never raises into the caller for one bad child.
+
+    A run waiting for approval is ended at once and its pending action is rejected, so it can never run later.
+    A run that is running is flagged: its loop stops before its next step and before it executes a planned action.
+    A run that says "running" but has not been updated for a long time (no live thread) is ended at once.
+    Runs that are already finished are left alone.
+    """
+    top = get_run(run_id)
+    if top is None:
+        return None
+    cancelled, stopping, finished = [], [], []
+    for rid in [top["id"]] + _descendant_ids(top["id"]):
+        r = get_run(rid)
+        if r is None:
+            continue
+        if r["status"] in FINISHED_STATUSES:
+            finished.append(rid)
+            continue
+        try:
+            _flag_cancel(rid)
+            if r["status"] == "waiting_approval" or _is_stale(r):
+                if _end_cancelled(rid, r["status"]):
+                    cancelled.append(rid)
+                    if r.get("pending_action_id"):
+                        try:
+                            from core import autonomy
+                            autonomy.resolve_pending(r["pending_action_id"], approve=False, decided_by=decided_by)
+                        except Exception as e:
+                            logger.warning("Could not reject the pending action of a cancelled run (non-fatal): %s", e)
+                    continue
+            stopping.append(rid)
+        except Exception as e:
+            logger.warning("Could not cancel run %s (non-fatal): %s", rid, e)
+    try:
+        from core import audit
+        audit.emit("agent_run_cancel", run_id=top["id"], cancelled=len(cancelled), stopping=len(stopping), finished=len(finished))
+    except Exception:
+        pass
+    return {"run_id": top["id"], "cancelled": cancelled, "stopping": stopping, "already_finished": finished}
 
 
 # ---------------- prompts ----------------
@@ -274,6 +431,8 @@ def _drive(run: Dict, service, role: Optional[str]) -> Optional[Dict]:
     tools = actions.available_tools()
     limit = max_steps()
     while True:
+        if _cancelled(run):
+            return _finish(run, None, role, "cancelled", "Stopped: cancelled by the owner.")
         if not tools:
             return _finish(run, service, role, "done", "No actions are available.")
         if len(run["steps"]) >= limit:
@@ -295,6 +454,8 @@ def _drive(run: Dict, service, role: Optional[str]) -> Optional[Dict]:
         sig = [valid["tool"], valid["target"], hashlib.sha256(valid["content"].encode()).hexdigest()[:16]]
         if any(s.get("sig") == sig for s in run["steps"]):
             return _finish(run, service, role, "done", "Stopped: the same action was proposed twice.")
+        if _cancelled(run):          # asked to stop while the model was planning: do not execute the planned action
+            return _finish(run, None, role, "cancelled", "Stopped: cancelled by the owner.")
         force = bool(run["tainted"] and valid["tool"] in OUTBOUND_TOOLS)
         res = execute_or_request(
             action_type=valid["tool"], channel=valid["channel"], target=valid["target"],
