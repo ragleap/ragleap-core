@@ -84,7 +84,7 @@ Licences are not declared by the engine. They come from `models.toml`, which sta
 5. If nothing is left, raise `NoEngineError`, listing each candidate and why it was dropped.
 6. If the chosen engine fails while running, raise `EngineError`. There is no second attempt on another engine.
 
-Cloud adapters (for example OpenAI, or Sarvam with the user's own key) may exist later as optional extras. They need `engine="name"`, a key from the environment, and they are excluded from `auto` in every case.
+Cloud adapters (for example a hosted general-purpose provider, or Sarvam with the user's own key) may exist later as optional extras. They need `engine="name"`, a key from the environment, and they are excluded from `auto` in every case.
 
 ## 7. Verified cache folders and offline loading
 
@@ -176,4 +176,4 @@ Everything here is **planned**. Sources are the sections of `benchmarks/voice/RE
 
 ### Open question added
 
-7. **An OpenAI-compatible HTTP endpoint** (`/v1/audio/transcriptions` and `/v1/audio/speech`) as an optional extra, so existing applications, including the older voice channel in this repository, can switch from a paid service by changing one base URL. Does it belong in 0.1.0, or in a later release? It must default to listening on localhost only.
+7. **An HTTP endpoint that follows the common hosted-API request shape** (`/v1/audio/transcriptions` and `/v1/audio/speech`) as an optional extra, so existing applications, including the older voice channel in this repository, can switch from a paid service by changing one base URL. Does it belong in 0.1.0, or in a later release? It must default to listening on localhost only.
