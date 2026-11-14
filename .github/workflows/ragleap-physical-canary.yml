@@ -1,0 +1,71 @@
+name: ragleap-physical canary
+
+# Nightly: the suite against the NEWEST MuJoCo, MCP SDK and numpy, beyond the pins in pyproject.toml.
+# A failure opens (or updates) one issue, so that a new release is noticed in a day and not when a user hits it.
+# Simulation only. No secrets. The pull_request trigger only runs this file's own change once, without reporting.
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/ragleap-physical-canary.yml'
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: ragleap-physical-canary
+  cancel-in-progress: false
+
+jobs:
+  canary:
+    if: github.repository == 'ragleap/ragleap-core'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.13'
+      - name: Install ragleap-physical, then upgrade the dependencies to the newest releases
+        working-directory: packages/ragleap-physical
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[test,mujoco,interop]"
+          pip install --upgrade mujoco mcp numpy
+      - name: Record the versions this run used
+        id: versions
+        run: |
+          python --version | tee versions.txt
+          pip list 2>/dev/null | grep -iE '^(mujoco|mcp|numpy|pytest|ragleap-physical) ' | tee -a versions.txt
+      - name: Run ragleap-physical test suite
+        working-directory: packages/ragleap-physical
+        env:
+          CI: "true"
+        run: |
+          python -m pytest -v
+      - name: Report a failure (scheduled and manual runs only)
+        if: failure() && github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="[physical] Canary: the test suite fails against the newest dependencies"
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          {
+            echo "The nightly canary failed on $(date -u +%Y-%m-%d). Run: ${run_url}"
+            echo
+            echo "Versions this run used:"
+            echo '```'
+            cat versions.txt
+            echo '```'
+            echo
+            echo "This installs the newest MuJoCo, MCP SDK and numpy beyond the pins in pyproject.toml. Simulation only."
+          } > body.md
+          n=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "in:title \"Canary: the test suite fails\"" --json number --jq '.[0].number')
+          if [ -n "$n" ]; then
+            gh issue comment "$n" --repo "$GITHUB_REPOSITORY" --body-file body.md
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body-file body.md --label physical
+          fi
