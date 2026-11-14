@@ -443,7 +443,7 @@ cp .env.example .env
 docker compose up --build -d
 ```
 
-Requirements: Docker, Docker Compose, and either a Gemini API key (the default) or a local Ollama setup with no key (use `ragleap launch --ollama`, or set `EMBEDDING_PROVIDER=ollama` for embeddings). For chat you can use Gemini or any of the 19 providers listed under [Supported LLM Providers](#supported-llm-providers-byok), including a local Ollama model and any OpenAI-compatible endpoint.
+Requirements: Docker, Docker Compose, and either a Gemini API key (the default) or a local Ollama setup with no key (use `ragleap launch --ollama`, or set `EMBEDDING_PROVIDER=ollama` for embeddings). For chat you can use Gemini or any of the 20 providers listed under [Supported LLM Providers](#supported-llm-providers-byok), including a local Ollama model and any OpenAI-compatible endpoint.
 
 **Try it in 30 seconds** — with the stack running, see [examples/](examples/) for two runnable scripts:
 - `examples/01_ingest_and_query.py` — upload a document and ask a question via the API. The installer put an API key in your `.env` file: set it first as `RAGLEAP_API_KEY` (bash: `export RAGLEAP_API_KEY=...`, PowerShell: `$env:RAGLEAP_API_KEY = "..."`) and run `pip install requests`
@@ -879,8 +879,12 @@ same live API.
 - [x] Community Discord
 - [x] AI Office dashboard with settings and a setup checklist (v0.9.0)
 - [x] Approval-gated agent loop, sandboxed tools, MCP client and scheduled check-ins
-- [x] One-command installer and `ragleap` command, local Ollama mode (not yet tested on a clean machine)
+- [x] One-command installer and `ragleap` command, local Ollama mode (one community tester ran the Windows installer with the Ollama option on one machine, see [#781](https://github.com/ragleap/ragleap-core/issues/781); macOS and Linux desktops are not verified)
 - [x] Failed-login throttling and optional token budgets
+- [x] Four roles with personal keys, a request audit log, folder auto-ingest (off by default) and single sign-on with OpenID Connect (off by default; tested on Keycloak for sign-in and refusals only, per the v0.13.0 notes)
+- [x] Documents treated as untrusted content for actions (v0.13.0), structured audit log lines (v0.13.1), audit filters, opt-in audit retention and a sign-in rate limit (v0.13.2)
+- [x] Separate libraries beyond rag and graph: memory, security, trace, optimizer, voice (pre-alpha), physical (simulation only), agents, tools, integrations and vectorstores (see ROADMAP.md, Phase 8)
+- [ ] Multi-tenant use and hosting inside ragleap-core (planned, no date)
 - [ ] Prebuilt Docker images (GHCR) for a faster install
 - [ ] Triggers and autonomy controls in the dashboard
 - [ ] Slack and email inbound, SMS, and the web widget (these need a public HTTPS address)

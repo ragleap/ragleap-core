@@ -1,6 +1,6 @@
 # RagLeap Core Roadmap
 
-This roadmap tracks the honest, current state of the open-core extraction — what exists, what's in progress, and what's planned.
+This roadmap tracks the honest, current state of RagLeap Core and its libraries (it began as the open-core extraction) — what exists, what's in progress, and what's planned.
 
 ## Phase 1 — Foundation ✅ Complete
 
@@ -26,7 +26,7 @@ RagLeap's production RAG engine originally lived inside a larger private Django 
 ## Phase 3 — Standalone Deployment Polish ✅ Complete
 
 - [x] Working `docker compose up --build` with no external dependencies
-- [x] Bring-your-own-API-key support for generation across 19 providers (OpenAI, Anthropic, Mistral, Groq, and more) — Gemini and Groq verified live end-to-end; embeddings remain Gemini-only by design (dimension constraints)
+- [x] Bring-your-own-API-key support for generation across 20 providers (OpenAI, Anthropic, Mistral, Groq, and more; updated 2026-11-14: this said 19) — Gemini and Groq verified live end-to-end; embeddings remain Gemini-only by design (dimension constraints)
 - [x] Input validation and improved error handling (file size limits, empty-input guards, question length limits, DB rollback/cleanup on ingestion failure)
 - [x] Final Quickstart accuracy pass
 - [x] Troubleshooting documentation for common Docker networking issues
@@ -44,8 +44,8 @@ RagLeap's production RAG engine originally lived inside a larger private Django 
 - [x] Streaming responses
 - [x] Provider fallback chain
 - [x] Real token usage reporting + context-size budget trimming
-- [x] Web chat widget
-- [x] AI Employees runtime — single-tenant, BYOK role-based agents: 9 default roles, business profile (owner-filled + auto-learned), pgvector-backed learned memory (`core/employees/`). Wired into `core/chat.py` and the `/chat`/`/chat/stream` API routes via #133.
+- [ ] Web chat widget (planned, not built; updated 2026-11-14: this was marked done, but the README says it is not built yet)
+- [x] AI Employees runtime — single-tenant, BYOK role-based agents: 46 default roles (updated 2026-11-14: this said 9), business profile (owner-filled + auto-learned), pgvector-backed learned memory (`core/employees/`). Wired into `core/chat.py` and the `/chat`/`/chat/stream` API routes via #133.
 - [x] n8n workflow automation — single-tenant webhook triggers (`core/workflows.py`), wired into whatsapp/telegram/discord channel adapters. Voice channel not yet wired (different protocol shape). See #141.
 
 ## Phase 5 — Community (in progress)
@@ -56,9 +56,9 @@ RagLeap's production RAG engine originally lived inside a larger private Django 
 - [ ] Plugin/extension system for custom document loaders or AI providers
 ## Phase 6 — `ragleap-rag` hardening (in progress)
 
-`ragleap-rag` (the standalone PyPI library, `packages/ragleap-rag/`) went from v0.6.3 to v0.12.2 across this and prior sessions: Cost-First RAG, embedding provider expansion, structured/JSON output, query rewriting (contextual/HyDE/multi-query), removal of all hardcoded model defaults, and six vector backends (pgvector, FAISS, Pinecone, Weaviate, Qdrant, Milvus). This phase covers what's left before a confident v1.0.
+`ragleap-rag` (the standalone PyPI library, `packages/ragleap-rag/`) went from v0.6.3 to v0.15.0 across this and prior sessions (updated 2026-11-14: this said v0.12.2): Cost-First RAG, embedding provider expansion, structured/JSON output, query rewriting (contextual/HyDE/multi-query), removal of all hardcoded model defaults, and six vector backends (pgvector, FAISS, Pinecone, Weaviate, Qdrant, Milvus). This phase covers what's left before a confident v1.0.
 
-- [ ] `SECURITY.md` — vulnerability disclosure process
+- [x] `SECURITY.md` — vulnerability disclosure process (refreshed in v0.13.1, #1276)
 - [ ] Dependency SBOM (`cyclonedx-bom` output) for supply-chain transparency
 - [ ] CodeQL + Dependabot enabled in CI, with status badges in the README
 - [ ] Real, measured benchmarks (ingestion throughput, query latency, cost per query) — run against real infrastructure and published as actually-measured numbers, not projected/estimated ones. No benchmark ships until it's been run for real; this project's whole differentiator is verified claims over marketing claims, and that standard applies here too.
@@ -71,7 +71,7 @@ RagLeap's production RAG engine originally lived inside a larger private Django 
 
 ## Phase 7 — `ragleap-graph` hardening (in progress)
 
-`ragleap-graph` (the standalone PyPI library, `packages/ragleap-graph/`) went from v0.1.0 to v0.9.0 across this and prior sessions: LLM-based entity/relation extraction, entity deduplication, hybrid vector+graph retrieval, per-document contribution tracking (idempotent re-upserts), lineage lookup (`find_lineage()`), per-user data isolation (`user_id=`, with a `backfill_user_id_defaults()` migration for pre-upgrade installs), Postgres-backed audit logging, schema migrations, cross-chunk relation extraction, and ontology cross-validation. 108 tests, 92 passing without live credentials, 16 skipped.
+`ragleap-graph` (the standalone PyPI library, `packages/ragleap-graph/`) went from v0.1.0 to v0.11.0 across this and prior sessions (updated 2026-11-14: this said v0.9.0): LLM-based entity/relation extraction, entity deduplication, hybrid vector+graph retrieval, per-document contribution tracking (idempotent re-upserts), lineage lookup (`find_lineage()`), per-user data isolation (`user_id=`, with a `backfill_user_id_defaults()` migration for pre-upgrade installs), Postgres-backed audit logging, schema migrations, cross-chunk relation extraction, and ontology cross-validation. 108 tests, 92 passing without live credentials, 16 skipped (counted at v0.9.0; updated 2026-11-14: not re-counted for v0.11.0).
 
 - [x] Core graph indexing, regex + LLM entity extraction, co-occurrence graphs
 - [x] Typed relation extraction (`RELATES_AS` edges), hybrid `GraphRetriever`
@@ -83,6 +83,8 @@ RagLeap's production RAG engine originally lived inside a larger private Django 
 - [x] Ontology cross-validation between relation types and entity types — shipped v0.9.0, see [#152](https://github.com/ragleap/ragleap-core/issues/152)
 - [ ] Eval framework (graph-RAG vs vector-RAG accuracy) — new engineering, still needs domain-expert-authored labeled test cases, see [#153](https://github.com/ragleap/ragleap-core/issues/153)
 - [x] Cross-chunk relation extraction — shipped v0.8.0, see [#154](https://github.com/ragleap/ragleap-core/issues/154)
+- [x] Deterministic community detection (Louvain), opt-in in retrieval — shipped v0.10.0
+- [x] Opt-in temporal relation edges, plus a tenant-isolation fix in three queries — shipped v0.11.0
 
 Also open: rotating a previously-exposed `GEMINI_API_KEY` ([#155](https://github.com/ragleap/ragleap-core/issues/155)), deciding how a future `ragleap-voice` package should relate to the existing `channels/voice/` code ([#156](https://github.com/ragleap/ragleap-core/issues/156)), and confirming the `/simple/` PyPI proxy serves real package data ([#157](https://github.com/ragleap/ragleap-core/issues/157)).
 
@@ -93,7 +95,7 @@ The longer-term package roadmap beyond `ragleap-rag` and `ragleap-graph`. Some p
 - [x] `ragleap-vectorstores` — SHIPPED v0.5.1. Pluggable vector backends beyond what already ships inside `ragleap-rag` core (6 backends today) — Chroma, LanceDB, Redis (RediSearch/Redis Stack), Upstash Vector, and OpenSearch
 - [x] `ragleap-tools` — SHIPPED (v0.5.1). A `@tool` decorator and a safe-dispatch `Toolkit` (v0.5.0), stateless tools, sandboxed file ops, document search, web and GitHub search, and image description, all BYOK, with a response-size cap and a hard total deadline on every network provider (code execution, HTTP fetch and business-system connectors deliberately deferred to their own security-focused design passes)
 - [x] `ragleap-integrations` — SHIPPED v0.5.0: MCP client over Streamable HTTP (owner-configured allowlist) and, since 0.4.0, a UTCP client for `http` manuals (connect_utcp: exact allowlist and approved origins; 0.5.0 adds owner-listed static query parameters (allowed_query) and one accepted auth shape; tested against fakes and a local TLS server; discovery live-checked on 2026-11-07 against Unified.to's public manual, where 0.4.0 could offer none of the 20 tools tried because they declare auth, and again on 2026-11-12 with the published 0.5.0 wheel and no token, where all 20 tried were skipped only because no token is configured; no tool call verified against a real UTCP server; no other auth blocks, OAuth or multi-tenant hub yet), with multi-tenant use for MCP since 0.3.0 (McpHub: per-tenant tokens, allowlists, approval, rate limits and audit; live-checked on a mock auth server, 2026-10-26 and 2026-10-27), connect() and approval and audit governance (live-checked on 2026-10-25 against Google Cloud's Pub/Sub MCP endpoint: connect(), annotation parsing and the approval flags; the approve hook and the call events are tested against fake servers only). Curated native connectors and channel integrations are NOT built yet; connectors need a read-only audit and a design pass first
-- [ ] `ragleap-agents` (AFTER) — role-based crews, tool-calling, human-in-the-loop approval gates
+- [x] `ragleap-agents` — SHIPPED (v0.5.0, 2026-10-21): a small act-observe agent loop over `ragleap-tools` Tool objects with human-in-the-loop approval gates, and a delegate tool for sub-agents (depth 1, a budget, no outbound actions by default) (updated 2026-11-14: this line was unchecked and marked "(AFTER)")
 - [ ] `ragleap-flows` (AFTER) — low-code orchestration + HITL checkpoints, bootstrapped from the existing n8n integration
 - [x] `ragleap-trace` — SHIPPED (v0.1.0): the tracing part of the old `ragleap-observability` item. Dependency-free spans and exporters, plus an adapter for ragleap-rag's hooks that records only allow-listed counts, never query or answer text or file names (tested against a real RagLeap with Postgres; no retention or rotation yet; not independently audited)
 - [ ] Hallucination detection and a full LLM-as-judge evaluation framework (DECISION NEEDED; name to be decided, because `ragleap-observability` is taken by the shipped infrastructure package) — new engineering, not extraction, since nothing like the eval-framework half exists internally today
@@ -103,6 +105,9 @@ The longer-term package roadmap beyond `ragleap-rag` and `ragleap-graph`. Some p
 - [x] `ragleap-memory` — SHIPPED (v0.3.0, 2026-11-09, alpha; first release v0.1.0, 2026-10-24). Durable, tenant-scoped long-term memory in one SQLite file: FTS5 keyword search, typed entries with trust labels (new entries default to untrusted), supersede, forget, export, erase (removes the text from the file), optional audit log. Needs `ragleap-security`. Version 0.3.0 adds optional vector and hybrid search over vectors from your own embedder function (no provider code in the library). Version 0.2.0 added a token budget on search (`max_tokens`), usage counters and per-tenant quotas, `ShardedStore` (one file per tenant) and download/upload of a memory as a file. Not verified: speed beyond one benchmark run on one machine, Windows and macOS, big-endian machines, any real embedding provider, several processes writing one file, retrieval quality (no benchmark yet), multilingual precision. Encrypted export and import (planned for 0.3.1), consolidation and the `ragleap-agents` adapter are planned (issue #900).
 - [x] `ragleap-security` — SHIPPED (v0.2.0, 2026-11-07, alpha; first release v0.1.0, 2026-10-23). Small, auditable security primitives: immutable tenant scopes, a hash-chained audit log (tamper-evident, not tamper-proof), secrets that do not print themselves plus a heuristic redactor, hard input limits, key rotation with optional AES-256-GCM encryption, rate limits, and file-integrity checks. Standard library only (encryption needs the optional cryptography extra). No independent security review yet; more modules are planned (issue #899).
 - [x] `ragleap-optimizer` — SHIPPED (v0.1.0, 2026-11-05, alpha). A measure-first layer that reduces the token use of LLM requests: a per-step report of what changed and whether information was lost; exact repeated-context removal, minifying, a stable prefix, bounded tool-output trimming (lossy, and it says so); a scope-keyed exact cache; retries and fallback; and an evaluation harness that compares quality before and after. No token-saving figure has been measured. Planned (issue #1164): a rule router and cascades, compression and a semantic cache (off by default), framework adapters. No independent security review yet.
+- [x] `ragleap-voice` — SHIPPED (v0.3.6, 2026-11-08, pre-alpha; first release v0.0.1). Local-first speech tooling: a model manifest with lock files and verified downloads, `transcribe()` and `synthesize()` with a Whisper large-v3 engine and an Indic Parler-TTS engine. Every model is unverified and none is a default; real phone audio is not measured. It is separate from the Twilio-based voice channel in this repo.
+- [x] `ragleap-physical` — SHIPPED (v0.0.5, 2026-11-08, pre-alpha, simulation only). A bridge between AI agents and open-source simulators: the AI proposes, a named person approves the exact change, and the limits are checked again before it is applied. Nothing controls real hardware, and it is not a safety certification.
+- [ ] `ragleap-phone` — PLANNED: phone calls without Twilio ([#814](https://github.com/ragleap/ragleap-core/issues/814)). Only the adapter interfaces (`Adapter`, `Call`, `Capabilities`, `Event`) are merged on main, with no backend, no calls and no release.
 - [ ] `ragleap-intelligence` (VISION / EARLY DISCUSSION ONLY) — see below
 
 ### Vision: AI Employee Twins (concept, not yet designed or built)
