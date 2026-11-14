@@ -292,3 +292,31 @@ def test_the_config_takes_both_remote_values_or_none():
     with pytest.raises(ValueError):
         EndpointConfig(law="ulaw", remote_port=4000)
     assert EndpointConfig("ulaw", "10.0.0.5", 4000).remote_port == 4000
+
+
+def test_the_audio_handed_on_cannot_run_ahead_of_real_time():
+    async def main():
+        clk = Clock()
+        c = RtpCall(_cfg(), clk)
+        ts = 160
+        for s in range(1, 101):
+            c.on_datagram(rtp.build(0, s, ts, 7, PAYLOAD), SRC)
+            ts += 160 + 60000          # every packet claims a huge silence before it
+        await c.hangup()
+        frames, _ = await _drain(c)
+        total_8k = sum(f.n_samples for f in frames) // 2
+        assert total_8k <= 100 * 160 + 16000 and c.counts["fill_limited"] > 0
+    _run(main())
+
+
+def test_a_legitimate_silence_after_real_time_has_passed_is_still_filled():
+    async def main():
+        clk = Clock()
+        c = RtpCall(_cfg(), clk)
+        c.on_datagram(rtp.build(0, 1, 160, 7, PAYLOAD), SRC)
+        clk.t += 6.0                                   # six seconds really pass
+        c.on_datagram(rtp.build(0, 2, 160 + 160 + 8000, 7, PAYLOAD), SRC)   # one second of silence was not sent
+        await c.hangup()
+        frames, _ = await _drain(c)
+        assert sum(f.n_samples for f in frames) == 2 * (160 + 8000 + 160) and c.counts["fill_limited"] == 0
+    _run(main())

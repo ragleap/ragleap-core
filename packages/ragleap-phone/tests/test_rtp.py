@@ -182,3 +182,10 @@ def test_the_timestamp_wraps_around():
     r.handle(build(PCMU, 1, 0xFFFFFF00, 7, b"\xff" * 160))
     assert r.handle(build(PCMU, 2, (0xFFFFFF00 + 160) & 0xFFFFFFFF, 7, b"\xff" * 160))[1] == 0
     assert r.handle(build(PCMU, 3, (0xFFFFFF00 + 320 + 480) & 0xFFFFFFFF, 7, b"\xff" * 160))[1] == 480
+
+
+@pytest.mark.parametrize("kw", [dict(max_gap=0), dict(max_gap=-1), dict(max_gap=1.5), dict(max_gap=True), dict(max_gap="x"),
+                                dict(max_payload=0), dict(max_payload=-5), dict(max_payload=2.5), dict(max_payload=True)])
+def test_the_receiver_limits_are_checked(kw):
+    with pytest.raises(ValueError):
+        Receiver(PCMU, **kw)

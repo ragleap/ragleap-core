@@ -19,6 +19,7 @@ from .audiopath import InboundAudio, OutboundAudio
 
 PACKET_BYTES = 160
 PACKET_TICKS = 160
+FILL_SLACK_SAMPLES = 16000  # 2 s: how far the audio handed on may run ahead of real time (a starting value)
 
 
 def _pos_int(name, v, hi=None):
@@ -78,7 +79,8 @@ class RtpCall(Call):
         self._rx = rtp.Receiver(rtp.PAYLOAD_TYPES[config.law], config.max_payload, config.max_gap)
         self._in = InboundAudio(config.law)
         self._out = OutboundAudio(config.law)
-        self._own = {"wrong_source": 0, "remote_not_set": 0, "rate_limited": 0, "queue_full": 0, "after_end": 0}
+        self._own = {"wrong_source": 0, "remote_not_set": 0, "rate_limited": 0, "queue_full": 0, "after_end": 0, "fill_limited": 0}
+        self._media_samples = 0
         now = clock()
         self._win_start, self._win_n = now, 0
         self._started_at = None
@@ -181,6 +183,11 @@ class RtpCall(Call):
             self._started_at = now
             self._emit("call.started")
         self._last_packet_at = now
+        room = max(0, int((now - self._started_at) * rtp.CLOCK_RATE) + FILL_SLACK_SAMPLES - self._media_samples)
+        if gap > room:
+            gap = room
+            self._own["fill_limited"] += 1
+        self._media_samples += gap + len(packet.payload)
         if gap:
             self._put_frame(self._in.silence(gap, ts_ns))
         self._put_frame(self._in.process(packet.payload, ts_ns))
