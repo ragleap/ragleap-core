@@ -22,11 +22,12 @@ import json
 import logging
 import os
 import threading
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
-from core import budget
+from core import budget, subagents
 from core.employees import actions
 from core.employees._db import get_connection
 
@@ -75,7 +76,7 @@ def _service():
 # ---------------- storage ----------------
 
 _COLS = ("id, role, query, context_answer, status, steps, tainted, pending_action_id, summary, created_at, updated_at, "
-         "parent_id, depth, cancel_requested")
+         "parent_id, depth, cancel_requested, tokens_used")
 
 
 def _row(r) -> Dict:
@@ -99,19 +100,19 @@ def _save(run: Dict) -> None:
         if run.get("id") is None:
             cur.execute(
                 "INSERT INTO agent_runs (role, query, context_answer, status, steps, tainted, "
-                "pending_action_id, summary, parent_id, depth) "
-                "VALUES (%s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s) RETURNING id",
+                "pending_action_id, summary, parent_id, depth, tokens_used) "
+                "VALUES (%s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s) RETURNING id",
                 (run.get("role"), run["query"], run["context_answer"], run["status"], steps,
                  run["tainted"], run.get("pending_action_id"), run.get("summary", ""),
-                 run.get("parent_id"), int(run.get("depth") or 0)),
+                 run.get("parent_id"), int(run.get("depth") or 0), int(run.get("tokens_used") or 0)),
             )
             run["id"] = str(cur.fetchone()[0])
         else:
             cur.execute(
                 "UPDATE agent_runs SET status = %s, steps = %s::jsonb, tainted = %s, "
-                "pending_action_id = %s, summary = %s, updated_at = now() WHERE id = %s",
+                "pending_action_id = %s, summary = %s, tokens_used = %s, updated_at = now() WHERE id = %s",
                 (run["status"], steps, run["tainted"], run.get("pending_action_id"),
-                 run.get("summary", ""), run["id"]),
+                 run.get("summary", ""), int(run.get("tokens_used") or 0), run["id"]),
             )
         conn.commit()
         cur.close()
@@ -416,29 +417,39 @@ def _finish(run: Dict, service, role: Optional[str], status: str, note: str = ""
     summary = ""
     if service is not None and status == "done" and run["steps"]:
         try:
-            summary = _llm(service, _summary_prompt(run), role, SUMMARY_MAX_TOKENS).strip()
+            sp = _summary_prompt(run)
+            summary = _llm(service, sp, role, SUMMARY_MAX_TOKENS).strip()
+            run["tokens_used"] = int(run.get("tokens_used") or 0) + budget.estimate_tokens(sp) + budget.estimate_tokens(summary)
         except Exception:
             summary = ""
     run["status"] = status
     run["summary"] = (summary or _fallback_summary(run, note))[:TEXT_CAP]
     run["pending_action_id"] = None
     _save(run)
+    if run.get("parent_id"):
+        subagents.on_child_ended(run)    # a parent that was waiting for this child goes on
     return _outcome(run)
 
 
 def _drive(run: Dict, service, role: Optional[str]) -> Optional[Dict]:
     from core.autonomy import execute_or_request  # lazy: avoids an import cycle
-    tools = actions.available_tools()
+    tools = subagents.with_delegate(actions.available_tools(), run)
     limit = max_steps()
     while True:
         if _cancelled(run):
             return _finish(run, None, role, "cancelled", "Stopped: cancelled by the owner.")
+        if run.get("deadline") and time.time() > run["deadline"]:
+            return _finish(run, None, role, "failed", "Stopped: the sub-agent time limit was reached.")
+        if subagents.over_budget(run):
+            return _finish(run, None, role, "budget", "Stopped: the sub-agent token cap was reached.")
         if not tools:
             return _finish(run, service, role, "done", "No actions are available.")
         if len(run["steps"]) >= limit:
             return _finish(run, service, role, "done", "Step limit reached.")
         try:
-            text = _llm(service, _build_prompt(run, tools, limit - len(run["steps"])), role)
+            prompt = _build_prompt(run, tools, limit - len(run["steps"]))
+            text = _llm(service, prompt, role)
+            run["tokens_used"] = int(run.get("tokens_used") or 0) + budget.estimate_tokens(prompt) + budget.estimate_tokens(text)
         except _BudgetBlocked:
             return _finish(run, None, role, "budget", "Stopped: the token budget was reached.")
         except Exception as e:
@@ -448,6 +459,11 @@ def _drive(run: Dict, service, role: Optional[str]) -> Optional[Dict]:
         tool = str((plan or {}).get("tool", "")).strip()
         if not plan or tool in ("", "done", "none"):
             return _finish(run, service, role, "done")
+        if tool == "delegate" and "delegate" in tools:
+            stop = subagents.delegate_step(run, plan, service, role)
+            if stop is not None:
+                return stop
+            continue
         valid = actions._validate_plan(plan, tools)
         if not valid:
             return _finish(run, service, role, "done", "The proposed action was not allowed.")
@@ -522,6 +538,8 @@ def on_resolved(action_id: str, approved: bool, result: str, action_type: Option
         run_["status"] = "rejected"
         run_["summary"] = "Stopped: the owner rejected the step."
         _save(run_)
+        if run_.get("parent_id"):
+            subagents.on_child_ended(run_)
         return
     obs = str(result or "")
     step["status"] = "executed"
