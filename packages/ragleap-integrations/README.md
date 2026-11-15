@@ -245,8 +245,9 @@ handshake with protocol version 2025-06-18 only (an explicit allowlist, not
 - Only text content is returned; other content types are counted and omitted.
 - Updated 2026-11-14: this line said that `ragleap_tools.Tool.call` in
   ragleap-tools 0.4.0 cannot take an argument literally named `self`. That is
-  true of ragleap-tools 0.4.0 only: from 0.5.0 `self` is positional-only, and
+  true of ragleap-tools 0.4.0 only: from 0.4.1 `self` is positional-only, and
   this package requires ragleap-tools>=0.5.1. It is no longer a limitation.
+  (Corrected 2026-11-15: this note first said 0.5.0; the fix is in 0.4.1.)
 - Not safe to share one client between threads while calls are running.
 - Server-supplied text is untrusted and not screened for prompt injection:
   tool descriptions and schemas, tool results, and the text of a tool-level
