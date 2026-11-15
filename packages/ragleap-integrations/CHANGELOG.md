@@ -5,6 +5,18 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- Documentation correction (2026-11-14): the README "Known limitations" of
+  0.4.0 and 0.5.0 says that `Tool.call` in ragleap-tools 0.4.0 cannot take an
+  argument literally named `self`. That is true of ragleap-tools 0.4.0 only.
+  ragleap-tools 0.5.0 made `self` positional-only (its changelog, Fixed), and
+  this package requires ragleap-tools>=0.5.1. Observed on 2026-11-14 with the
+  published wheels: 0.4.0 raised `TypeError` for such an argument ("got
+  multiple values for argument 'self'") and 0.5.1 passed it to the handler.
+  The README is corrected here; the published 0.4.0 and 0.5.0 files cannot be
+  edited.
+
 ## [0.5.0] - 2026-11-11
 
 ### Added
