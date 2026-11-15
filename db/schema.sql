@@ -357,6 +357,7 @@ CREATE INDEX IF NOT EXISTS agent_runs_created_idx ON agent_runs (created_at DESC
 ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS parent_id UUID;
 ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS depth INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS cancel_requested BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS tokens_used INTEGER NOT NULL DEFAULT 0;
 CREATE INDEX IF NOT EXISTS agent_runs_parent_idx ON agent_runs (parent_id) WHERE parent_id IS NOT NULL;
 DO $$
 BEGIN
