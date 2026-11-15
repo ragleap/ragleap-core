@@ -9,11 +9,11 @@ on:
       velero_version:
         description: 'Velero version (a very new release can be compared against the previous one)'
         required: false
-        default: 'v1.18.3'
+        default: 'v1.18.4'
       aws_plugin_version:
         description: 'velero-plugin-for-aws version'
         required: false
-        default: 'v1.14.0'
+        default: 'v1.14.4'
       s3_image:
         description: 'S3 stand-in image'
         required: false
@@ -33,7 +33,7 @@ on:
       k3s_image:
         description: 'k3s image (only used when cluster is k3d)'
         required: false
-        default: 'rancher/k3s:v1.34.12-k3s1'
+        default: 'rancher/k3s:v1.34.13-k3s1'
       storage:
         description: 'Storage mode: static (hand-made local volumes) or default (the cluster own dynamic storage, k3d only)'
         required: false
@@ -72,12 +72,12 @@ jobs:
           kind version || echo "kind is not preinstalled; the test script downloads v0.24.0"
       - name: Back up, delete and restore with Velero
         env:
-          VELERO_VERSION: ${{ inputs.velero_version || 'v1.18.3' }}
-          AWS_PLUGIN_VERSION: ${{ inputs.aws_plugin_version || 'v1.14.0' }}
+          VELERO_VERSION: ${{ inputs.velero_version || 'v1.18.4' }}
+          AWS_PLUGIN_VERSION: ${{ inputs.aws_plugin_version || 'v1.14.4' }}
           S3_IMAGE: ${{ inputs.s3_image || 'rustfs/rustfs@sha256:9ca9559533b537d10482fe923288b676ad08f92a7069d9a17327fbae3cab688b' }}
           CLUSTER: ${{ inputs.cluster || 'kind' }}
           K3D_VERSION: ${{ inputs.k3d_version || 'v5.9.0' }}
-          K3S_IMAGE: ${{ inputs.k3s_image || 'rancher/k3s:v1.34.12-k3s1' }}
+          K3S_IMAGE: ${{ inputs.k3s_image || 'rancher/k3s:v1.34.13-k3s1' }}
           STORAGE: ${{ inputs.storage || 'static' }}
         run: bash .github/scripts/velero-test.sh
 
@@ -97,11 +97,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Back up, delete and restore with Velero
         env:
-          VELERO_VERSION: ${{ inputs.velero_version || 'v1.18.3' }}
-          AWS_PLUGIN_VERSION: ${{ inputs.aws_plugin_version || 'v1.14.0' }}
+          VELERO_VERSION: ${{ inputs.velero_version || 'v1.18.4' }}
+          AWS_PLUGIN_VERSION: ${{ inputs.aws_plugin_version || 'v1.14.4' }}
           S3_IMAGE: ${{ inputs.s3_image || 'rustfs/rustfs@sha256:9ca9559533b537d10482fe923288b676ad08f92a7069d9a17327fbae3cab688b' }}
           CLUSTER: ${{ matrix.cluster }}
           K3D_VERSION: ${{ inputs.k3d_version || 'v5.9.0' }}
-          K3S_IMAGE: ${{ inputs.k3s_image || 'rancher/k3s:v1.34.12-k3s1' }}
+          K3S_IMAGE: ${{ inputs.k3s_image || 'rancher/k3s:v1.34.13-k3s1' }}
           STORAGE: ${{ matrix.storage }}
         run: bash .github/scripts/velero-test.sh
