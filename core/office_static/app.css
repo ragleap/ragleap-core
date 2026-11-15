@@ -26,6 +26,7 @@ button:disabled { opacity:.5; cursor:default; }
 .tag.warn { color:var(--warn); border-color:var(--warn); }
 pre { white-space:pre-wrap; word-break:break-word; background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:10px; margin:8px 0; max-height:340px; overflow:auto; font:13px/1.4 ui-monospace, monospace; }
 .step { border-top:1px solid var(--line); padding-top:8px; margin-top:8px; }
+.children { margin:10px 0 0 6px; padding-left:12px; border-left:2px solid var(--line); display:flex; flex-direction:column; gap:10px; }
 .empty { color:var(--muted); padding:24px 0; text-align:center; }
 .login { max-width:360px; margin:12vh auto; display:flex; flex-direction:column; gap:10px; padding:16px; }
 .login input { font:inherit; padding:8px 10px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--fg); }

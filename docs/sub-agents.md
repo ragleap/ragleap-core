@@ -21,11 +21,11 @@ Set in the app environment (all optional, shown with their defaults):
 
 ## Watching and stopping
 
-`GET /agent-runs/{id}/tree` shows a run with its children. `POST /agent-runs/{id}/cancel` stops a run and everything below it. AUDIT lines `subagent_started`, `subagent_finished` and `agent_run_cancel` are written.
+The Runs tab of the dashboard shows sub-agent runs under their parent and has a Cancel run button (it asks for a second click). `GET /agent-runs/{id}/tree` shows a run with its children. `POST /agent-runs/{id}/cancel` stops a run and everything below it. AUDIT lines `subagent_started`, `subagent_finished` and `agent_run_cancel` are written.
 
 ## Limits to know
 
 - One delegation at a time per run: a parent waits for its child. The limit of children working at the same moment matters when several requests delegate together.
 - Each child costs extra model calls. The caps above are the control; start with the defaults.
 - A child that was running when the server restarted stays "running" until you cancel it (or the cancel call finds it idle for 15 minutes).
-- Not included yet: a dashboard view of the tree, and a research skill built on this.
+- Not included yet: a research skill built on this.
