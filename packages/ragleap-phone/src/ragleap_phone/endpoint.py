@@ -79,7 +79,7 @@ class RtpCall(Call):
         self._rx = rtp.Receiver(rtp.PAYLOAD_TYPES[config.law], config.max_payload, config.max_gap)
         self._in = InboundAudio(config.law)
         self._out = OutboundAudio(config.law)
-        self._own = {"wrong_source": 0, "remote_not_set": 0, "rate_limited": 0, "queue_full": 0, "after_end": 0, "fill_limited": 0}
+        self._own = {"wrong_source": 0, "remote_not_set": 0, "rate_limited": 0, "queue_full": 0, "after_end": 0, "fill_limited": 0, "ahead_of_clock": 0}
         self._media_samples = 0
         now = clock()
         self._win_start, self._win_n = now, 0
@@ -187,6 +187,9 @@ class RtpCall(Call):
         if gap > room:
             gap = room
             self._own["fill_limited"] += 1
+        if gap + len(packet.payload) > room:
+            self._own["ahead_of_clock"] += 1
+            return
         self._media_samples += gap + len(packet.payload)
         if gap:
             self._put_frame(self._in.silence(gap, ts_ns))

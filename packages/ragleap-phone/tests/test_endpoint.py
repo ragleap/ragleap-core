@@ -320,3 +320,35 @@ def test_a_legitimate_silence_after_real_time_has_passed_is_still_filled():
         frames, _ = await _drain(c)
         assert sum(f.n_samples for f in frames) == 2 * (160 + 8000 + 160) and c.counts["fill_limited"] == 0
     _run(main())
+
+
+def test_payload_alone_cannot_run_ahead_of_real_time():
+    async def main():
+        clk = Clock()
+        c = RtpCall(_cfg(), clk)
+        ts = 160
+        for s in range(1, 101):            # same instant, no gaps, 480 bytes each
+            c.on_datagram(rtp.build(0, s, ts, 7, bytes([0xFF]) * 480), SRC)
+            ts += 480
+        await c.hangup()
+        frames, _ = await _drain(c)
+        total_8k = sum(f.n_samples for f in frames) // 2
+        assert total_8k <= 16000 and c.counts["ahead_of_clock"] > 0
+    _run(main())
+
+
+def test_a_burst_does_not_cost_a_later_legitimate_silence():
+    async def main():
+        clk = Clock()
+        c = RtpCall(_cfg(), clk)
+        ts = 160
+        for s in range(1, 1001):           # ten real seconds of a 6x burst
+            c.on_datagram(rtp.build(0, s, ts, 7, bytes([0xFF]) * 480), SRC)
+            ts += 480
+            clk.t += 0.01
+        before = c.counts["fill_limited"]
+        clk.t += 6.0                       # six more seconds really pass
+        c.on_datagram(rtp.build(0, 1001, ts + 8000, 7, PAYLOAD), SRC)   # 1 s of silence was not sent
+        await c.hangup()
+        assert c.counts["fill_limited"] == before
+    _run(main())
