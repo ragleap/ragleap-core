@@ -10,7 +10,7 @@ from ragleap_optimizer.model import (InvalidRequestError, Optimized, OptimizerEr
 from ragleap_optimizer.optimizer import Optimizer
 from ragleap_optimizer.resilience import AllFailedError, retry, with_fallback
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 __all__ = [
     "AllFailedError", "EvalTable", "ExactCache", "InvalidRequestError", "Optimized", "Optimizer", "OptimizerError",

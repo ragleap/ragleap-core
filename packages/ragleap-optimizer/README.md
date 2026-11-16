@@ -4,7 +4,7 @@ A measure-first layer that reduces the token use of LLM requests. Alpha. **Not i
 
 The idea: "same quality with fewer tokens" is something one application can **measure**, not something a library can promise. So every step reports what it changed and whether it can lose information, and `evaluate` compares quality before and after on your own cases, including where it gets worse. Design: issue #1164.
 
-## What is in 0.1.0
+## What is in 0.1.1
 
 - `Optimizer`: runs steps over a request (a dict with a list of `messages`, and optionally `tools`, `system` and other fields) and returns the new request plus a `Report` with the tokens before and after, per step. A step whose result is longer than its input is discarded. The input is never changed.
 - Steps (`ragleap_optimizer.steps`):
@@ -12,7 +12,7 @@ The idea: "same quality with fewer tokens" is something one application can **me
   - `minify_whitespace()`: three or more newlines become two; a message that is entirely JSON is written compactly. Only spacing changes.
   - `stable_prefix()`: system messages first and tool JSON in sorted key order, so a provider's prompt cache can recognise the start of the request.
   - `trim_tool_output(max_tokens)`: keeps the start and end of an oversized tool message with an explicit marker. **This loses the middle**, so the report says `lossy=True` whenever it cuts.
-- `ExactCache`: an in-memory cache that returns an answer only for the same scope and the same request (model, messages, tools and every other field are part of the key). Needs a `Scope` from ragleap-security; entries expire; erase per scope.
+- `ExactCache`: an in-memory cache that returns an answer only for the same scope and the same request (model, messages, tools and every other field are part of the key). Needs a `Scope` from ragleap-security; entries expire; erase per scope. Since 0.1.1 it has per-tenant budgets: fair eviction (a noisy tenant evicts itself first), `max_entries_per_scope`, size limits (`max_value_bytes` is 1 MiB by default; `max_bytes_per_scope`, `max_bytes`) and `stats(scope)`.
 - `retry` and `with_fallback`: bounded retries with doubling waits and a deadline, and trying several callables in order.
 - `evaluate`: runs your cases with and without the optimizer, scores both answers with your judge, and reports input tokens saved, the quality change with a 95% interval, and every case that got worse. With fewer than 30 cases it gives no savings figure.
 
@@ -40,7 +40,7 @@ Not in 0.1.0: model routing, prompt compression, a semantic cache, secret redact
 ## Limits you should know
 
 - Token counts are **estimates** (one token per 3 UTF-8 bytes, which over-counts English). Pass `counter=` to the `Optimizer` to use a real tokenizer. `evaluate` counts input tokens only, not answers.
-- The cache lives in one process and stores whatever you put in it. It does not know whether an answer was good: a wrong answer is served until it expires. Use a short `ttl_seconds` for anything that changes, and never cache answers that depend on the current time or on private context that is not in the request.
+- The cache lives in one process. Sizes are measured as JSON length, not as Python memory, so the size limits are a guard and not an exact bound. It stores whatever you put in it. It does not know whether an answer was good: a wrong answer is served until it expires. Use a short `ttl_seconds` for anything that changes, and never cache answers that depend on the current time or on private context that is not in the request.
 - `evaluate` is only as good as your judge and your cases. A small or unrepresentative test set can hide a regression.
 - No speed numbers have been measured yet.
 

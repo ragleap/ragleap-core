@@ -1,10 +1,10 @@
-# ragleap-optimizer 0.1.0: threat model
+# ragleap-optimizer 0.1.1: threat model
 
-Status: first version. It covers only what 0.1.0 contains. Anything not listed as defended is not defended. This library has had no independent security review.
+Status: second version. It covers only what 0.1.1 contains (row 10 is new). Anything not listed as defended is not defended. This library has had no independent security review.
 
-## Scope of 0.1.0
+## Scope of 0.1.1
 
-`Optimizer` and four steps, `ExactCache`, `retry` and `with_fallback`, and `evaluate`. It uses `Scope`, `AuditLog` and the size limits from ragleap-security 0.1.0. It makes no network calls and writes nothing to disk. Not in 0.1.0: model routing, prompt compression, a semantic cache, secret redaction and framework adapters.
+`Optimizer` and four steps, `ExactCache`, `retry` and `with_fallback`, and `evaluate`. It uses `Scope`, `AuditLog` and the size limits from ragleap-security 0.1.0. It makes no network calls and writes nothing to disk. New in 0.1.1: per-tenant budgets for `ExactCache` (row 10). Not in 0.1.1: model routing, prompt compression, a semantic cache, secret redaction and framework adapters.
 
 ## Threats
 
@@ -19,11 +19,12 @@ Status: first version. It covers only what 0.1.0 contains. Anything not listed a
 | 7 | An evaluation gives a misleading result | No savings figure under 30 cases; failed cases are counted and named, not hidden; every case where the optimized answer scored lower is listed; the quality change comes with a seeded bootstrap interval; the summary says input tokens only. | `tests/test_evaluate.py`; 14 mutations | The judge may be wrong or biased. A test set that does not look like your traffic hides regressions. One run on one set is one sample. The interval does not account for judge noise. |
 | 8 | Token counts are wrong | The default count is a conservative estimate; a custom counter is used everywhere and its results are checked (a non-negative int). | `tests/test_model.py`, `tests/test_optimizer.py`; 5 mutations | A real tokenizer will give different numbers. Costs are not computed from tokens here. |
 | 9 | A step or counter that raises, returns junk, or is badly written | Steps must come from `ragleap_optimizer.steps` (they carry a name); a bad counter result raises `InvalidRequestError`; a step that edits its input in place cannot change the caller's request. | `tests/test_optimizer.py` | A step you write yourself is trusted code and can do anything inside your process. |
+| 10 | One tenant fills or empties a shared cache: a noisy tenant evicts everyone else's entries, or stores huge values until the process runs out of memory | `eviction="fair"` removes the least recently used entry of the scope holding the most entries (bytes, when a byte limit decides), so the noisy tenant evicts itself; `max_entries_per_scope`, `max_bytes_per_scope` and `max_bytes` bound one scope and the whole cache; `max_value_bytes` (1 MiB by default) refuses a big value without storing or evicting anything; the entry just stored is never the one removed; `stats(scope)` shows only that scope. | `tests/test_cache_budgets.py`; 35 mutations | The cache is per process, nothing is shared. Bytes are measured as JSON length, so real memory use is higher: the limits are a guard, not an exact bound. A scope limit does not limit CPU use or call rate. Expired entries count against the limits until they are read or evicted. |
 
-## Not covered in 0.1.0
+## Not covered in 0.1.1
 
 Model routing and cascades, prompt compression, semantic caching, secret and personal-data redaction before a request leaves your process, a disk or shared cache, and framework adapters. Savings on real traffic have not been measured.
 
 ## How this document is checked
 
-`python scripts/mutation_check.py` breaks one protection at a time in a temporary copy and requires a test to fail. All 84 listed mutations were killed when this version was written (Python 3.12, author's sandbox; the Python 3.10 run is still to be done). A killed mutation shows a protection is exercised by a test; it does not show the protection is sufficient.
+`python scripts/mutation_check.py` breaks one protection at a time in a temporary copy and requires a test to fail. All 119 listed mutations were killed when this version was written (Python 3.12.3 and Python 3.10.20, author's sandbox; the VPS run is recorded in the pull request). A killed mutation shows a protection is exercised by a test; it does not show the protection is sufficient.
