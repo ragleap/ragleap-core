@@ -1522,7 +1522,7 @@ def delete_uploaded_document(document_id: str):
 
 @app.get("/agent-runs")
 def list_agent_runs(limit: int = 50, status: str | None = None):
-    """Agent-loop runs, newest first (status: running, waiting_approval, done, failed, rejected, budget)."""
+    """Agent-loop runs, newest first (status: running, waiting_approval, done, failed, rejected, budget, cancelled)."""
     return {"runs": agent_loop.list_runs(limit=limit, status=status)}
 
 
@@ -1532,6 +1532,25 @@ def get_agent_run(run_id: str):
     if r is None:
         raise HTTPException(status_code=404, detail="Run not found.")
     return r
+
+
+@app.get("/agent-runs/{run_id}/tree")
+def get_agent_run_tree(run_id: str):
+    """A run with the runs it started nested under it (short fields only)."""
+    t = agent_loop.tree(run_id)
+    if t is None:
+        raise HTTPException(status_code=404, detail="Run not found.")
+    return {"tree": t}
+
+
+@app.post("/agent-runs/{run_id}/cancel")
+def cancel_agent_run(run_id: str, request: Request = None):
+    """Stop a run and every run below it. A run waiting for approval ends at once and its pending action is rejected;
+    a running run stops before its next step; finished runs are left alone."""
+    res = agent_loop.cancel_run(run_id, decided_by=_actor_of(request))
+    if res is None:
+        raise HTTPException(status_code=404, detail="Run not found.")
+    return res
 
 
 @app.get("/autonomy/report")

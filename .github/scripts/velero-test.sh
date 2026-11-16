@@ -8,13 +8,13 @@ set -euo pipefail
 
 CL=velero-test
 NS=ragleap-ops-test
-VELERO_VERSION="${VELERO_VERSION:-v1.18.3}"
-AWS_PLUGIN_VERSION="${AWS_PLUGIN_VERSION:-v1.14.0}"
+VELERO_VERSION="${VELERO_VERSION:-v1.18.4}"
+AWS_PLUGIN_VERSION="${AWS_PLUGIN_VERSION:-v1.14.4}"
 S3_IMAGE="${S3_IMAGE:-rustfs/rustfs@sha256:9ca9559533b537d10482fe923288b676ad08f92a7069d9a17327fbae3cab688b}"
 CLUSTER="${CLUSTER:-kind}"
 STORAGE="${STORAGE:-static}"
 K3D_VERSION="${K3D_VERSION:-v5.9.0}"
-K3S_IMAGE="${K3S_IMAGE:-rancher/k3s:v1.34.12-k3s1}"
+K3S_IMAGE="${K3S_IMAGE:-rancher/k3s:v1.34.13-k3s1}"
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/../.." && pwd)
 OPS=$ROOT/packages/ragleap-ops/helm/ragleap-ops

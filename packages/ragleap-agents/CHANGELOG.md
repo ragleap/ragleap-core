@@ -5,7 +5,7 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-## [0.5.1] - 2026-11-13
+## [0.5.1] - 2026-11-14
 
 Design: #1395. Tenant scope for runs, approvals and audit. A security fix for shared multi-tenant use.
 

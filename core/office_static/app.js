@@ -182,7 +182,7 @@
       b.disabled = true;
       try {
         const r = await api("POST", path);
-        msg.textContent = r.result || "Done.";
+        msg.textContent = r.result || (Array.isArray(r.cancelled) ? cancelText(r) : "Done.");
         setTimeout(refresh, 800);
       } catch (e) {
         msg.textContent = "Failed: " + clip(e.message, 120);
@@ -207,24 +207,62 @@
     ? h("div", { class: "list" }, items.map(approvalCard))
     : h("p", { class: "empty" }, "Nothing is waiting for approval."));
 
-  const runCard = (r) => {
+  // runsHelpers:begin
+  // Runs come newest first. A run whose parent is in the list is shown under its parent; any other run is shown on its own.
+  const groupRuns = (runs) => {
+    const list = Array.isArray(runs) ? runs : [];
+    const ids = new Set(list.map((r) => r.id));
+    const kids = new Map();
+    const top = [];
+    list.forEach((r) => {
+      if (r.parent_id && r.parent_id !== r.id && ids.has(r.parent_id)) {
+        if (!kids.has(r.parent_id)) kids.set(r.parent_id, []);
+        kids.get(r.parent_id).push(r);
+      } else {
+        top.push(r);
+      }
+    });
+    kids.forEach((l) => l.sort((a, b) => String(a.created_at).localeCompare(String(b.created_at))));
+    return { top, kids };
+  };
+  const cancelText = (r) => {
+    const a = (r.cancelled || []).length;
+    const b = (r.stopping || []).length;
+    if (!a && !b) return "Nothing to cancel: the run had already finished.";
+    return "Cancelled " + a + " run(s)" + (b ? ", " + b + " still stopping" : "") + ".";
+  };
+  // runsHelpers:end
+
+  const runCard = (r, kidsMap, level) => {
     const isOpen = expanded.has(r.id);
-    const statusClass = r.status === "done" ? "ok" : (r.status === "waiting_approval" ? "warn" : (r.status === "running" ? "" : "bad"));
+    const kids = (kidsMap && kidsMap.get(r.id)) || [];
+    const live = r.status === "running" || r.status === "waiting_approval";
+    const statusClass = r.status === "done" ? "ok" : (r.status === "waiting_approval" ? "warn" : (r.status === "running" || r.status === "cancelled" ? "" : "bad"));
+    const msg = h("span", { class: "sub" }, "");
     const body = isOpen ? h("div", null,
       r.summary ? h("p", null, r.summary) : null,
       (r.steps || []).map((s, i) => h("div", { class: "step" },
         h("div", { class: "row" }, h("strong", null, (i + 1) + ". " + s.tool), h("span", { class: "tag" }, s.status),
           s.forced_approval ? h("span", { class: "tag warn" }, "approval forced") : null),
         s.target ? h("div", { class: "sub" }, clip(s.target, 200)) : null,
+        s.child_run_id ? h("div", { class: "sub" }, "sub-agent run " + String(s.child_run_id).slice(0, 8)) : null,
         s.observation ? h("pre", null, s.observation) : null))) : null;
     return h("article", { class: "item" },
       h("div", { class: "row click", on: { click: () => toggle(r.id) } },
         h("strong", null, clip(r.query, 90)), h("span", { class: "tag " + statusClass }, r.status),
+        r.parent_id ? h("span", { class: "tag" }, "sub-agent" + (r.role ? " " + clip(r.role, 40) : "")) : null,
+        kids.length ? h("span", { class: "tag" }, kids.length + " sub-agent" + (kids.length === 1 ? "" : "s")) : null,
         r.tainted ? h("span", { class: "tag warn" }, "saw web content") : null,
+        r.status === "running" && r.cancel_requested ? h("span", { class: "tag warn" }, "stopping") : null,
         h("span", { class: "sub" }, (r.steps || []).length + " step(s), " + ago(r.updated_at))),
-      body);
+      live && !r.cancel_requested ? h("div", { class: "row" }, approvalButton("Cancel run", "bad", "/agent-runs/" + encodeURIComponent(r.id) + "/cancel", msg), msg) : null,
+      body,
+      kids.length && (level || 0) < 4 ? h("div", { class: "children" }, kids.map((k) => runCard(k, kidsMap, (level || 0) + 1))) : null);
   };
-  const renderRuns = (runs) => (runs.length ? h("div", { class: "list" }, runs.map(runCard)) : h("p", { class: "empty" }, "No agent runs yet."));
+  const renderRuns = (runs) => {
+    const g = groupRuns(runs);
+    return g.top.length ? h("div", { class: "list" }, g.top.map((r) => runCard(r, g.kids, 0))) : h("p", { class: "empty" }, "No agent runs yet.");
+  };
 
   const logCard = (r) => {
     const id = "log" + r.id;
@@ -898,7 +936,7 @@
       let content;
       if (tab === "overview") content = renderOverview(ov);
       else if (tab === "approvals") content = renderApprovals((await api("GET", "/autonomy/pending")).pending);
-      else if (tab === "runs") content = renderRuns((await api("GET", "/agent-runs?limit=30")).runs);
+      else if (tab === "runs") content = renderRuns((await api("GET", "/agent-runs?limit=60")).runs);
       else if (tab === "employees") content = renderOrg(await api("GET", "/org"));
       else if (tab === "tasks") { await refreshTasks(); content = null; }
       else if (tab === "documents") { await refreshDocuments(); content = null; }

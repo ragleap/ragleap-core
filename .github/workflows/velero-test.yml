@@ -2,17 +2,18 @@ name: velero-test
 
 # Backup and restore test: Velero with a RustFS S3 stand-in on a throwaway kind cluster, using the ragleap-ops chart.
 # Manual (workflow_dispatch, with version inputs) or when a PR changes this file or the test script. Not a required check.
+# The velero-drill job runs all three cluster and storage combinations every Wednesday 03:30 UTC (schedule), or on demand with drill=true.
 on:
   workflow_dispatch:
     inputs:
       velero_version:
         description: 'Velero version (a very new release can be compared against the previous one)'
         required: false
-        default: 'v1.18.3'
+        default: 'v1.18.4'
       aws_plugin_version:
         description: 'velero-plugin-for-aws version'
         required: false
-        default: 'v1.14.0'
+        default: 'v1.14.4'
       s3_image:
         description: 'S3 stand-in image'
         required: false
@@ -32,7 +33,7 @@ on:
       k3s_image:
         description: 'k3s image (only used when cluster is k3d)'
         required: false
-        default: 'rancher/k3s:v1.34.12-k3s1'
+        default: 'rancher/k3s:v1.34.13-k3s1'
       storage:
         description: 'Storage mode: static (hand-made local volumes) or default (the cluster own dynamic storage, k3d only)'
         required: false
@@ -41,6 +42,13 @@ on:
         options:
           - static
           - default
+      drill:
+        description: 'Run the three-combination drill that the weekly schedule runs (kind static, k3d static, k3d default)'
+        required: false
+        type: boolean
+        default: false
+  schedule:
+    - cron: '30 3 * * 3'
   pull_request:
     branches: [main]
     paths:
@@ -52,6 +60,7 @@ permissions:
 
 jobs:
   velero-test:
+    if: ${{ github.event_name != 'schedule' && !inputs.drill }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -63,11 +72,36 @@ jobs:
           kind version || echo "kind is not preinstalled; the test script downloads v0.24.0"
       - name: Back up, delete and restore with Velero
         env:
-          VELERO_VERSION: ${{ inputs.velero_version || 'v1.18.3' }}
-          AWS_PLUGIN_VERSION: ${{ inputs.aws_plugin_version || 'v1.14.0' }}
+          VELERO_VERSION: ${{ inputs.velero_version || 'v1.18.4' }}
+          AWS_PLUGIN_VERSION: ${{ inputs.aws_plugin_version || 'v1.14.4' }}
           S3_IMAGE: ${{ inputs.s3_image || 'rustfs/rustfs@sha256:9ca9559533b537d10482fe923288b676ad08f92a7069d9a17327fbae3cab688b' }}
           CLUSTER: ${{ inputs.cluster || 'kind' }}
           K3D_VERSION: ${{ inputs.k3d_version || 'v5.9.0' }}
-          K3S_IMAGE: ${{ inputs.k3s_image || 'rancher/k3s:v1.34.12-k3s1' }}
+          K3S_IMAGE: ${{ inputs.k3s_image || 'rancher/k3s:v1.34.13-k3s1' }}
           STORAGE: ${{ inputs.storage || 'static' }}
+        run: bash .github/scripts/velero-test.sh
+
+  velero-drill:
+    if: ${{ github.event_name == 'schedule' || inputs.drill }}
+    name: velero-drill (${{ matrix.cluster }}, ${{ matrix.storage }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { cluster: kind, storage: static }
+          - { cluster: k3d, storage: static }
+          - { cluster: k3d, storage: default }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Back up, delete and restore with Velero
+        env:
+          VELERO_VERSION: ${{ inputs.velero_version || 'v1.18.4' }}
+          AWS_PLUGIN_VERSION: ${{ inputs.aws_plugin_version || 'v1.14.4' }}
+          S3_IMAGE: ${{ inputs.s3_image || 'rustfs/rustfs@sha256:9ca9559533b537d10482fe923288b676ad08f92a7069d9a17327fbae3cab688b' }}
+          CLUSTER: ${{ matrix.cluster }}
+          K3D_VERSION: ${{ inputs.k3d_version || 'v5.9.0' }}
+          K3S_IMAGE: ${{ inputs.k3s_image || 'rancher/k3s:v1.34.13-k3s1' }}
+          STORAGE: ${{ matrix.storage }}
         run: bash .github/scripts/velero-test.sh

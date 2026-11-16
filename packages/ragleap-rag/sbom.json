@@ -2199,7 +2199,7 @@
       "version": "1.4.1"
     },
     {
-      "bom-ref": "onnxruntime==1.31.1",
+      "bom-ref": "onnxruntime==1.32.0",
       "description": "ONNX Runtime is a runtime accelerator for Machine Learning models",
       "externalReferences": [
         {
@@ -2222,12 +2222,12 @@
         }
       ],
       "name": "onnxruntime",
-      "purl": "pkg:pypi/onnxruntime@1.31.1",
+      "purl": "pkg:pypi/onnxruntime@1.32.0",
       "type": "library",
-      "version": "1.31.1"
+      "version": "1.32.0"
     },
     {
-      "bom-ref": "openai==3.50.0",
+      "bom-ref": "openai==3.51.0",
       "description": "The official Python library for the openai API",
       "externalReferences": [
         {
@@ -2250,9 +2250,9 @@
         }
       ],
       "name": "openai",
-      "purl": "pkg:pypi/openai@3.50.0",
+      "purl": "pkg:pypi/openai@3.51.0",
       "type": "library",
-      "version": "3.50.0"
+      "version": "3.51.0"
     },
     {
       "bom-ref": "openpyxl==3.1.5",
@@ -3054,7 +3054,7 @@
       "version": "3.3.3"
     },
     {
-      "bom-ref": "pypdf==7.0.1",
+      "bom-ref": "pypdf==7.1.0",
       "description": "A pure-python PDF library capable of splitting, merging, cropping, and transforming PDF files",
       "externalReferences": [
         {
@@ -3087,9 +3087,9 @@
         }
       ],
       "name": "pypdf",
-      "purl": "pkg:pypi/pypdf@7.0.1",
+      "purl": "pkg:pypi/pypdf@7.1.0",
       "type": "library",
-      "version": "7.0.1"
+      "version": "7.1.0"
     },
     {
       "bom-ref": "pytesseract==0.3.13",
@@ -4840,7 +4840,7 @@
         "packaging==26.3",
         "protobuf==6.33.6"
       ],
-      "ref": "onnxruntime==1.31.1"
+      "ref": "onnxruntime==1.32.0"
     },
     {
       "dependsOn": [
@@ -4856,7 +4856,7 @@
         "urllib3==2.8.0",
         "websockets==17.4"
       ],
-      "ref": "openai==3.50.0"
+      "ref": "openai==3.51.0"
     },
     {
       "dependsOn": [
@@ -5001,7 +5001,7 @@
         "pillow==13.0.0",
         "typing_extensions==4.16.0"
       ],
-      "ref": "pypdf==7.0.1"
+      "ref": "pypdf==7.1.0"
     },
     {
       "dependsOn": [
@@ -5110,8 +5110,8 @@
         "jsonschema==4.26.0",
         "lxml_html_clean==0.4.6",
         "odfpy==1.4.1",
-        "onnxruntime==1.31.1",
-        "openai==3.50.0",
+        "onnxruntime==1.32.0",
+        "openai==3.51.0",
         "openpyxl==3.1.5",
         "pandas==3.1.1",
         "pillow==13.0.0",
@@ -5119,7 +5119,7 @@
         "psycopg2-binary==2.9.13",
         "pyarrow==26.0.1",
         "pymilvus==3.0.3",
-        "pypdf==7.0.1",
+        "pypdf==7.1.0",
         "pytesseract==0.3.13",
         "python-docx==1.2.0",
         "python-pptx==1.0.2",
@@ -5299,7 +5299,7 @@
       "type": "library",
       "version": "0.16.0"
     },
-    "timestamp": "2026-11-13T05:37:43.565499+00:00",
+    "timestamp": "2026-11-14T11:40:56.824792+00:00",
     "tools": {
       "components": [
         {
@@ -5403,7 +5403,7 @@
       ]
     }
   },
-  "serialNumber": "urn:uuid:a25e5303-7a1e-4edc-95e6-d0a781025c8f",
+  "serialNumber": "urn:uuid:5d624ea7-115e-4e1e-96fd-8aba7fd2e40f",
   "version": 1,
   "$schema": "http://cyclonedx.org/schema/bom-1.6.schema.json",
   "bomFormat": "CycloneDX",

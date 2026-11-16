@@ -3,6 +3,7 @@ stop sending, read and throw away what the client is still sending for a short, 
 body the server did not read can get a connection reset (WinError 10053) instead of the answer. Checked through server-side counters
 and a socket pair, because the reset itself cannot be forced on every operating system."""
 import http.client
+import io
 import socket
 import threading
 import time
@@ -99,7 +100,7 @@ def test_mcp_server_discards_an_oversize_refused_body_after_answering():
     t, _, _ = mcp_setup()
     with McpRunning(t, auth_token="t" * 20) as s:
         port = s.server.server_address[1]
-        assert post(port, "/mcp", MCP_MAX + 1000, {"Authorization": "Bearer " + "t" * 20}) == 413
+        assert post(port, "/mcp", MCP_MAX + io.DEFAULT_BUFFER_SIZE + 1000, {"Authorization": "Bearer " + "t" * 20}) == 413
         assert wait_for(lambda: getattr(s.server, "lingered_calls", 0) >= 1)
         assert s.server.lingered_bytes > 0
         assert getattr(s.server, "drained_bytes", 0) == 0  # the body was not read before the answer, only discarded after it
@@ -110,7 +111,7 @@ def test_console_discards_an_oversize_refused_body_after_answering():
     with ConsoleRunning(b) as s:
         port = s.server.server_address[1]
         # the body must be larger than what the server's read buffer already holds when it has parsed the headers
-        assert post(port, "/v1/apply", CONSOLE_MAX + 300_000, {"Authorization": "Bearer " + ALICE}) == 413
+        assert post(port, "/v1/apply", CONSOLE_MAX + io.DEFAULT_BUFFER_SIZE + 1000, {"Authorization": "Bearer " + ALICE}) == 413
         assert wait_for(lambda: getattr(s.server, "lingered_calls", 0) >= 1)
         assert s.server.lingered_bytes > 0
 

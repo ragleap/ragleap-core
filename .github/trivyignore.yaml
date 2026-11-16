@@ -1,4 +1,4 @@
-# Trivy baseline for the config scan in .github/workflows/trivy.yml.
+# Trivy baseline for the config scan and the image gate in .github/workflows/trivy.yml.
 # The gate fails on any HIGH or CRITICAL finding that is not listed here, so it blocks NEW findings.
 # Limit: an entry is per rule and per file, so a new finding of the same rule inside a file listed below is NOT caught.
 # Entries need a written reason. Removing an entry turns that finding red again.
@@ -40,3 +40,9 @@ misconfigurations:
       - "ragleap-ops/k8s/neo4j-backup-cronjob.yaml"
       - "ragleap-ops/k8s/voice-deployment.yaml"
     statement: "Baseline 2026-11-10: a finding that already existed when this gate was switched on; not reviewed individually yet. Do not add entries to hide a new finding."
+vulnerabilities:
+  - id: CVE-2025-68121
+    paths:
+      - "usr/local/bin/gosu"
+    statement: "gosu, the privilege-dropping helper in the official Postgres images, is built with Go 1.24.6, which carries the crypto/tls CVE-2025-68121 (fixed in Go 1.24.13). Present in postgres:16, postgres:16-alpine and pgvector/pgvector:pg16 on 2026-11-13. Reachability from these images was not assessed. Needs an upstream rebuild; re-check before the expiry, then remove this entry."
+    expired_at: 2027-01-12
