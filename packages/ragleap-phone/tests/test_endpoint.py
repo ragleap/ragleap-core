@@ -352,3 +352,22 @@ def test_a_burst_does_not_cost_a_later_legitimate_silence():
         await c.hangup()
         assert c.counts["fill_limited"] == before
     _run(main())
+
+
+def test_a_sequence_jump_with_a_timestamp_jump_fills_no_silence():
+    async def main():
+        clk = Clock()
+        c = RtpCall(_cfg(), clk)
+        for s, ts in ((1, 160), (2, 320), (3, 480)):
+            c.on_datagram(rtp.build(0, s, ts, 7, PAYLOAD), SRC)
+            clk.t += 0.02
+        clk.t += 1.2                                   # one second really passes
+        c.on_datagram(rtp.build(0, 5000, 480 + 160 + 8000, 7, PAYLOAD), SRC)   # dropped: unconfirmed jump
+        clk.t += 0.02
+        c.on_datagram(rtp.build(0, 5001, 480 + 320 + 8000, 7, PAYLOAD), SRC)   # confirms the jump, gap 0
+        await c.hangup()
+        frames, _ = await _drain(c)
+        total_8k = sum(f.n_samples for f in frames) // 2
+        assert total_8k == 4 * 160                     # no silence for the jump, and one packet lost
+        assert c.counts["jump_dropped"] == 1 and c.counts["resyncs"] == 1
+    _run(main())
