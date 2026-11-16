@@ -25,7 +25,8 @@ def test_official_sdk_client_can_list_and_call():
     threading.Thread(target=server.serve_forever, daemon=True).start()
 
     async def run():
-        async with streamablehttp_client(url) as (read, write, _):
+        async with streamablehttp_client(url) as streams:
+            read, write = streams[0], streams[1]  # newer SDKs return two values, older ones three
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 listed = await session.list_tools()
@@ -40,6 +41,7 @@ def test_official_sdk_client_can_list_and_call():
         server.server_close()
     assert names == ["physical_list_sources", "physical_get_observation", "physical_get_envelope",
                      "physical_propose_action"]
-    assert res.isError is False
+    is_error = res.is_error if hasattr(res, "is_error") else res.isError  # renamed in mcp 2.x
+    assert is_error is False
     assert json.loads(res.content[0].text)["data"]["status"] == "validated"
     assert adapter.applied == []
