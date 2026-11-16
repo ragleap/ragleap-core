@@ -1,7 +1,7 @@
 {
   "components": [
     {
-      "bom-ref": "Authlib==1.9.5",
+      "bom-ref": "Authlib==1.9.8",
       "description": "The ultimate Python library in building OAuth and OpenID Connect servers and clients.",
       "externalReferences": [
         {
@@ -50,9 +50,9 @@
         }
       ],
       "name": "Authlib",
-      "purl": "pkg:pypi/authlib@1.9.5",
+      "purl": "pkg:pypi/authlib@1.9.8",
       "type": "library",
-      "version": "1.9.5"
+      "version": "1.9.8"
     },
     {
       "bom-ref": "EbookLib==0.21",
@@ -1493,7 +1493,7 @@
       "version": "1.0.9"
     },
     {
-      "bom-ref": "httpcore2==2.16.0",
+      "bom-ref": "httpcore2==2.16.2",
       "description": "A minimal low-level HTTP client.",
       "externalReferences": [
         {
@@ -1521,9 +1521,9 @@
         }
       ],
       "name": "httpcore2",
-      "purl": "pkg:pypi/httpcore2@2.16.0",
+      "purl": "pkg:pypi/httpcore2@2.16.2",
       "type": "library",
-      "version": "2.16.0"
+      "version": "2.16.2"
     },
     {
       "bom-ref": "httpx==0.28.1",
@@ -1576,7 +1576,7 @@
       "version": "0.28.1"
     },
     {
-      "bom-ref": "httpx2==2.16.0",
+      "bom-ref": "httpx2==2.16.2",
       "description": "The next generation HTTP client.",
       "externalReferences": [
         {
@@ -1604,9 +1604,9 @@
         }
       ],
       "name": "httpx2",
-      "purl": "pkg:pypi/httpx2@2.16.0",
+      "purl": "pkg:pypi/httpx2@2.16.2",
       "type": "library",
-      "version": "2.16.0"
+      "version": "2.16.2"
     },
     {
       "bom-ref": "huggingface_hub==2.4.0",
@@ -3415,7 +3415,7 @@
       "version": "0.37.0"
     },
     {
-      "bom-ref": "regex==2026.11.9",
+      "bom-ref": "regex==2026.11.15",
       "description": "Alternative regular expression module, to replace re.",
       "externalReferences": [
         {
@@ -3431,9 +3431,9 @@
         }
       ],
       "name": "regex",
-      "purl": "pkg:pypi/regex@2026.11.9",
+      "purl": "pkg:pypi/regex@2026.11.15",
       "type": "library",
-      "version": "2026.11.9"
+      "version": "2026.11.15"
     },
     {
       "bom-ref": "requests==2.34.2",
@@ -3725,7 +3725,7 @@
       "version": "2.4.0"
     },
     {
-      "bom-ref": "soupsieve==4.1",
+      "bom-ref": "soupsieve==4.1.1",
       "description": "A modern CSS selector implementation for Beautiful Soup.",
       "externalReferences": [
         {
@@ -3743,9 +3743,9 @@
         }
       ],
       "name": "soupsieve",
-      "purl": "pkg:pypi/soupsieve@4.1",
+      "purl": "pkg:pypi/soupsieve@4.1.1",
       "type": "library",
-      "version": "4.1"
+      "version": "4.1.1"
     },
     {
       "bom-ref": "striprtf==0.0.35",
@@ -4444,7 +4444,7 @@
         "cryptography==50.0.2",
         "joserfc==1.8.0"
       ],
-      "ref": "Authlib==1.9.5"
+      "ref": "Authlib==1.9.8"
     },
     {
       "dependsOn": [
@@ -4463,7 +4463,7 @@
         "anyio==4.16.0",
         "docstring_parser==0.18.0",
         "google-auth==2.62.2",
-        "httpx2==2.16.0",
+        "httpx2==2.16.2",
         "jiter==0.19.0",
         "opentelemetry-api==1.45.2",
         "pydantic==2.14.3",
@@ -4504,7 +4504,7 @@
         "chardet==7.7.0",
         "charset-normalizer==3.5.2",
         "lxml==6.1.3",
-        "soupsieve==4.1",
+        "soupsieve==4.1.1",
         "typing_extensions==4.16.0"
       ],
       "ref": "beautifulsoup4==4.15.0"
@@ -4575,7 +4575,7 @@
       "dependsOn": [
         "python-dateutil==4.0.0",
         "pytz==2026.6",
-        "regex==2026.11.9",
+        "regex==2026.11.15",
         "tzlocal==5.4.5"
       ],
       "ref": "dateparser==1.5.0"
@@ -4635,7 +4635,7 @@
         "anyio==4.16.0",
         "distro==1.9.0",
         "google-auth==2.62.2",
-        "httpx2==2.16.0",
+        "httpx2==2.16.2",
         "httpx==0.28.1",
         "pillow==13.0.0",
         "protobuf==6.33.6",
@@ -4687,7 +4687,7 @@
         "h2==4.4.1",
         "truststore==0.10.5"
       ],
-      "ref": "httpcore2==2.16.0"
+      "ref": "httpcore2==2.16.2"
     },
     {
       "dependsOn": [
@@ -4703,12 +4703,12 @@
         "anyio==4.16.0",
         "click==8.5.1",
         "h2==4.4.1",
-        "httpcore2==2.16.0",
+        "httpcore2==2.16.2",
         "idna==3.20",
         "truststore==0.10.5",
         "typing_extensions==4.16.0"
       ],
-      "ref": "httpx2==2.16.0"
+      "ref": "httpx2==2.16.2"
     },
     {
       "dependsOn": [
@@ -4723,13 +4723,13 @@
     },
     {
       "dependsOn": [
-        "Authlib==1.9.5",
+        "Authlib==1.9.8",
         "PyYAML==6.0.3",
         "click==8.5.1",
         "filelock==4.2.10",
         "fsspec==2026.9.0",
         "hf-xet==1.8.0",
-        "httpx2==2.16.0",
+        "httpx2==2.16.2",
         "numpy==2.4.6",
         "packaging==26.3",
         "pillow==13.0.0",
@@ -4795,7 +4795,7 @@
     },
     {
       "dependsOn": [
-        "regex==2026.11.9"
+        "regex==2026.11.15"
       ],
       "ref": "lark==1.3.1"
     },
@@ -4846,7 +4846,7 @@
       "dependsOn": [
         "anyio==4.16.0",
         "google-auth==2.62.2",
-        "httpx2==2.16.0",
+        "httpx2==2.16.2",
         "jiter==0.19.0",
         "numpy==2.4.6",
         "pandas==3.1.1",
@@ -5071,7 +5071,7 @@
       "ref": "referencing==0.37.0"
     },
     {
-      "ref": "regex==2026.11.9"
+      "ref": "regex==2026.11.15"
     },
     {
       "dependsOn": [
@@ -5156,7 +5156,7 @@
       "ref": "sortedcontainers==2.4.0"
     },
     {
-      "ref": "soupsieve==4.1"
+      "ref": "soupsieve==4.1.1"
     },
     {
       "ref": "striprtf==0.0.35"
@@ -5166,7 +5166,7 @@
     },
     {
       "dependsOn": [
-        "regex==2026.11.9",
+        "regex==2026.11.15",
         "requests==2.34.2"
       ],
       "ref": "tiktoken==0.14.0"
@@ -5237,7 +5237,7 @@
     },
     {
       "dependsOn": [
-        "Authlib==1.9.5",
+        "Authlib==1.9.8",
         "certifi==2026.10.23",
         "grpcio==1.78.2",
         "httpx==0.28.1",
@@ -5299,7 +5299,7 @@
       "type": "library",
       "version": "0.16.0"
     },
-    "timestamp": "2026-11-14T11:40:56.824792+00:00",
+    "timestamp": "2026-11-16T13:16:12.952238+00:00",
     "tools": {
       "components": [
         {
@@ -5403,7 +5403,7 @@
       ]
     }
   },
-  "serialNumber": "urn:uuid:5d624ea7-115e-4e1e-96fd-8aba7fd2e40f",
+  "serialNumber": "urn:uuid:eab4eeab-0784-48e3-9e67-3f8115e4c9de",
   "version": 1,
   "$schema": "http://cyclonedx.org/schema/bom-1.6.schema.json",
   "bomFormat": "CycloneDX",
