@@ -50,7 +50,8 @@ CONFIG = {"envelope_version": 0, "allowed_commands": ["set_position_target"],
           "targets": {"joint_1": {"pos_min": -1.0, "pos_max": 1.0, "vel_max": 2.0, "force_max": 5.0}},
           "rate": {"max_commands_per_s": 5}, "episode": {"max_sim_time_s": 60, "max_steps": 100000},
           "on_violation": "reject"}
-PROPOSER, REQUESTER, APPROVER, TOKEN = "employee:agent", "employee:ops", "person:alice", "t" * 24
+PROPOSER, REQUESTER, APPROVER = "employee:agent", "employee:ops", "person:alice"
+TOKEN = "t" * 24
 ALICE_T, BOB_T = "a" * 24, "b" * 24
 CON_TOKENS = {ALICE_T: "person:alice", BOB_T: "person:bob"}
 INVARIANTS_FILE = Path(__file__).with_name("invariants.json")  # class -> invariant ids, copied from docs/safety-invariants.md
