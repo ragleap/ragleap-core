@@ -58,3 +58,15 @@ Read on 2026-11-12 and 2026-11-13: the GitHub licence field and the LICENSE file
 ## 7. Rules
 
 Understand the ideas and copy no code. Read every licence at its source page before any reuse. Never probe a hosted service, and run no comparison against one without the maintainer's own keys and go. Nothing from a hosted service enters the default path.
+
+## 8. Answers read in the Asterisk documentation (2026-11-16, not run)
+
+Source: docs.asterisk.org, the page "External Media and ARI" (Asterisk Framework and API Examples). Read, not tested. The page describes the first release of the feature, so a later version may differ. Everything here stays [unverified] until the throwaway-machine test in section 6.
+
+- Version: the page says the externalMedia resource arrived in Asterisk 16.6. The documentation site lists Asterisk 18 to 24 and certified 18.9, 20.7 and 22.8; which versions are still supported was not read.
+- How it works: an ARI application creates the channel with POST /channels/externalMedia, giving the application name, the media destination as host:port (external_host) and a format. Asterisk then sends RTP to that destination, opening the stream itself (client mode), and accepts RTP back. The channel is normally added to a bridge.
+- Codec: the format is required and nothing is negotiated; Asterisk converts the bridge's media to the format named (the page's examples are ulaw and g722). ulaw or alaw matches the payload types 0 and 8 of this package.
+- Limits stated for the first release: rtp over UDP only, direction both only, and no server mode (where Asterisk would give an address to connect to).
+- Where to send media back: the channel driver sets the channel variables UNICASTRTP_LOCAL_ADDRESS and UNICASTRTP_LOCAL_PORT to the address and port that media can be sent to. The page does not say that Asterisk sends from that same address and port, so the expected remote of the source check (expect_remote) still has to be found from a capture.
+- Hang-up: the page says to delete the external media channel to hang it up. It does not say whether that ends the caller's call; ending the caller's own channel through ARI was not read.
+- Not stated on the page, so still open: whether RTP keeps flowing during silence, the marker bit, the header extension bit, SSRC changes, and how DTMF arrives. For DTMF it is open whether digits come as telephone-event RTP on this route or only as ARI events on the caller's channel; if only as events, the receive-DTMF option of the endpoint does not apply to this backend.
