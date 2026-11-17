@@ -384,6 +384,47 @@
     }
    ],
    "note": "Option A of issue 1338, proposed by the lead engineer; merged only if the maintainer decides so. Deliberate breaks checked. REAL. Simulated adapters only."
+  },
+  {
+   "id": "C29",
+   "claim": "A seeded red-team harness (`benchmarks/redteam/`) sends generated hostile cases through the bridge, the four tools, the MCP server and the console, in simulation only, and reports any case that gets through.",
+   "where": "docs/safety-invariants.md",
+   "status": "verified",
+   "evidence": [
+    {
+     "type": "test",
+     "ref": "benchmarks/redteam/test_redteam.py::test_nothing_gets_through_on_the_current_code"
+    },
+    {
+     "type": "test",
+     "ref": "benchmarks/redteam/test_redteam.py::test_same_seed_same_report"
+    },
+    {
+     "type": "test",
+     "ref": "benchmarks/redteam/test_redteam.py::test_the_harness_only_reports"
+    },
+    {
+     "type": "test",
+     "ref": "benchmarks/redteam/test_redteam.py::test_a_requester_who_approves_itself_is_reported"
+    },
+    {
+     "type": "test",
+     "ref": "benchmarks/redteam/test_redteam.py::test_an_approval_that_survives_a_stop_is_reported"
+    },
+    {
+     "type": "test",
+     "ref": "benchmarks/redteam/test_redteam.py::test_a_clamping_bridge_is_reported"
+    }
+   ],
+   "note": "REAL, 2026-11-17, Python 3.10.12, main at bb591ced, simulation only: seeds 1 to 3 with 100 cases per class, nothing got through, 0 unclean refusals, 0 errors (about 2,100 cases per seed); 35 deliberate one-line breaks of the library were all reported (benchmarks/redteam/breakcheck_redteam.py). No finding is not a proof that nothing can get through. Says nothing about real devices."
+  },
+  {
+   "id": "C30",
+   "claim": "The red-team harness does not cover S6, S11, S12 and S13, and it watches S3 only indirectly.",
+   "where": "docs/safety-invariants.md",
+   "status": "limitation",
+   "evidence": [],
+   "note": "The class-to-invariant mapping (benchmarks/redteam/invariants.json) is a hand-made reading of docs/safety-invariants.md, not a proof of coverage."
   }
  ]
 }
