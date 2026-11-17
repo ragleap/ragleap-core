@@ -432,6 +432,23 @@ def request_approval(action_type: str, channel: str, target: str,
     return "sent" in result
 
 
+# File tools: the label (action_type) and the effect channel must always travel together.
+_FILE_CHANNEL_FOR_ACTION = {"write_file": "files_write", "delete_file": "files_delete", "request_access": "files_request"}
+_FORCED_ACTION_TYPES = tuple(_FILE_CHANNEL_FOR_ACTION)
+_FORCED_CHANNELS = tuple(_FILE_CHANNEL_FOR_ACTION.values())
+
+
+def file_pair_error(action_type: str, channel: str) -> Optional[str]:
+    """Why this (action_type, channel) pair is refused, or None. A file label needs its own file channel and a
+    file channel needs its own label, so a harmless label cannot carry a file effect past forced approval."""
+    want = _FILE_CHANNEL_FOR_ACTION.get(action_type)
+    if want is not None and channel != want:
+        return f"action_type {action_type} must use channel {want}"
+    if want is None and channel in _FORCED_CHANNELS:
+        return f"channel {channel} needs its own file action_type"
+    return None
+
+
 def execute_or_request(action_type: str, channel: str, target: str,
                         content: str, execute_fn: Optional[Callable] = None,
                         subject: str = "", role: Optional[str] = None,
@@ -456,6 +473,11 @@ def execute_or_request(action_type: str, channel: str, target: str,
     mode = settings["mode"]
     actions = settings["actions"]
     channels = settings["channels"]
+
+    bad_pair = file_pair_error(action_type, channel)
+    if bad_pair:
+        _audit_event("action_skipped", content=content, reason="action_type and channel do not match", action_type=action_type, channel=channel, role=role)
+        return {"status": "error", "result": bad_pair}
 
     if mode == "off":
         _audit_event("action_skipped", content=content, reason="autonomy off", action_type=action_type, channel=channel, role=role)
@@ -483,7 +505,7 @@ def execute_or_request(action_type: str, channel: str, target: str,
             _audit_event("action_skipped", content=why, reason="delete not possible", action_type=action_type, channel=channel, role=role)
             return {"status": "skipped", "result": why}
 
-    if mode == "full" and (force_semi or action_type in ("request_access", "write_file", "delete_file")):
+    if mode == "full" and (force_semi or action_type in _FORCED_ACTION_TYPES or channel in _FORCED_CHANNELS):
         # caller (e.g. a run that has read untrusted web/MCP content) requires approval for this call
         logger.info(f"force_semi: {action_type} forced full->semi")
         _audit_event("action_forced_approval", content=content, reason="untrusted input, request_access, write_file or delete_file", action_type=action_type, channel=channel, role=role)

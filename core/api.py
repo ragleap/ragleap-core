@@ -1090,6 +1090,9 @@ def execute_autonomous_action(req: AutonomyActionRequest):
     current mode and allowlists - may execute immediately (full mode),
     queue for approval (semi mode), or skip (off mode / not allowlisted).
     """
+    bad_pair = autonomy.file_pair_error(req.action_type, req.channel)
+    if bad_pair:
+        raise HTTPException(status_code=400, detail=bad_pair)
     return autonomy.execute_or_request(
         action_type=req.action_type, channel=req.channel, target=req.target,
         content=req.content, subject=req.subject,
