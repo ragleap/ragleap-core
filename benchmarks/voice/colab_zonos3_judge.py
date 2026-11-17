@@ -1,9 +1,9 @@
 """Round-trip check of the ZONOS3-Mini smoke clips (colab_zonos3_smoke.py): each clip is read back by IndicConformer-600m (the same
 judge and the same scoring as colab_tts_roundtrip.py) and compared with the FLEURS sentence it was made from.
-NOT RUN YET when this file was written. It compiles; its first run is its test.
+First run on 2026-11-17 (T4, 50 clips from the smoke script with Z_N=5): it ran as written.
 
 How to run: first the smoke script, with Z_N=5 (five sentences per language), Z_OUT and Z_CACHE on Google Drive, and NO token in the
-notebook secrets. Then this script in a second cell, on a GPU runtime with Drive mounted, after the server has stopped.
+notebook secrets. Then this script in a second cell as %run colab_zonos3_judge.py (not !python: the secret can only be read inside the notebook session), on a GPU runtime with Drive mounted, after the server has stopped.
 It needs a Hugging Face token: IndicConformer is a gated model whose conditions the account must have accepted. The token is read from
 Colab Secrets (HF_TOKEN, Notebook access on) in the first seconds, so keep the tab in the foreground. The model's own code runs with
 trust_remote_code=True while the token exists: use a fresh short-lived Read token and delete the secret afterwards.
@@ -16,6 +16,7 @@ IC = "ai4bharat/indic-conformer-600m-multilingual"
 OUT = pathlib.Path(os.environ.get("Z_OUT", "/content/drive/MyDrive/zonos3_smoke"))
 RES = pathlib.Path(os.environ.get("Z_JUDGE_OUT", str(OUT / "judge")))
 FLAG_CER = 0.5     # a clip with more than this share of characters wrong is listed
+FLAG_RATIO = 0.85   # judge output shorter than this share of the reference: listed as cut or dropped speech (or a weak judge)
 FLAG_GAP = 0.3     # the two voices differ by more than this on the same sentence: listed
 
 
@@ -137,7 +138,7 @@ def rate(e, n):
 
 
 say("\nper clip: audio seconds, reference characters per second, judge output length / reference length, word and character error")
-cer_of, pooled = {}, {}
+cer_of, pooled, short = {}, {}, []
 for r in rows:
     c = meta_of[r["id"]]
     k = r["id"].rsplit("_", 1)[1]
@@ -147,6 +148,8 @@ for r in rows:
     cer, wer = rate(r["char_errors"], r["ref_chars"]), rate(r["word_errors"], r["ref_words"])
     cps = len(r["reference"]) / r["audio_s"] if r["audio_s"] else 0
     ratio = len(r["hypothesis"]) / max(1, len(r["reference"]))
+    if ratio < FLAG_RATIO:
+        short.append("%s (%.2f)" % (r["id"], ratio))
     say("  %-16s %5.1f s  %5.1f c/s  length ratio %4.2f  WER %5.1f%%  CER %5.1f%%" % (
         r["id"], r["audio_s"], cps, ratio, 100 * (wer or 0), 100 * (cer or 0)))
     cer_of[(c["lang"], k, c["voice"])] = cer
@@ -167,6 +170,8 @@ for (l, k, v), x in cer_of.items():
     if o and x is not None and o[0] is not None and x - o[0] > FLAG_GAP:
         gaps.append("%s_%s_%s (%.0f%% against %.0f%%)" % (l, v, k, 100 * x, 100 * o[0]))
 say("  " + (", ".join(sorted(gaps)) if gaps else "none"))
+say("\nclips whose judge output is shorter than %d%% of the reference (cut or dropped speech, or a weak judge):" % int(100 * FLAG_RATIO))
+say("  " + (", ".join(short) if short else "none"))
 say("\nLimits: one run, seed 1, few sentences, two stock voices. The judge is itself a model with its own errors on these languages, and "
     "it was not calibrated on this audio, so a high error can mean wrong speech or a weak judge. A low length ratio with high error "
     "points to cut or dropped speech; a normal ratio with high error points to wrong sounds or a weak judge. Nothing here says the "
