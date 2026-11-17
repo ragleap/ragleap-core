@@ -6,6 +6,7 @@ pipeline (core.chat.ask), and sends the response back. Single-tenant:
 one bot, one document set, configured entirely via .env.
 """
 import os
+import time
 import logging
 
 import requests
@@ -26,6 +27,26 @@ DISCORD_API_URL = "https://discord.com/api/v10"
 MAX_DISCORD_MESSAGE_LENGTH = 2000
 
 
+def _timestamp_is_fresh(timestamp: str) -> bool:
+    """A signed request is accepted only near the time it was signed, so a captured request cannot be replayed later.
+    DISCORD_MAX_SKEW_SECONDS (default 300); 0 turns the check off (for example when the server clock is wrong)."""
+    try:
+        limit = int(os.environ.get("DISCORD_MAX_SKEW_SECONDS", "300"))
+    except ValueError:
+        limit = 300
+    if limit <= 0:
+        return True
+    try:
+        skew = abs(time.time() - int(str(timestamp).strip()))
+    except (TypeError, ValueError):
+        logger.warning("Discord request refused: the timestamp is not a number")
+        return False
+    if skew > limit:
+        logger.warning(f"Discord request refused: its timestamp is {int(skew)} seconds off (limit {limit}); check the server clock if this repeats")
+        return False
+    return True
+
+
 def verify_discord_signature(signature: str, timestamp: str, body: bytes) -> bool:
     """Verify a Discord interaction request using Ed25519, per Discord's official algorithm."""
     if not signature or not timestamp or not DISCORD_PUBLIC_KEY:
@@ -36,7 +57,7 @@ def verify_discord_signature(signature: str, timestamp: str, body: bytes) -> boo
         public_key = Ed25519PublicKey.from_public_bytes(bytes.fromhex(DISCORD_PUBLIC_KEY))
         message = timestamp.encode("utf-8") + body
         public_key.verify(bytes.fromhex(signature), message)
-        return True
+        return _timestamp_is_fresh(timestamp)
     except Exception as e:
         logger.warning(f"Discord signature verification failed: {e}")
         return False
