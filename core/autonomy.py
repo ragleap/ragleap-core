@@ -564,18 +564,20 @@ def process_approval_response(message: str, decided_by: Optional[Dict] = None) -
     conn = get_connection()
     try:
         cur = conn.cursor()
+        # Claim the pending row atomically: only the caller whose DELETE removes the row may
+        # run the effect. A second, simultaneous answer (dashboard, API or chat) finds no row.
         cur.execute(
-            "SELECT action_type, channel, target, content, subject, role FROM autonomy_pending WHERE action_id = %s",
+            "DELETE FROM autonomy_pending WHERE action_id = %s "
+            "RETURNING action_type, channel, target, content, subject, role",
             (action_id,),
         )
         row = cur.fetchone()
+        conn.commit()
         if not row:
             cur.close()
             return f"Action {action_id} not found or already processed."
 
         action_type, channel, target, content, subject, role = row
-        cur.execute("DELETE FROM autonomy_pending WHERE action_id = %s", (action_id,))
-        conn.commit()
         cur.close()
     except Exception as e:
         logger.error(f"process_approval_response lookup error: {e}", exc_info=True)
