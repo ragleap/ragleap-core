@@ -189,3 +189,27 @@ def test_the_timestamp_wraps_around():
 def test_the_receiver_limits_are_checked(kw):
     with pytest.raises(ValueError):
         Receiver(PCMU, **kw)
+
+
+def test_a_telephone_event_needs_the_option_four_octets_and_an_audio_packet_first():
+    from ragleap_phone import rtp as _rtp
+    ev = lambda seq, ts, body=bytes([9, 20, 1, 144]): _rtp.build(101, seq, ts, 7, body)
+    audio = lambda seq, ts: _rtp.build(0, seq, ts, 7, bytes([0xFF]) * 160)
+    r = _rtp.Receiver(0, dtmf_payload_type=101)
+    assert r.handle(ev(1, 0)) is None and r.counts["dtmf_before_audio"] == 1
+    assert r.handle(audio(2, 0)) is not None
+    got = r.handle(ev(3, 0))
+    assert got is not None and got[1] == 0 and got[0].payload_type == 101 and r.counts["dtmf_accepted"] == 1
+    got = r.handle(audio(4, 1600))                 # the report did not move the audio timestamps
+    assert got is not None and got[1] == 1600 - 160
+    assert r.handle(ev(5, 0, bytes([9, 20, 1]))) is None and r.counts["payload_size"] == 1
+    assert r.handle(ev(5, 0, bytes([9, 20, 1, 144, 0, 0, 0, 0]))) is None and r.counts["payload_size"] == 2
+    assert r.handle(ev(3, 0)) is None and r.counts["duplicate_or_late"] == 1
+    off = _rtp.Receiver(0)
+    assert off.handle(ev(1, 0)) is None and off.counts["wrong_payload_type"] == 1
+    for bad in (5, 0, 200, True, "101"):
+        try:
+            _rtp.Receiver(0, dtmf_payload_type=bad)
+        except ValueError:
+            continue
+        raise AssertionError("accepted a bad dtmf payload type: %r" % (bad,))

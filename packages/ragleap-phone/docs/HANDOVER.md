@@ -172,7 +172,7 @@ Added by the current owner; the text above is unchanged. Evidence tags as in sec
 
 - SIP signalling (INVITE, SDP, BYE). Because of this, `hangup()` stops our media and ends the call object but cannot end the phone call; how the endpoint tells the SIP server to hang up is open.
 - Several calls at once, port allocation.
-- DTMF (RFC 4733 telephone-event packets), SRTP, RTCP, a jitter buffer.
+- Sending DTMF, SRTP, RTCP, a jitter buffer. Receiving DTMF (RFC 4733) is built, off by default: see the DTMF section at the end of docs/design/phase0-rtp-endpoint.md.
 - Any test with real traffic: no PBX, no trunk, no packet capture. Parsing is tested against hand-written bytes, which shows self-consistency and not interoperability.
 - The timing numbers (100 packets per second, 10 s idle timeout, 3600 s maximum call, 100 ms flush) are untested starting points.
 
