@@ -13,13 +13,16 @@ already-parsed dict. It returns a failed ToolResult for an unknown tool,
 oversize or invalid JSON, arguments that do not match the tool's schema (before
 the handler runs), and any exception from the handler (only the exception type
 reaches the model; the detail goes to the "ragleap_tools" logger).
+
+call() is prepare() followed by run(); use them separately to decide something
+between validating the arguments and running the handler.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional
+from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Tuple, Union
 
 from ragleap_tools._schema import clip, drop_null_optionals, safe_text, validate_arguments
 from ragleap_tools.base import Tool, ToolError, ToolResult
@@ -107,7 +110,16 @@ class Toolkit:
     def to_anthropic_schema(self) -> List[Dict[str, Any]]:
         return [t.to_anthropic_schema() for t in self._tools.values()]
 
-    def call(self, name: Any, arguments: Any = None) -> ToolResult:
+    def prepare(self, name: Any, arguments: Any = None) -> Union[Tuple[Tool, Dict[str, Any]], ToolResult]:
+        """Everything call() does before the handler runs.
+
+        Finds the tool, parses and size-checks the arguments, drops nulls for
+        optional parameters and validates against the tool's schema. Returns
+        ``(tool, arguments)`` when the call may proceed, or the failed
+        ToolResult that call() would return. The handler is not run. Pass the
+        pair to run(). Use prepare() and run() instead of call() when you must
+        decide something in between (a policy, an approval, a rate limit).
+        """
         tool = self._tools.get(name) if isinstance(name, str) else None
         if tool is None:
             return _fail("unknown tool '%s'" % clip(name))
@@ -118,8 +130,25 @@ class Toolkit:
         problem = validate_arguments(tool.parameters, args)
         if problem:
             return _fail("invalid arguments: " + problem)
+        return tool, args
+
+    def run(self, tool: Tool, arguments: Dict[str, Any]) -> ToolResult:
+        """Run the handler of one of this toolkit's tools; never raises.
+
+        Meant for the pair that prepare() returned: it does not validate the
+        arguments against the schema, that is prepare()'s job. It refuses a
+        tool that is not in this toolkit and arguments that are not a dict of
+        string keys, without running anything. Handler failures are contained
+        exactly as in call().
+        """
+        if not any(t is tool for t in self._tools.values()):
+            return _fail("unknown tool '%s'" % clip(getattr(tool, "name", None)))
+        if not isinstance(arguments, dict):
+            return _fail("arguments must be a JSON object")
+        if any(not isinstance(k, str) for k in arguments):
+            return _fail("argument names must be strings")
         try:
-            result = tool.call(**args)
+            result = tool.call(**arguments)
         except ToolError as exc:
             return _fail(safe_text(exc) or "%s failed" % tool.name)
         except Exception as exc:  # noqa: BLE001 - one bad tool must not crash the loop
@@ -128,6 +157,13 @@ class Toolkit:
         if not isinstance(result, ToolResult):
             return _fail("%s returned an invalid result" % tool.name)
         return result
+
+    def call(self, name: Any, arguments: Any = None) -> ToolResult:
+        prepared = self.prepare(name, arguments)
+        if isinstance(prepared, ToolResult):
+            return prepared
+        tool, args = prepared
+        return self.run(tool, args)
 
     def _parse(self, arguments: Any) -> Any:
         if arguments is None:

@@ -5,6 +5,20 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `Toolkit.prepare(name, arguments)` and `Toolkit.run(tool, arguments)`, the
+  two halves of `Toolkit.call`. `prepare` finds the tool, parses and
+  size-checks the arguments and validates them, and returns `(tool,
+  arguments)` or the failed `ToolResult` that `call` would return, without
+  running the handler. `run` runs the handler of one of the toolkit's own
+  tools with the same exception containment as `call`, and refuses a tool
+  that is not in the toolkit and arguments that are not a dict of string
+  keys. `call` is now `prepare` followed by `run` and behaves as before. The
+  split is the first step of the governed dispatch proposed in
+  `docs/design/governed-toolkit.md`; nothing else of that proposal is
+  implemented.
+
 ## [0.5.1] - 2026-10-19
 
 ### Changed
