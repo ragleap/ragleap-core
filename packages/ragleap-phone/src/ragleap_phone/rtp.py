@@ -16,6 +16,7 @@ MAX_GAP = 50
 GAP_UNIT = 160
 MAX_DROPOUT = 3000
 MAX_MISORDER = 100
+EVENT_PAYLOAD = 4  # one telephone-event report (RFC 4733 section 2.3); packed reports are refused
 
 PARSE_REASONS = ("too_short", "too_long", "bad_version", "bad_header_length", "extension", "bad_padding",
                  "wrong_payload_type", "payload_size")
@@ -40,8 +41,9 @@ class RtpPacket:
     payload: bytes
 
 
-def parse(datagram, payload_type, max_payload=MAX_PAYLOAD):
-    """Parse one datagram or raise RtpError. The payload type must equal the one the operator configured."""
+def parse(datagram, payload_type, max_payload=MAX_PAYLOAD, dtmf_payload_type=None):
+    """Parse one datagram or raise RtpError. The payload type must equal the one the operator configured, or the optional
+    telephone-event type, whose payload must be exactly 4 octets."""
     if not isinstance(datagram, (bytes, bytearray, memoryview)):
         raise TypeError("datagram must be bytes, bytearray or memoryview")
     d = bytes(datagram)
@@ -64,10 +66,12 @@ def parse(datagram, payload_type, max_payload=MAX_PAYLOAD):
         if n == 0 or header_len + n > len(d):
             raise RtpError("bad_padding")
         end -= n
-    if b1 & 0x7F != payload_type:
+    pt = b1 & 0x7F
+    if pt != payload_type and (dtmf_payload_type is None or pt != dtmf_payload_type):
         raise RtpError("wrong_payload_type")
     payload = d[header_len:end]
-    if not 1 <= len(payload) <= max_payload:
+    low, high = (1, max_payload) if pt == payload_type else (EVENT_PAYLOAD, EVENT_PAYLOAD)
+    if not low <= len(payload) <= high:
         raise RtpError("payload_size")
     sequence, timestamp, ssrc = struct.unpack("!HII", d[2:12])
     return RtpPacket(b1 & 0x7F, bool(b1 >> 7), sequence, timestamp, ssrc, payload)
@@ -102,7 +106,7 @@ class Receiver:
     either direction is dropped until a second packet follows it consecutively, and then the call is resynchronised (counted as
     resyncs). The two limits are starting values. Not thread-safe."""
 
-    def __init__(self, payload_type, max_payload=MAX_PAYLOAD, max_gap=MAX_GAP):
+    def __init__(self, payload_type, max_payload=MAX_PAYLOAD, max_gap=MAX_GAP, dtmf_payload_type=None):
         if payload_type not in PAYLOAD_TYPES.values():
             raise ValueError("payload_type must be one of %s" % (sorted(PAYLOAD_TYPES.values()),))
         for name, v in (("max_payload", max_payload), ("max_gap", max_gap)):
@@ -111,8 +115,12 @@ class Receiver:
         self.payload_type = payload_type
         self.max_payload = max_payload
         self.max_gap = max_gap
+        if dtmf_payload_type is not None and (isinstance(dtmf_payload_type, bool) or not isinstance(dtmf_payload_type, int)
+                                              or not 96 <= dtmf_payload_type <= 127 or dtmf_payload_type == payload_type):
+            raise ValueError("dtmf_payload_type must be None or a dynamic payload type from 96 to 127")
+        self.dtmf_payload_type = dtmf_payload_type
         self.counts = {r: 0 for r in PARSE_REASONS + STATE_REASONS}
-        self.counts.update(accepted=0, long_gaps=0, resyncs=0)
+        self.counts.update(accepted=0, long_gaps=0, resyncs=0, dtmf_accepted=0, dtmf_before_audio=0)
         self._ssrc = None
         self._last_seq = None
         self._last_ts = 0
@@ -126,17 +134,35 @@ class Receiver:
 
     def handle(self, datagram):
         try:
-            p = parse(datagram, self.payload_type, self.max_payload)
+            p = parse(datagram, self.payload_type, self.max_payload, self.dtmf_payload_type)
         except RtpError as e:
             self.counts[e.reason] += 1
             return None
+        is_event = self.dtmf_payload_type is not None and p.payload_type == self.dtmf_payload_type
         if self._ssrc is None:
+            if is_event:
+                self.counts["dtmf_before_audio"] += 1
+                return None
             self._ssrc = p.ssrc
             return self._accept(p, 0)
         if p.ssrc != self._ssrc:
             self.counts["ssrc_changed"] += 1
             return None
         delta = seq_delta(p.sequence, self._last_seq)
+        if is_event:
+            # A telephone-event report shares the sequence numbers of the audio but not its timestamps: only the sequence moves
+            # on. The audio's last timestamp and length stay, so the next audio packet's gap still covers the time of the digit.
+            # A report never takes part in a resynchronisation.
+            if 0 < delta <= MAX_DROPOUT:
+                self._probation = None
+                self._last_seq = p.sequence
+                self.counts["dtmf_accepted"] += 1
+                return p, 0
+            if -MAX_MISORDER <= delta <= 0:
+                self.counts["duplicate_or_late"] += 1
+            else:
+                self.counts["jump_dropped"] += 1
+            return None
         if 0 < delta <= MAX_DROPOUT:
             self._probation = None
             ts_diff = (p.timestamp - self._last_ts) & 0xFFFFFFFF

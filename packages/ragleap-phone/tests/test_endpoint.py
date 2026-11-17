@@ -371,3 +371,112 @@ def test_a_sequence_jump_with_a_timestamp_jump_fills_no_silence():
         assert total_8k == 4 * 160                     # no silence for the jump, and one packet lost
         assert c.counts["jump_dropped"] == 1 and c.counts["resyncs"] == 1
     _run(main())
+
+
+import asyncio as _aio
+import dataclasses as _dc
+
+
+def _dtmf_cfg(**kw):
+    return _dc.replace(_cfg(), dtmf_payload_type=101, **kw)
+
+
+def _ev(seq, ts, event, dur, end=False, marker=False):
+    return rtp.build(101, seq, ts, 7, bytes([event, (0x80 if end else 0) | 20, dur >> 8, dur & 0xFF]), marker=marker)
+
+
+def _digits(c):
+    out = []
+    while True:
+        try:
+            e = c._events.get_nowait()
+        except _aio.QueueEmpty:
+            return out
+        if e is not None and e.kind == "dtmf":
+            out.append(e.data)
+
+
+def test_the_rfc_4733_example_911_gives_three_digits_and_no_audio():
+    async def main():
+        clk = Clock()
+        c = RtpCall(_dtmf_cfg(), clk)
+        c.on_datagram(rtp.build(0, 0, 0, 7, PAYLOAD), SRC)        # audio first: it fixes the SSRC
+        # RFC 4733 section 5, Table 5: (sequence, timestamp, event, duration, E bit, M bit). The rows that the table
+        # leaves out ("...") are filled in by its pattern.
+        rows = [(1, 0, 9, 400, 0, 1), (2, 0, 9, 800, 0, 0), (3, 0, 9, 1200, 0, 0), (4, 0, 9, 1600, 0, 0),
+                (5, 0, 9, 1600, 1, 0), (6, 0, 9, 1600, 1, 0),
+                (7, 7040, 1, 400, 0, 1), (8, 7040, 1, 800, 0, 0), (9, 7040, 1, 1200, 0, 0), (10, 7040, 1, 1600, 0, 0),
+                (11, 7040, 1, 2000, 0, 0), (12, 7040, 1, 2000, 1, 0), (13, 7040, 1, 2000, 1, 0),
+                (14, 11200, 1, 400, 0, 1), (15, 11200, 1, 800, 0, 0), (16, 11200, 1, 1200, 0, 0), (17, 11200, 1, 1600, 0, 0),
+                (18, 11200, 1, 1760, 1, 0), (19, 11200, 1, 1760, 1, 0), (20, 11200, 1, 1760, 1, 0)]
+        for seq, ts, ev, dur, end, m in rows:
+            c.on_datagram(_ev(seq, ts, ev, dur, bool(end), bool(m)), SRC)
+            clk.t += 0.05
+        await c.hangup()
+        assert _digits(c) == ["9", "1", "1"]
+        assert c.counts["dtmf_accepted"] == 20 and c.counts["dtmf_digits"] == 3
+        assert c._media_samples == 160                              # reports are not audio
+    _run(main())
+
+
+def test_telephone_events_are_dropped_unless_the_operator_turns_dtmf_on():
+    async def main():
+        clk = Clock()
+        c = RtpCall(_cfg(), clk)
+        c.on_datagram(rtp.build(0, 0, 0, 7, PAYLOAD), SRC)
+        c.on_datagram(_ev(1, 0, 9, 400, marker=True), SRC)
+        await c.hangup()
+        assert _digits(c) == [] and c.counts["wrong_payload_type"] == 1
+    _run(main())
+
+
+def test_an_event_code_that_is_not_dtmf_and_a_zero_duration_are_ignored():
+    async def main():
+        clk = Clock()
+        c = RtpCall(_dtmf_cfg(), clk)
+        c.on_datagram(rtp.build(0, 0, 0, 7, PAYLOAD), SRC)
+        c.on_datagram(_ev(1, 100, 16, 400, marker=True), SRC)     # event 16 is not a DTMF digit
+        c.on_datagram(_ev(2, 200, 3, 0, marker=True), SRC)        # duration 0 is ignored for a digit
+        await c.hangup()
+        assert _digits(c) == [] and c.counts["dtmf_ignored"] == 2
+    _run(main())
+
+
+def test_the_next_segment_of_a_long_digit_is_not_a_new_digit():
+    async def main():
+        clk = Clock()
+        c = RtpCall(_dtmf_cfg(), clk)
+        c.on_datagram(rtp.build(0, 0, 0, 7, PAYLOAD), SRC)
+        c.on_datagram(_ev(1, 1000, 5, 0xFFFF, marker=True), SRC)
+        c.on_datagram(_ev(2, 1000 + 0xFFFF, 5, 800), SRC)
+        c.on_datagram(_ev(3, 1000 + 0xFFFF, 5, 1600, end=True), SRC)
+        c.on_datagram(_ev(4, 1000 + 0xFFFF + 5000, 5, 400, marker=True), SRC)   # a later press of the same key
+        await c.hangup()
+        assert _digits(c) == ["5", "5"]
+    _run(main())
+
+
+def test_a_flood_of_digits_is_limited_per_second():
+    async def main():
+        clk = Clock()
+        c = RtpCall(_dc.replace(_dtmf_cfg(), max_packets_per_second=1000), clk)
+        c.on_datagram(rtp.build(0, 0, 0, 7, PAYLOAD), SRC)
+        for i in range(1, 301):                                   # 300 different digits in under a second
+            c.on_datagram(_ev(i, 1000 * i, i % 16, 400, marker=True), SRC)
+            clk.t += 0.003
+        await c.hangup()
+        assert len(_digits(c)) == 10 and c.counts["dtmf_limited"] == 290
+    _run(main())
+
+
+def test_unread_digits_cannot_grow_the_event_queue_without_limit():
+    from ragleap_phone.endpoint import DTMF_BACKLOG
+    async def main():
+        clk = Clock()
+        c = RtpCall(_dc.replace(_dtmf_cfg(max_dtmf_per_second=1000), max_packets_per_second=1000), clk)
+        c.on_datagram(rtp.build(0, 0, 0, 7, PAYLOAD), SRC)
+        for i in range(1, 301):
+            c.on_datagram(_ev(i, 1000 * i, i % 16, 400, marker=True), SRC)
+            clk.t += 0.003
+        assert c._events.qsize() <= DTMF_BACKLOG and c.counts["dtmf_backlog"] > 0
+    _run(main())

@@ -4,6 +4,8 @@ All notable changes to ragleap-phone are recorded here, in the Keep a Changelog 
 
 ## [Unreleased]
 
+- Receiving DTMF (RFC 4733 telephone-event packets), off by default: dtmf_payload_type and max_dtmf_per_second in EndpointConfig, one dtmf event per digit, a bounded backlog, counters only. Tested with the example of the RFC and hand-built bytes, not with real traffic.
+
 - The real-time budget now also covers packet payload: a packet that does not fit is dropped and counted as `ahead_of_clock`. Before, only the gap was limited, so a sender could get about 6 times real time. Two tests added.
 
 ### Added

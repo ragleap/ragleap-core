@@ -28,7 +28,7 @@ A datagram is dropped and counted by reason unless all of these hold [plan]:
 | SSRC equals the first valid SSRC of the call; a different SSRC is dropped, not adopted | strict |
 | Sequence number: up to 3000 ahead is accepted; up to 100 behind is dropped as late; a larger jump in either direction is dropped until a second packet follows it consecutively, then the call resynchronises (values from memory of RFC 3550 appendix A.1, unverified) | starting values |
 
-Telephone-event packets (DTMF, a dynamic payload type) fail the payload-type rule and are dropped until DTMF is designed. [plan]
+Telephone-event packets (DTMF, RFC 4733) fail the payload-type rule and are dropped unless the operator sets dtmf_payload_type; see the section on DTMF at the end of this note.
 
 ## 4. Who may send, and limits
 
@@ -65,10 +65,25 @@ Unit tests use an in-memory transport and hand-built packets, never a socket and
 
 ## 10. Open questions
 
-- DTMF: RFC 4733 telephone-event packets use a dynamic payload type negotiated in SDP, so they cannot be handled without SDP knowledge.
+- DTMF: RFC 4733 telephone-event packets use a dynamic payload type negotiated in SDP. This package has no SDP, so the operator gives the number as dtmf_payload_type (off by default); see the section on DTMF at the end of this note.
 - SRTP and RTCP: not designed here.
 - Symmetric RTP and NAT: a remote behind NAT may send from a different port than announced. Allowing a port range, or latching under an explicit opt-in, needs a threat discussion first.
 - How a hangup reaches the SIP server.
 - Whether a jitter buffer is needed, and how much loss recognition tolerates: needs measurement on real calls.
 - Interoperability with Asterisk, FreeSWITCH and others: needs real captures and a throwaway test machine, never production.
 - Injection by a sender that passes the source check: RTP without SRTP cannot stop it. Such a sender can inject audio, and can also keep the call in the resynchronisation state by interleaving packets with the right SSRC (in a scratch run, 0 of 200 legitimate packets were accepted while it did). The rate limit bounds the volume; only encryption and authentication of the media (SRTP) or a trusted network path address the cause.
+
+
+## DTMF (RFC 4733), receive only
+
+Read on 2026-11-16 at rfc-editor.org (RFC 4733, sections 2, 3, 5 and 6). Off by default. Not tested with any real traffic, PBX or trunk.
+
+- The operator sets dtmf_payload_type (a dynamic type from 96 to 127, the number agreed out of band) in EndpointConfig; this package has no SDP. With the default (None) every telephone-event packet fails the payload-type rule as before.
+- A report must have a payload of exactly 4 octets (packed reports and redundant payloads are refused and counted as payload_size). Event codes 0 to 15 are digits; other codes, and a duration of 0, are ignored and counted as dtmf_ignored. The reserved bit and the volume are ignored.
+- Reports share the sequence numbers of the audio, so the sequence rules apply to them. They do not move the audio timestamps, so the gap before the next audio packet still covers the time of the digit and is filled as silence. A report never takes part in a resynchronisation and never fixes the SSRC of the call: one that arrives before any audio packet is dropped (dtmf_before_audio).
+- One digit gives one dtmf event, on the first report seen for it. Updates, the repeated final reports and the next segment of a long digit (timestamp equal to the previous timestamp plus 0xFFFF after a report of duration 0xFFFF without the end bit) are not new digits. A short history of recent (timestamp, event) pairs stops a late repeat from counting twice.
+- Limits (starting values, untested): max_dtmf_per_second 10 (RFC 4733 section 3.1 cites 8 to 10 digits per second for legacy equipment) and DTMF_BACKLOG 32 events waiting unread; the events queue itself has no size limit, so this backlog limit is what keeps a hostile sender from growing it. Digits past either limit are dropped and counted (dtmf_limited, dtmf_backlog). Reports also count in the packet rate limit and are not audio: they never use the real-time budget.
+- Counters hold no digit. The digit appears only in the event that is handed on, and is never logged.
+- No integrity: RFC 4733 section 6 says integrity must be provided for this payload, and names SRTP, which this package does not have. A sender that passes the source check can forge digits. Do not use DTMF for secrets such as PINs until SRTP exists.
+- Tests use the example of RFC 4733 section 5 (the digits 9, 1, 1; the timestamps, durations and repeated final reports of its Table 5; the rows the table leaves out are filled in by its pattern) and hand-built bytes: this shows self-consistency, not interoperability.
+- The class-level flag capabilities.dtmf of RtpMediaEndpoint stays False because DTMF is off unless the operator turns it on. Not built: sending digits, packed reports, RFC 2198 redundant payloads, tone payloads.

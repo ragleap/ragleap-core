@@ -14,11 +14,12 @@ import time
 from dataclasses import dataclass
 
 from . import g711, rtp
-from .adapter import Call, Event
+from .adapter import DTMF_DIGITS, Call, Event
 from .audiopath import InboundAudio, OutboundAudio
 
 PACKET_BYTES = 160
 PACKET_TICKS = 160
+DTMF_BACKLOG = 32  # a new digit is dropped and counted while this many events wait unread (a starting value)
 FILL_SLACK_SAMPLES = 16000  # 2 s: how far the audio handed on may run ahead of real time (a starting value)
 
 
@@ -51,6 +52,8 @@ class EndpointConfig:
     max_payload: int = rtp.MAX_PAYLOAD
     max_gap: int = rtp.MAX_GAP
     frame_queue_size: int = 500
+    dtmf_payload_type: int = None
+    max_dtmf_per_second: int = 10
 
     def __post_init__(self):
         if self.law not in rtp.PAYLOAD_TYPES:
@@ -66,6 +69,10 @@ class EndpointConfig:
         _pos_int("max_payload", self.max_payload, rtp.MAX_PAYLOAD)
         _pos_int("max_gap", self.max_gap)
         _pos_int("frame_queue_size", self.frame_queue_size)
+        if self.dtmf_payload_type is not None and (isinstance(self.dtmf_payload_type, bool) or not isinstance(self.dtmf_payload_type, int)
+                                                   or not 96 <= self.dtmf_payload_type <= 127):
+            raise ValueError("dtmf_payload_type must be None or a dynamic payload type from 96 to 127")
+        _pos_int("max_dtmf_per_second", self.max_dtmf_per_second)
 
 
 class RtpCall(Call):
@@ -76,13 +83,17 @@ class RtpCall(Call):
         self.config = config
         self._clock = clock
         self._remote = None if config.remote_ip is None else _parse_remote(config.remote_ip, config.remote_port)
-        self._rx = rtp.Receiver(rtp.PAYLOAD_TYPES[config.law], config.max_payload, config.max_gap)
+        self._rx = rtp.Receiver(rtp.PAYLOAD_TYPES[config.law], config.max_payload, config.max_gap, config.dtmf_payload_type)
         self._in = InboundAudio(config.law)
         self._out = OutboundAudio(config.law)
-        self._own = {"wrong_source": 0, "remote_not_set": 0, "rate_limited": 0, "queue_full": 0, "after_end": 0, "fill_limited": 0, "ahead_of_clock": 0}
+        self._own = {"wrong_source": 0, "remote_not_set": 0, "rate_limited": 0, "queue_full": 0, "after_end": 0, "fill_limited": 0, "ahead_of_clock": 0,
+                     "dtmf_digits": 0, "dtmf_ignored": 0, "dtmf_limited": 0, "dtmf_backlog": 0}
         self._media_samples = 0
         now = clock()
         self._win_start, self._win_n = now, 0
+        self._dtmf_win_start, self._dtmf_win_n = now, 0
+        self._dtmf_last = None
+        self._dtmf_seen = collections.deque(maxlen=8)
         self._started_at = None
         self._last_packet_at = now
         self._ended = False
@@ -178,6 +189,10 @@ class RtpCall(Call):
         if got is None:
             return
         packet, gap = got
+        if packet.payload_type != self._rx.payload_type:
+            self._last_packet_at = now
+            self._on_dtmf(packet, now)
+            return
         ts_ns = int(now * 1e9)
         if self._started_at is None:
             self._started_at = now
@@ -194,6 +209,43 @@ class RtpCall(Call):
         if gap:
             self._put_frame(self._in.silence(gap, ts_ns))
         self._put_frame(self._in.process(packet.payload, ts_ns))
+
+    def _on_dtmf(self, p, now):
+        """One telephone-event report (RFC 4733) that the receiver accepted. One digit gives one event, on the first report seen
+        for it; the updates, the repeated final reports and the next segment of a long digit are not new digits. A digit past
+        max_dtmf_per_second, or while DTMF_BACKLOG events wait unread, is dropped and counted. The digit appears only in the
+        event that is handed on, never in a counter. Reports are not audio and never use the real-time budget."""
+        event = p.payload[0]
+        duration = (p.payload[2] << 8) | p.payload[3]
+        if event > 15 or duration == 0:
+            self._own["dtmf_ignored"] += 1
+            return
+        end = bool(p.payload[1] & 0x80)
+        last = self._dtmf_last
+        if last is not None and last[1] == event:
+            if last[0] == p.timestamp:
+                self._dtmf_last = (last[0], event, max(last[2], duration), last[3] or end)
+                return
+            if last[2] == 0xFFFF and not last[3] and p.timestamp == ((last[0] + 0xFFFF) & 0xFFFFFFFF):
+                self._dtmf_last = (p.timestamp, event, duration, end)
+                return
+        key = (p.timestamp, event)
+        if key in self._dtmf_seen:
+            self._own["dtmf_ignored"] += 1
+            return
+        self._dtmf_seen.append(key)
+        self._dtmf_last = (p.timestamp, event, duration, end)
+        if self._events.qsize() >= DTMF_BACKLOG:
+            self._own["dtmf_backlog"] += 1
+            return
+        if now - self._dtmf_win_start >= 1.0:
+            self._dtmf_win_start, self._dtmf_win_n = now, 0
+        self._dtmf_win_n += 1
+        if self._dtmf_win_n > self.config.max_dtmf_per_second:
+            self._own["dtmf_limited"] += 1
+            return
+        self._own["dtmf_digits"] += 1
+        self._emit("dtmf", DTMF_DIGITS[event])
 
     def tick(self):
         """Check the timeouts. Returns True when this call ended the call. The transport calls it about once a second."""
