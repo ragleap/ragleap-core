@@ -20,6 +20,7 @@ core/employees/triggers.py's autonomous escalation trigger.
 """
 import logging
 import os
+import re
 from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
@@ -29,6 +30,11 @@ REDIS_URL = os.environ.get("REDIS_URL", "")
 _connection = None
 _queue = None
 _unavailable_logged = False
+
+
+def _redact_url(url: str) -> str:
+    """The URL without its user and password part, safe to write to a log."""
+    return re.sub(r"//[^@/]*@", "//***@", url or "")
 
 
 def _get_queue():
@@ -54,7 +60,7 @@ def _get_queue():
         _connection = redis.from_url(REDIS_URL)
         _connection.ping()
         _queue = Queue("default", connection=_connection)
-        logger.info("Redis queue connected (%s) - integration syncs will be enqueued, not run inline.", REDIS_URL)
+        logger.info("Redis queue connected (%s) - integration syncs will be enqueued, not run inline.", _redact_url(REDIS_URL))
         return _queue
     except Exception as e:
         if not _unavailable_logged:
