@@ -717,7 +717,13 @@ async def telegram_webhook(request: Request):
         return {"ok": True}
 
     logger.info(f"Telegram webhook: message from chat {chat_id}: {text[:50]}")
-    handle_incoming_message(chat_id, text)
+    # Approvals are accepted only in a one-to-one chat with the same person on both sides.
+    from_id = (message.get("from") or {}).get("id")
+    private = message.get("chat", {}).get("type") == "private" and (from_id is None or str(from_id) == str(chat_id))
+    if private:
+        handle_incoming_message(chat_id, text)
+    else:
+        handle_incoming_message(chat_id, text, private=False)
 
     return {"ok": True}
 
@@ -752,7 +758,11 @@ async def discord_webhook(request: Request):
         return {"ok": True}
 
     logger.info(f"Discord webhook: message from channel {channel_id}: {content[:50]}")
-    handle_incoming_message(channel_id, content)
+    # A message from a server (guild) channel is not a private conversation: approvals are ignored there.
+    if data.get("guild_id"):
+        handle_incoming_message(channel_id, content, private=False)
+    else:
+        handle_incoming_message(channel_id, content)
 
     return {"ok": True}
 
@@ -1074,6 +1084,8 @@ def set_autonomy(req: AutonomySettingsRequest):
     """
     if req.mode not in ("off", "semi", "full"):
         raise HTTPException(status_code=400, detail='mode must be "off", "semi", or "full"')
+    if req.approval_channel == "telegram" and str(req.approval_target or "").strip().startswith("-"):
+        raise HTTPException(status_code=400, detail="approval_target must be a private chat: a Telegram group id (a negative number) is not accepted.")
     ok = autonomy.set_autonomy(
         mode=req.mode, channels=req.channels, actions=req.actions,
         approval_channel=req.approval_channel, approval_target=req.approval_target,
