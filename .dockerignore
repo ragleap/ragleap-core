@@ -9,3 +9,5 @@ venv/
 *.log
 .DS_Store
 grants/
+backups/
+**/*_pre-update.sql
