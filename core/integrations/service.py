@@ -9,7 +9,7 @@ import logging
 import uuid
 from typing import Dict, Any, List, Optional
 
-from core.integrations.base import DataSource, encrypt_value, decrypt_value
+from core.integrations.base import DataSource, encrypt_secret, decrypt_value, protect_headers, reveal_headers
 from core.integrations.factory import get_connector, CONNECTOR_MAP
 
 logger = logging.getLogger(__name__)
@@ -34,7 +34,7 @@ def _row_to_data_source(row) -> DataSource:
         connection_string=decrypt_value(connection_string),
         api_endpoint=api_endpoint,
         api_key=decrypt_value(api_key),
-        api_headers=api_headers or {},
+        api_headers=reveal_headers(api_headers),
         query_template=query_template,
         field_mappings=field_mappings or {},
         user_identifier_field=user_identifier_field,
@@ -62,6 +62,11 @@ def create_data_source(
             f"Supported types: {', '.join(sorted(CONNECTOR_MAP.keys()))}"
         )
 
+    # Credentials are never stored in plain text: with no key this raises (the route answers 400).
+    enc_connection_string = encrypt_secret(connection_string)
+    enc_api_key = encrypt_secret(api_key)
+    stored_headers = protect_headers(api_headers)
+
     conn = _get_connection()
     try:
         cur = conn.cursor()
@@ -75,8 +80,8 @@ def create_data_source(
             """,
             (
                 data_source_id, name, source_type,
-                encrypt_value(connection_string), api_endpoint, encrypt_value(api_key),
-                json.dumps(api_headers or {}), query_template,
+                enc_connection_string, api_endpoint, enc_api_key,
+                json.dumps(stored_headers), query_template,
                 json.dumps(field_mappings or {}), user_identifier_field,
             ),
         )

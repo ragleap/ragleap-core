@@ -13,6 +13,23 @@ from core.integrations.base import BaseDatabaseConnector
 logger = logging.getLogger(__name__)
 
 
+_PLACEHOLDERS = ("{{user_id}}", "{{user_identifier}}")
+
+
+def _fill_placeholders(node, identifier: str):
+    """Put the identifier into the parsed filter as a plain value. The filter is data, never text that is
+    parsed again, so the identifier cannot add keys, operators or quotes to it."""
+    if isinstance(node, str):
+        for p in _PLACEHOLDERS:
+            node = node.replace(p, identifier)
+        return node
+    if isinstance(node, list):
+        return [_fill_placeholders(x, identifier) for x in node]
+    if isinstance(node, dict):
+        return {k: _fill_placeholders(v, identifier) for k, v in node.items()}
+    return node
+
+
 class MongoDBConnector(BaseDatabaseConnector):
     """MongoDB database connector"""
 
@@ -46,11 +63,7 @@ class MongoDBConnector(BaseDatabaseConnector):
                 projection = query_config.get('projection')
 
                 if user_identifier:
-                    safe_identifier = str(user_identifier).replace('$', '').replace('{', '').replace('}', '')
-                    filter_str = json.dumps(filter_query)
-                    filter_str = filter_str.replace('{{user_id}}', safe_identifier)
-                    filter_str = filter_str.replace('{{user_identifier}}', safe_identifier)
-                    filter_query = json.loads(filter_str)
+                    filter_query = _fill_placeholders(filter_query, str(user_identifier))
 
                 db = client[database]
                 coll = db[collection]

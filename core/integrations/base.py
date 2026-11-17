@@ -6,6 +6,8 @@ kept (same library, no Django dependency), workspace scoping removed
 (single-tenant).
 """
 import os
+import re
+import json
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -38,6 +40,47 @@ def encrypt_value(value: Optional[str]) -> Optional[str]:
     if fernet:
         return fernet.encrypt(value.encode()).decode()
     return value
+
+
+class MissingEncryptionKey(ValueError):
+    """Raised instead of storing a credential in plain text."""
+
+
+def encrypt_secret(value: Optional[str]) -> Optional[str]:
+    """Encrypt a credential for storage. Unlike encrypt_value it never falls back to plain text:
+    without ADDON_ENCRYPTION_KEY (or the cryptography library) it refuses to store the secret."""
+    if not value:
+        return value
+    fernet = _get_fernet()
+    if not fernet:
+        raise MissingEncryptionKey(
+            "ADDON_ENCRYPTION_KEY is not set, so credentials cannot be stored. Set the key and try again."
+        )
+    return fernet.encrypt(value.encode()).decode()
+
+
+_SENSITIVE_HEADER = re.compile(r"auth|cookie|token|secret|password|key|credential", re.IGNORECASE)
+
+
+def protect_headers(headers: Optional[Dict[str, str]]) -> Dict[str, str]:
+    """Headers as stored. If any header name looks like a credential, all headers are stored encrypted
+    (refused when there is no key); otherwise they are stored as given."""
+    headers = headers or {}
+    if any(_SENSITIVE_HEADER.search(str(name)) for name in headers):
+        return {"__enc__": encrypt_secret(json.dumps(headers))}
+    return headers
+
+
+def reveal_headers(stored) -> Dict[str, str]:
+    """Headers as the connector uses them: decrypts the form protect_headers writes, passes older rows through."""
+    if isinstance(stored, dict) and set(stored) == {"__enc__"}:
+        text = decrypt_value(stored["__enc__"])
+        try:
+            return json.loads(text)
+        except (TypeError, ValueError):
+            logger.error("Stored connector headers could not be decrypted (key mismatch or damaged data).")
+            return {}
+    return stored or {}
 
 
 def decrypt_value(value: Optional[str]) -> Optional[str]:
