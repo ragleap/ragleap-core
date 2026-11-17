@@ -149,6 +149,42 @@ Limits specific to this measurement:
 - Kokoro's Hindi path uses the GPLv3 espeak-ng package according to its model card; it was installed from the OS package manager for this measurement only.
 - `colab_tts_roundtrip.py` was assembled from three cells that were each run successfully. The combined script has not been run end to end as one piece.
 
+## TTS round trip: ZONOS3-Mini (first measurement, not a recommendation)
+
+The same intelligibility proxy as the section above, on a smaller set: 5 sentences per language (the first five of the 20 used above; the two scripts apply the same filter in the same order, which was read in both and not compared line by line), synthesized by ZONOS3-Mini with its two stock voices (Ananya, Hindi, female; Sravya, Telugu, female), read back by IndicConformer-600m and compared with the text. Tamil, Malayalam and Kannada have no stock voice, so those sentences were spoken by the Hindi or the Telugu voice.
+
+| Language | Voice | Round-trip WER | CER |
+|---|---|---|---|
+| Hindi | Ananya | 13.0% | 2.4% |
+| Hindi | Sravya | 10.2% | 2.4% |
+| Tamil | Ananya | 15.6% | 11.4% |
+| Tamil | Sravya | 9.4% | 1.4% |
+| Telugu | Ananya | 10.1% | 0.8% |
+| Telugu | Sravya | 10.1% | 4.3% |
+| Malayalam | Ananya | 10.4% | 1.2% |
+| Malayalam | Sravya | 32.5% | 19.7% |
+| Kannada | Ananya | 20.6% | 7.6% |
+| Kannada | Sravya | 38.2% | 32.7% |
+
+Method:
+
+- Date 2026-11-17, Tesla T4 (15 GB), Google Colab, seed 1. Code revision 96d9e0ec1e (MIT) built as a CUDA server, weights revision d2d142a86b (Apache-2.0 per the model card). The first build took 3635 s; generation ran at a real-time factor of 0.13 to 0.23. Scripts: `colab_zonos3_smoke.py` (generation) and `colab_zonos3_judge.py` (read-back). Raw per-clip files are not committed.
+
+What it shows:
+
+- All 50 clips came out and none was silent. 40 of the 50 read back at under 5% character error.
+- 8 clips were clearly wrong (over 15% character error): ml_Sravya_00 (1.3 s of audio for a long sentence; the judge read back about 2% of it), kn_Sravya_00, kn_Sravya_03, kn_Sravya_04, ta_Ananya_01, kn_Ananya_04, ml_Sravya_04 and te_Sravya_00. Seven of the eight are in the three languages without a stock voice. In most of those pairs the other voice reads the same sentence back at under 5%, which suggests the fault is in the audio and not in the judge. That is a hint and not proof; for kn_Sravya_04 and kn_Ananya_04 both voices failed on the same long sentence.
+- A characters-per-second check on the audio length found only 2 of the 8; the judge's output length against the reference length finds cut or dropped speech better.
+
+Limits specific to this measurement:
+
+- 5 sentences per language, one run, one seed, two voices: no confidence interval, and differences between languages and voices are partly noise.
+- The Parler table above covers 20 sentences with one voice description; the two tables are not like for like, and the first five sentences of the Parler run are not shown separately. On word error, Zonos was in the same range as Parler on Hindi, Telugu and Tamil, similar on Malayalam, and clearly worse on Kannada; read that as a hint only.
+- The recogniser and Indic Parler-TTS come from the same organisation and may share training data (see the section above), which could favour Parler in any comparison; the recogniser is itself a model with errors on these languages and was not calibrated on this audio.
+- Naturalness, accent, emotion and voice similarity were not measured. Human listeners are needed, in particular for the 8 clips above. The WAV files are not committed.
+- Speeds are not like for like: a ggml CUDA server against a library run without optimisation.
+- ZONOS3-Mini can take a speaker recording or embedding as input; any use of that needs the speaker's consent, and none was made here. The model is not in the default path and is not verified.
+
 ## Whisper large-v3 on 12 languages from several regions (pilot)
 
 First non-Indian measurement for the language coverage matrix. Scripts: `colab_pilot12.py` (measurement) and `colab_pilot12_analysis.py` (intervals and diagnostics, same Colab session).
