@@ -569,6 +569,15 @@ def _notify_agent_loop(action_id: str, approved: bool, result: str, action_type:
         logger.warning(f"agent loop notification failed (non-fatal): {e}")
 
 
+def _approval_expiry_hours() -> int:
+    """How long a pending action may wait for an answer. APPROVAL_EXPIRY_HOURS, default 168 (7 days); 0 turns it off."""
+    try:
+        h = int(os.environ.get("APPROVAL_EXPIRY_HOURS", "168"))
+    except ValueError:
+        h = 168
+    return h if h > 0 else 876000
+
+
 def process_approval_response(message: str, decided_by: Optional[Dict] = None) -> Optional[str]:
     """
     Process an owner reply of the form "YES ABC123" or "NO ABC123".
@@ -590,8 +599,9 @@ def process_approval_response(message: str, decided_by: Optional[Dict] = None) -
         # run the effect. A second, simultaneous answer (dashboard, API or chat) finds no row.
         cur.execute(
             "DELETE FROM autonomy_pending WHERE action_id = %s "
-            "RETURNING action_type, channel, target, content, subject, role",
-            (action_id,),
+            "RETURNING action_type, channel, target, content, subject, role, "
+            "(created_at < now() - make_interval(hours => %s))",
+            (action_id, _approval_expiry_hours()),
         )
         row = cur.fetchone()
         conn.commit()
@@ -599,7 +609,7 @@ def process_approval_response(message: str, decided_by: Optional[Dict] = None) -
             cur.close()
             return f"Action {action_id} not found or already processed."
 
-        action_type, channel, target, content, subject, role = row
+        action_type, channel, target, content, subject, role, expired = row
         cur.close()
     except Exception as e:
         logger.error(f"process_approval_response lookup error: {e}", exc_info=True)
@@ -615,6 +625,14 @@ def process_approval_response(message: str, decided_by: Optional[Dict] = None) -
         )
         _notify_agent_loop(action_id, False, "", action_type)
         return f"Action {action_id} rejected and cancelled."
+
+    if expired:
+        # An old request is not a current decision: the situation may have changed since it was asked.
+        log_autonomous_action(action_type, channel, target, content, "EXPIRED: not run", approved=False, role=role,
+                              decided_by=decided_by, action_id=action_id)
+        _notify_agent_loop(action_id, False, "", action_type)
+        return (f"Action {action_id} expired (it waited longer than {_approval_expiry_hours()} hours) and was not run. "
+                "Ask for it again if you still want it.")
 
     result = _send_via_channel(channel, target, content)
     log_autonomous_action(action_type, channel, target, content, result, approved=True, role=role,
