@@ -6,4 +6,8 @@ Approvals ("YES <id>" or "NO <id>") count only when they come from a private, on
 - Discord: use a direct message conversation. An approval typed in a server channel is ignored.
 - Why: in a group the id that arrives belongs to the group, so everyone in it would look like the owner. Approvals from the dashboard or the API are not affected.
 
+## Pending approvals expire
+
+A pending action that waits longer than `APPROVAL_EXPIRY_HOURS` (default 168, which is 7 days) is not run when someone approves it late: the person gets a message that it expired, and it is logged as expired. Rejecting an old one still works. Set `APPROVAL_EXPIRY_HOURS=0` to turn the limit off.
+
 This helps an operator keep approvals with one person. It is not a certification of any kind.
