@@ -84,6 +84,13 @@ invalid or oversize JSON (100,000 characters by default), arguments that do not
 match the tool's schema, and any exception from the handler. `Tool.metadata` is
 a free-form dict for your own policy code; it is never sent to a provider.
 
+`call` is `prepare` followed by `run`. Use them separately when you must
+decide something between validating the arguments and running the handler
+(a policy, an approval, a rate limit): `prepare(name, arguments)` returns
+`(tool, arguments)` or the same failed `ToolResult` that `call` would return,
+without running the handler, and `run(tool, arguments)` runs the handler with
+the same containment as `call`.
+
 ## The 12 stateless tools
 
 No configuration needed - import and use directly.
