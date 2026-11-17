@@ -662,11 +662,18 @@ def _linked_approver(channel: str, sender) -> Optional[Dict]:
     return None
 
 
-def process_approval_from(channel: str, sender, message: str) -> Optional[str]:
+def process_approval_from(channel: str, sender, message: str, private: bool = True, actor=None) -> Optional[str]:
     """Like process_approval_response, but only honours the reply when it comes from the
     configured owner or a person whose chat is linked and who may approve. Anyone else gets None (the message
     falls through to normal chat), so a
     stranger cannot approve or reject actions, or learn whether an action id exists."""
+    # An approval counts only from a one-to-one conversation. In a group chat or a server channel the id
+    # that arrives is the group's, so anyone in it would count as the owner (F-CORE-006). When the caller
+    # also knows the person who wrote the message, that person must be the conversation's owner id.
+    if not private or (actor is not None and _norm_sender(channel, actor) != _norm_sender(channel, sender)):
+        if re.match(r"^\s*(YES|NO)\s+[A-Za-z0-9]{8}\s*$", message or "", re.IGNORECASE):
+            logger.warning(f"Approval-style message on {channel} ignored: approvals are accepted only in a private chat")
+        return None
     if not is_owner_sender(channel, sender):
         person = _linked_approver(channel, sender)
         if person is not None:

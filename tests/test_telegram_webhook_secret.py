@@ -43,7 +43,7 @@ class _Req:
     def __init__(self, headers, body=None):
         self.headers = headers
         self._body = body if body is not None else {
-            "message": {"chat": {"id": 424242}, "text": "example-text"},
+            "message": {"chat": {"id": 424242, "type": "private"}, "from": {"id": 424242}, "text": "example-text"},
         }
 
     async def json(self):

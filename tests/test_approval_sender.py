@@ -90,7 +90,7 @@ def test_non_owner_approval_attempt_is_logged(caplog):
 def test_telegram_router_passes_channel_and_sender():
     with patch.object(tg, "process_approval_from", return_value="done") as p, patch.object(tg, "send_telegram_message") as send:
         assert tg.handle_incoming_message(424242, "YES ABCD1234") == "done"
-    p.assert_called_once_with("telegram", 424242, "YES ABCD1234")
+    p.assert_called_once_with("telegram", 424242, "YES ABCD1234", private=True)
     send.assert_called_once_with(424242, "done")
 
 
@@ -104,7 +104,7 @@ def test_whatsapp_router_passes_channel_and_sender():
 def test_discord_router_passes_channel_and_sender():
     with patch.object(dc, "process_approval_from", return_value="done") as p, patch.object(dc, "send_discord_message") as send:
         assert dc.handle_incoming_message("555", "YES ABCD1234") == "done"
-    p.assert_called_once_with("discord", "555", "YES ABCD1234")
+    p.assert_called_once_with("discord", "555", "YES ABCD1234", private=True)
     send.assert_called_once_with("555", "done")
 
 

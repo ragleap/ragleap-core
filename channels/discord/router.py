@@ -63,7 +63,7 @@ def send_discord_message(channel_id, message_text: str) -> bool:
     return False
 
 
-def handle_incoming_message(channel_id, message_text: str) -> str:
+def handle_incoming_message(channel_id, message_text: str, private: bool = True) -> str:
     """
     Process an incoming Discord message: ask the core RAG pipeline,
     send the answer back to the channel, and return the answer text.
@@ -74,7 +74,7 @@ def handle_incoming_message(channel_id, message_text: str) -> str:
         return reply
 
     try:
-        approval_reply = process_approval_from("discord", channel_id, message_text)
+        approval_reply = process_approval_from("discord", channel_id, message_text, private=private)
         if approval_reply is not None:
             send_discord_message(channel_id, approval_reply)
             return approval_reply

@@ -75,7 +75,7 @@ def send_typing_action(chat_id) -> None:
         pass  # typing indicator is optional, never fail the request over it
 
 
-def handle_incoming_message(chat_id, message_text: str) -> str:
+def handle_incoming_message(chat_id, message_text: str, private: bool = True) -> str:
     """
     Process an incoming Telegram message: ask the core RAG pipeline,
     send the answer back to the chat, and return the answer text.
@@ -86,7 +86,7 @@ def handle_incoming_message(chat_id, message_text: str) -> str:
         return reply
 
     try:
-        approval_reply = process_approval_from("telegram", chat_id, message_text)
+        approval_reply = process_approval_from("telegram", chat_id, message_text, private=private)
         if approval_reply is not None:
             send_telegram_message(chat_id, approval_reply)
             return approval_reply
