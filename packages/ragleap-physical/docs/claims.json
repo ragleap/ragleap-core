@@ -425,6 +425,68 @@
    "status": "limitation",
    "evidence": [],
    "note": "The class-to-invariant mapping (benchmarks/redteam/invariants.json) is a hand-made reading of docs/safety-invariants.md, not a proof of coverage."
+  },
+  {
+   "id": "C31",
+   "claim": "The CSV replay adapter is observe-only: it has no command and no write path",
+   "where": "docs/industry/csv-replay-adapter.md",
+   "status": "verified",
+   "evidence": [
+    {
+     "type": "test",
+     "ref": "tests/test_csv_replay_adapter.py::test_there_is_no_command_and_nothing_is_a_target"
+    },
+    {
+     "type": "test",
+     "ref": "tests/test_csv_replay_adapter.py::test_even_a_control_bridge_cannot_change_the_replay"
+    },
+    {
+     "type": "test",
+     "ref": "tests/test_csv_replay_adapter.py::test_the_module_imports_only_the_standard_library_it_needs_and_has_no_network_code"
+    }
+   ],
+   "note": "Every limit and check of the adapter has a deliberate-break row; rows where a second guard refuses the same input are reported as equivalent. REAL. Simulated adapter only; no real file of a third-party dataset was used."
+  },
+  {
+   "id": "C32",
+   "claim": "Each file is at most 5,000,000 bytes, 100,000 data rows and 64 header cells",
+   "where": "docs/industry/csv-replay-adapter.md",
+   "status": "verified",
+   "evidence": [
+    {
+     "type": "test",
+     "ref": "tests/test_csv_replay_adapter.py::test_the_hard_caps_are_the_ones_the_guide_states"
+    },
+    {
+     "type": "test",
+     "ref": "tests/test_csv_replay_adapter.py::test_the_byte_cap_holds_for_bytes_and_for_text_and_cannot_be_raised_above_the_hard_cap"
+    },
+    {
+     "type": "test",
+     "ref": "tests/test_csv_replay_adapter.py::test_the_row_cap_holds_and_cannot_be_raised_above_the_hard_cap"
+    },
+    {
+     "type": "test",
+     "ref": "tests/test_csv_replay_adapter.py::test_the_column_cap_and_the_line_cap"
+    },
+    {
+     "type": "test",
+     "ref": "tests/test_csv_replay_adapter.py::test_the_field_cap"
+    },
+    {
+     "type": "test",
+     "ref": "tests/test_csv_replay_adapter.py::test_the_time_span_cap"
+    }
+   ],
+   "note": "The caps are hard: a caller may ask for lower byte and row caps, never for higher ones. Deliberate breaks checked. REAL."
+  },
+  {
+   "id": "C33",
+   "claim": "It has not been run on a real file of that dataset, and no claim is made that it works with that data",
+   "where": "docs/industry/csv-replay-adapter.md",
+   "status": "limitation",
+   "evidence": [],
+   "note": "The milling signal description is built from the signal table of a data paper and is marked [unverified]; its ranges are loose sanity bounds chosen here."
   }
  ]
 }
