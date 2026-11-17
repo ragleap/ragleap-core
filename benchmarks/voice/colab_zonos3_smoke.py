@@ -2,7 +2,7 @@
 Run once so far, on one T4: all 20 clips came out, but two were much shorter than their text suggests, which is why the summary now prints characters per second. It measures nothing about quality, naturalness, emotion or accent: it only shows whether the
 build works, the server answers, the five language codes (hi, ta, te, ml, kn) are accepted and audio comes out. A failed build or an
 environment problem is printed as such and is never a result about the model.
-Needs a Colab GPU runtime and no Hugging Face token (the weights are public). Takes over an hour on a T4 (the build alone took 3635 s in the first run). Mount Google Drive first or set Z_OUT, because results kept in /content are lost when Colab recycles the runtime.
+Needs a Colab GPU runtime and no Hugging Face token (the weights are public). Takes over an hour on a T4 (the build alone took 3635 s in the first run). Mount Google Drive first or set Z_OUT, because results kept in /content are lost when Colab recycles the runtime. Set Z_CACHE to a folder on Drive to keep the built server between runs (opt-in; the key is the code pin, the GPU architecture and the nvcc version; not tested yet).
 Prompts are FLEURS test sentence TEXT (CC-BY-4.0, no audio), the same filter as colab_tts_roundtrip.py.
 Stock voices: Ananya (Hindi, female) and Sravya (Telugu, female). Tamil, Malayalam and Kannada have no stock voice, so those sentences are
 spoken by a Hindi or Telugu voice: that can test intelligibility only, never accent. No real person's voice is cloned.
@@ -149,6 +149,20 @@ def main():
             stop("Rust install failed (environment problem):\n" + tail(WORK / "rustup.log", 15), 3)
     env_info["rustc"] = first_line(["rustc", "--version"]); say(env_info["rustc"])
 
+    # ---- 2b. optional build cache (opt-in: Z_CACHE is a folder on Drive) ----
+    cache_file = None
+    if os.environ.get("Z_CACHE"):
+        cache_dir = pathlib.Path(os.environ["Z_CACHE"]); cache_dir.mkdir(parents=True, exist_ok=True)
+        key = "%s_sm%s_%s" % (PIN_CODE[:10], cc, hashlib.sha1(str(nvcc).encode()).hexdigest()[:8])
+        cache_file = cache_dir / ("zonos3_build_%s.tar" % key)
+        if cache_file.exists() and not (WORK / "zonos3" / ".git").exists():
+            say("restoring the cached build %s (%.0f MiB) ..." % (cache_file.name, cache_file.stat().st_size / 2 ** 20))
+            r = run(["tar", "-xf", str(cache_file), "-C", str(WORK)])
+            if r.returncode:
+                say("cache restore failed, the server will be built instead: " + r.stderr[-200:])
+    else:
+        say("Z_CACHE is not set: the build will not be cached. Set it to a folder on Drive to skip the hour-long build next time.")
+
     # ---- 3. code at the pinned commit, only the submodules the server needs ----
     src = WORK / "zonos3"
     if not (src / ".git").exists():
@@ -178,6 +192,14 @@ def main():
     if exe is None:
         stop("the build finished but no zonos3-server binary was found under %s/build-cuda." % ggml, 3)
     say("server binary:", exe)
+    if cache_file is not None and not cache_file.exists():
+        say("saving the build to %s ..." % cache_file)
+        r = run(["tar", "-cf", str(cache_file) + ".part", "-C", str(WORK), "zonos3"])
+        if r.returncode == 0:
+            os.replace(str(cache_file) + ".part", str(cache_file))
+            say("saved, %.0f MiB" % (cache_file.stat().st_size / 2 ** 20))
+        else:
+            say("cache save failed (not a problem for this run): " + r.stderr[-200:])
 
     # ---- 5. weights at the pinned revision, with their SHA-256 ----
     r = run([sys.executable, "-m", "pip", "install", "-q", "huggingface_hub", "datasets==3.6.0"])
