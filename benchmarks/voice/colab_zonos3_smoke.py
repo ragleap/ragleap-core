@@ -1,8 +1,8 @@
 """Smoke test of ZONOS3-Mini on a Colab GPU: build the ggml server, run it on 127.0.0.1 only, make a few sentences per language.
-NOT RUN YET when this file was written. It measures nothing about quality, naturalness, emotion or accent: it only shows whether the
+Run once so far, on one T4: all 20 clips came out, but two were much shorter than their text suggests, which is why the summary now prints characters per second. It measures nothing about quality, naturalness, emotion or accent: it only shows whether the
 build works, the server answers, the five language codes (hi, ta, te, ml, kn) are accepted and audio comes out. A failed build or an
 environment problem is printed as such and is never a result about the model.
-Needs a Colab GPU runtime and no Hugging Face token (the weights are public). Takes about 30 to 40 minutes, mostly the build.
+Needs a Colab GPU runtime and no Hugging Face token (the weights are public). Takes over an hour on a T4 (the build alone took 3635 s in the first run). Mount Google Drive first or set Z_OUT, because results kept in /content are lost when Colab recycles the runtime.
 Prompts are FLEURS test sentence TEXT (CC-BY-4.0, no audio), the same filter as colab_tts_roundtrip.py.
 Stock voices: Ananya (Hindi, female) and Sravya (Telugu, female). Tamil, Malayalam and Kannada have no stock voice, so those sentences are
 spoken by a Hindi or Telugu voice: that can test intelligibility only, never accent. No real person's voice is cloned.
@@ -106,6 +106,8 @@ def generate_one(text, language, voice_id, seed=1):
 
 def main():
     say("ZONOS3-Mini smoke test. Pins: code %s, weights %s" % (PIN_CODE[:10], PIN_MODEL[:10]))
+    if not os.environ.get("Z_OUT") and not os.path.isdir("/content/drive/MyDrive"):
+        stop("Google Drive is not mounted and Z_OUT is not set: the results would be lost when the runtime is recycled. Mount Drive (from google.colab import drive; drive.mount('/content/drive')) or set Z_OUT, then run again.")
     bad = [k for k in os.environ if "TOKEN" in k.upper() and k != "COLAB_JUPYTER_TOKEN"]
     if bad:
         stop("token variable(s) set: %s. This test needs none: delete them and restart." % bad, 2)
@@ -268,6 +270,10 @@ def main():
     proc.terminate()
     ok_rows = [r for r in rows if not r["error"]]
     silent = [r["id"] for r in ok_rows if r["peak"] < 100]
+    cps = {r["id"]: r["chars"] / r["seconds"] for r in ok_rows if r.get("seconds")}
+    med = sorted(cps.values())[len(cps) // 2] if cps else 0
+    fast = sorted(k for k, v in cps.items() if med and v > 1.8 * med)
+    say("characters per second: median %.1f; more than 1.8 times the median (the speech may be cut or rushed): %s" % (med, fast or "none"))
     summary = {"env": env_info, "rows": rows, "clips_ok": len(ok_rows), "clips_total": len(rows), "silent_clips": silent}
     (OUT / "zonos3_smoke.json").write_text(json.dumps(summary, ensure_ascii=False, indent=1))
     say("\nclips ok: %d of %d; silent (peak < 100): %s; results and WAVs in %s" % (len(ok_rows), len(rows), silent or "none", OUT))
