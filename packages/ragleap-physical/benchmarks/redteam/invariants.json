@@ -1,0 +1,68 @@
+{
+ "source": "docs/safety-invariants.md (S1 to S13) of ragleap-physical 0.0.5, main commit e1b118ef6015; the class-to-invariant mapping is a hand-made reading of that page, not a proof of coverage",
+ "invariants": [
+  "S1",
+  "S2",
+  "S3",
+  "S4",
+  "S5",
+  "S6",
+  "S7",
+  "S8",
+  "S9",
+  "S10",
+  "S11",
+  "S12",
+  "S13"
+ ],
+ "classes": {
+  "bad_values": [
+   "S4"
+  ],
+  "wrong_targets": [
+   "S4"
+  ],
+  "stale_or_reused_approvals": [
+   "S2"
+  ],
+  "self_approval": [
+   "S2"
+  ],
+  "oversize_or_nested": [
+   "S7",
+   "S9"
+  ],
+  "bidi_and_control": [
+   "S7",
+   "S9"
+  ],
+  "replay_after_expiry": [
+   "S2"
+  ],
+  "stop_races": [
+   "S8"
+  ],
+  "forbidden_access": [
+   "S1",
+   "S10"
+  ],
+  "console_auth": [
+   "S2",
+   "S7"
+  ],
+  "console_approval": [
+   "S2",
+   "S7"
+  ],
+  "console_input": [
+   "S2",
+   "S7"
+  ],
+  "random_sequences": [
+   "S1",
+   "S2",
+   "S4",
+   "S5"
+  ]
+ }
+}
