@@ -97,3 +97,11 @@ Replacing a worn tool in the simulated machine is a method of the adapter. It is
 The bridge refuses an adapter that does not say it is simulated. Enforced in `bridge.py`.
 - `tests/test_bridge.py::test_real_hardware_refused`
 - `tests/test_adapter_conformance.py::test_simulated_is_true`
+
+## Red-team harness (a check, not an invariant)
+
+A seeded red-team harness (`benchmarks/redteam/`) sends generated hostile cases through the bridge, the four tools, the MCP server and the console, in simulation only, and reports any case that gets through. Its 13 classes exercise S1, S2, S4, S5, S7, S8, S9 and S10. The red-team harness does not cover S6, S11, S12 and S13, and it watches S3 only indirectly.
+
+"No finding" means the generated cases did not get through; it is not a proof that nothing can. The class-to-invariant mapping (`benchmarks/redteam/invariants.json`) is a hand-made reading of this page. Known gaps are named and never counted as findings. The harness tests live in `benchmarks/redteam/test_redteam.py`, outside the `tests/` folder, so the guard test of this page does not follow them; the claims ledger does.
+
+Run it from the package folder: `PYTHONPATH=src python benchmarks/redteam/redteam_harness.py --seed 1 --per-class 100`
