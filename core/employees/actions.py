@@ -14,6 +14,7 @@ always posts to the one configured URL. The request and answer text are treated
 as untrusted data in the prompt. Best-effort: any failure means "no action" and
 the normal answer is unaffected. Never raises.
 """
+import concurrent.futures
 import json
 import logging
 import os
@@ -50,6 +51,34 @@ ACTION_TOOLS = {
 }
 
 
+class ProviderTimeout(Exception):
+    """A provider did not answer a planning call within ACTION_PROVIDER_TIMEOUT seconds."""
+
+
+def _provider_timeout() -> float:
+    """Seconds one provider may take for one planning call. ACTION_PROVIDER_TIMEOUT, default 45; 0 turns the limit off."""
+    try:
+        return max(0.0, float(os.environ.get("ACTION_PROVIDER_TIMEOUT", "45")))
+    except ValueError:
+        return 45.0
+
+
+def _call_limited(service, config, prompt: str, max_tokens: int):
+    """One provider call that gives up after the time limit, so a slow provider cannot stall a run for minutes.
+    The abandoned call may still finish in the background; its answer is ignored."""
+    limit = _provider_timeout()
+    if not limit:
+        return service._call_provider(config, prompt, 0.0, max_tokens)
+    pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    future = pool.submit(service._call_provider, config, prompt, 0.0, max_tokens)
+    try:
+        return future.result(timeout=limit)
+    except concurrent.futures.TimeoutError:
+        raise ProviderTimeout(f"no answer in {limit:g} s")
+    finally:
+        pool.shutdown(wait=False)
+
+
 def call_with_fallback(service, prompt: str, max_tokens: int) -> str:
     """
     One planning/summary model call that survives a busy provider: try each configured
@@ -73,12 +102,17 @@ def call_with_fallback(service, prompt: str, max_tokens: int) -> str:
     for config in chain:
         for attempt in (0, 1):
             try:
-                text, _u = service._call_provider(config, prompt, 0.0, max_tokens)
+                text, _u = _call_limited(service, config, prompt, max_tokens)
                 if not (text or "").strip():
-                    text, _u = service._call_provider(config, prompt, 0.0, max_tokens * 2)
+                    text, _u = _call_limited(service, config, prompt, max_tokens * 2)
                 if (text or "").strip():
                     return text
                 break  # this provider answered but said nothing: try the next one
+            except ProviderTimeout as e:
+                last_error = e
+                logger.warning("Provider %s timed out during planning (%s); trying the next provider",
+                               config.get("provider"), e)
+                break  # no second try after a timeout: the next provider goes now
             except Exception as e:
                 last_error = e
                 logger.warning("Provider %s failed during planning (%s)%s",
