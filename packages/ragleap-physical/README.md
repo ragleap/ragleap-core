@@ -23,7 +23,7 @@ lives in the bridge, in one place. The model cannot change the limits.
 - A simulated machine tool (tool wear): the AI can only adjust a tool offset, in micrometres, inside an envelope (range,
   step size, minimum gap between changes). Changing the tool is a human action and is not a command. It is a model with
   invented numbers and says nothing about a real machine.
-- Hardened after independent review by two other AI sessions (see the CHANGELOG): stricter input and prediction checks, no self-approval.
+- Hardened after independent review (see the CHANGELOG): stricter input and prediction checks, no self-approval.
 - A three-joint arm model (MuJoCo XML in `examples/robots/`, plus a built-in stand-in), an offline ROS 2 observe-only mock that
   needs no ROS install, and a repeatability experiment in `benchmarks/` (exact replay within one installed environment;
   cross-machine repeatability is not claimed).
@@ -61,6 +61,6 @@ python examples/two_link_workspace_demo.py
 Report vulnerabilities privately through the repository's Security tab (see `SECURITY.md`).
 
 ## Other languages (drafts, not reviewed by native speakers)
-English (this file) is the original: if a translation differs, trust the English text. The Hindi and Tamil drafts are older and shorter than this file. The Spanish text was written by a native speaker, with translation tools, and has not been read by a second one.
+English (this file) is the original: if a translation differs, trust the English text. The Spanish text was written by a native speaker, with translation tools, and has not been read by a second one.
 
 [English (original)](https://github.com/ragleap/ragleap-core/blob/main/packages/ragleap-physical/README.md) · [Hindi](https://github.com/ragleap/ragleap-core/blob/main/packages/ragleap-physical/README.hi.md) · [Tamil](https://github.com/ragleap/ragleap-core/blob/main/packages/ragleap-physical/README.ta.md) · [Chinese, Simplified](https://github.com/ragleap/ragleap-core/blob/main/packages/ragleap-physical/README.zh-CN.md) · [Spanish](https://github.com/ragleap/ragleap-core/blob/main/packages/ragleap-physical/README.es.md)
