@@ -40,3 +40,24 @@ Phase A2, our endpoint receives:
 ## 4. Report back
 
 The Asterisk version and how it was installed, every command used, the counters, and the findings of step 6. Nothing except loopback addresses. Do not commit the capture file.
+
+## 5. First result: Test A on loopback (2026-11-18, one run, not a PBX or trunk)
+
+Setup actually used: Asterisk 22.12.0 built from asterisk-22-current.tar.gz (sha256 f8b2ba98aac6c4ff3376bc0a2868bea6ed577ca684efb7ec739ae6e8ce6e35e2, downloaded on 2026-11-17 from downloads.asterisk.org; no published checksum was found to compare with, so this only shows a later change), on Ubuntu 24.04 under WSL2 on a Windows laptop. The prerequisite script (contrib/scripts/install_prereq install) asked no questions; ./configure --with-jansson-bundled --with-pjproject-bundled; make -j8 took 3 min 20 s; make install; make samples was not run.
+
+Corrections to section 2 above:
+
+- Asterisk does not start with an empty /etc/asterisk: it exited with "modules.conf invalid or missing". The files used: modules.conf with autoload=yes, logger.conf with one console line, an empty asterisk.conf, and extensions.conf with one test context.
+- The dial string UnicastRTP/127.0.0.1:40000/c(ulaw) works in 22.12.0: the channel came up, direction sendrecv, native format ulaw. core show channeltypes also lists WebSocket and AudioSocket channel drivers.
+- PlayTones(440) was accepted without indications.conf. A call originated straight into an application ends when the application returns, and PlayTones returns at once, so the call has to be kept up: [atest] with PlayTones(440), Wait(15), Hangup(), started with: channel originate UnicastRTP/127.0.0.1:40000/c(ulaw) extension s@atest.
+- UNICASTRTP_LOCAL_ADDRESS and UNICASTRTP_LOCAL_PORT were set on the channel, and every packet came from exactly that address and port.
+
+The stream (one call of 15 s, 749 datagrams; a capture with tcpdump and the receiving script agreed on the count):
+
+- RTP version 2, no padding, no header extension, no CSRC, payload type 0, 160-byte payloads, one SSRC.
+- Sequence +1 and timestamp +160 on every step (748 of 748); the marker bit was not set on any packet; the first timestamp was 160.
+- Arrival gaps 19.2 to 20.6 ms (mean 20.0), none above 30 ms; about 880 sign changes per second in the payload, as for a 440 Hz tone.
+
+Our receiver on the real packets (RtpCall fed by a script that gave the expected remote to expect_remote() once the port was read from the channel variable; the UDP wrapper RtpMediaEndpoint was not used): 645 accepted, 104 remote_not_set (before the port was set, as designed), 146 queue_full; no other counter was above zero. queue_full is consistent with the script not reading audio_in() during the run, so the bounded frame queue (500) filled; the audio handed on was exactly 499 frames of 320 samples.
+
+Not tested: silence suppression, DTMF, hang-up from the signalling side, packet loss or jitter, sending audio back, SRTP, and any real PBX or trunk. Not explained: with no configuration and no call, Asterisk opened two UDP sockets on random ports (one IPv4, one IPv6); the module that does it was not identified.
