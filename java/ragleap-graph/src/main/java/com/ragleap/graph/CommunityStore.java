@@ -99,7 +99,7 @@ public final class CommunityStore {
             """;
     static final String MEMBER_NAMES = """
             MATCH (e:Entity)-[:IN_COMMUNITY]->(c:Community {composite_key: $community_id})
-            WHERE coalesce(e.user_id, '') = $user_id
+            WHERE e.namespace = $namespace AND coalesce(e.user_id, '') = $user_id
             RETURN e.display_name AS entity_name
             ORDER BY entity_name
             LIMIT $limit
@@ -115,7 +115,8 @@ public final class CommunityStore {
             Map.entry("relates_edges", RELATES_EDGES), Map.entry("existing", EXISTING), Map.entry("merge", MERGE),
             Map.entry("members", MEMBERS), Map.entry("delete", DELETE), Map.entry("display_names", DISPLAY_NAMES),
             Map.entry("relations", RELATIONS), Map.entry("set_summary", SET_SUMMARY), Map.entry("list", LIST),
-            Map.entry("by_entity", BY_ENTITY), Map.entry("member_names", MEMBER_NAMES));
+            Map.entry("by_entity", BY_ENTITY), Map.entry("member_names", MEMBER_NAMES),
+            Map.entry("relates_edges_open", RELATES_EDGES_OPEN), Map.entry("relations_open", RELATIONS_OPEN));
 
     private static final int MEMBER_LIMIT = 25;
     private static final int SUMMARY_LIMIT = 20000;
@@ -296,7 +297,7 @@ public final class CommunityStore {
                 if (includeMembers) {
                     members = new ArrayList<>();
                     for (Map<String, Object> m : run(MEMBER_NAMES, "community_id", row.get("community_id"),
-                            "user_id", uid, "limit", MEMBER_LIMIT)) {
+                            "namespace", ns, "user_id", uid, "limit", MEMBER_LIMIT)) {
                         members.add(str(m.get("entity_name")));
                     }
                 }
