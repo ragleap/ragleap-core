@@ -157,6 +157,18 @@ def test_a_delegation_makes_a_child_run_and_returns_its_result_to_the_parent(wor
     assert [c["id"] for c in t["children"]] == [child["id"]] and t["children"][0]["depth"] == 1
 
 
+def test_a_child_that_needs_no_tool_answers_the_task_itself(world):
+    answer = "A pending approval is an action that waits for a person to say yes or no."
+    svc = FakeService([plan("delegate", "support", TASK), DONE, answer, DONE, "Parent summary."])
+    agent_loop.run(Q, "d", svc, None)
+    parent, children = parent_and_children()
+    child = children[0]
+    assert child["status"] == "done" and child["steps"] == [] and child["summary"] == answer
+    assert parent["steps"][0]["observation"] == "Sub-agent support finished (done): " + answer
+    assert answer in svc.prompts[3]                       # the parent's next planning step sees the child's answer
+    assert child["tokens_used"] > 0
+
+
 def test_a_child_that_tries_to_delegate_is_refused_and_no_grandchild_exists(world):
     svc = FakeService([plan("delegate", "support", TASK), plan("delegate", "sales", "TEST-SUB deeper"), DONE, "ok"])
     agent_loop.run(Q, "d", svc, None)
@@ -180,7 +192,7 @@ def test_the_number_of_children_is_limited(world, monkeypatch):
 
 
 def test_the_same_delegation_twice_is_refused(world):
-    svc = FakeService([plan("delegate", "support", TASK), DONE, plan("delegate", "support", TASK)])
+    svc = FakeService([plan("delegate", "support", TASK), DONE, "Child answer.", plan("delegate", "support", TASK)])
     agent_loop.run(Q, "d", svc, None)
     parent, children = parent_and_children()
     assert len(children) == 1 and "same action was proposed twice" in parent["summary"]
