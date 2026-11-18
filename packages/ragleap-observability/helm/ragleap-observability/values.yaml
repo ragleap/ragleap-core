@@ -76,7 +76,7 @@ promtail:
 # so the chart refuses that combination.
 alloy:
   enabled: false
-  image: grafana/alloy:v1.20.1
+  image: grafana/alloy:v1.22.0
   # Host directory where Alloy keeps its read positions (the only writable host path).
   dataHostPath: /var/lib/ragleap-alloy
 
