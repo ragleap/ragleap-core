@@ -30,7 +30,7 @@ jobs:
       matrix:
         # Keep in sync with the ragleap-observability chart values.
         image:
-          - prom/prometheus:v3.13.4
+          - prom/prometheus:v3.16.0
           - grafana/grafana:12.4.15
           - grafana/loki:3.6.17
           - prom/alertmanager:v0.34.1
