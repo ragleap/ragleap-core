@@ -2,11 +2,11 @@
 # find_communities) by running the real Python methods against a fake Neo4j session that records every statement and
 # parameter, every audit call and every summarizer input. Writes community_index_cases.json into
 # RAGLEAP_GRAPH_PARITY_DIR (default /root/fixtures-graph-comm).
-# Pinned commit: 6892d8c83e2ffc52a4071cb456700bc761a73193 (packages/ragleap-graph).
-# Export first: git archive 6892d8c83e2ffc52a4071cb456700bc761a73193 packages/ragleap-graph | tar -x -C /root/py-graph-comm-pinned2
+# Pinned commit: 4d393f7aecc41cf94e27aa08f9e1960f0b5667c2 (packages/ragleap-graph).
+# Export first: git archive 4d393f7aecc41cf94e27aa08f9e1960f0b5667c2 packages/ragleap-graph | tar -x -C /root/py-graph-pin-main
 import copy, json, logging, os, sys
 logging.disable(logging.CRITICAL)
-SRC = os.environ.get("RAGLEAP_GRAPH_SRC", "/root/py-graph-comm-pinned2/packages/ragleap-graph/src")
+SRC = os.environ.get("RAGLEAP_GRAPH_SRC", "/root/py-graph-pin-main/packages/ragleap-graph/src")
 sys.path.insert(0, SRC)
 import ragleap_graph as rg
 assert rg.__file__.startswith(SRC), "wrong module path"
@@ -212,6 +212,7 @@ def run(sc):
     g = GraphIndex.__new__(GraphIndex)
     g.driver = Fake(sc, ev) if sc["driver"] else None
     g._audit = Audit(ev)
+    g.temporal = False  # __new__ skips __init__; temporal=False is the default
     kw = dict(DEF[sc["op"]])
     kw.update(sc["kwargs"])
     call = dict(kw)
