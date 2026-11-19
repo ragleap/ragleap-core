@@ -1,4 +1,4 @@
-"""Deliberate-break check for the red-team harness (issue #1205). AI-assisted.
+"""Deliberate-break check for the red-team harness (issue #1205).
 
 For each row: copy the package source to a scratch folder, change ONE thing, run the harness on the classes that must notice it and require that
 the report gets worse there (more 'passed', 'unclean' or 'error' than the unbroken control). A break that is not caught means the harness is blind

@@ -196,7 +196,7 @@
    "where": "README.md",
    "status": "limitation",
    "evidence": [],
-   "note": "Translations are AI-assisted drafts. Review calls: issues 1122, 1123 and 1281."
+   "note": "Translations are drafts that no second native speaker has read. Review calls: issues 1122, 1123 and 1281."
   },
   {
    "id": "C13",
@@ -383,7 +383,7 @@
      "ref": "tests/test_stop_revokes_approvals.py::test_clear_without_a_stop_does_not_revoke"
     }
    ],
-   "note": "Option A of issue 1338, proposed by the lead engineer; merged only if the maintainer decides so. Deliberate breaks checked. REAL. Simulated adapters only."
+   "note": "Option A of issue 1338, merged by the maintainer's decision. Deliberate breaks checked. REAL. Simulated adapters only."
   },
   {
    "id": "C29",

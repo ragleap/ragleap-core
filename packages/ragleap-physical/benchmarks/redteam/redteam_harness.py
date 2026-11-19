@@ -1,4 +1,4 @@
-"""Red-team harness for ragleap-physical (issue #1205), version 2. AI-assisted. Simulation only.
+"""Red-team harness for ragleap-physical (issue #1205), version 2. Simulation only.
 
 It generates seeded hostile proposals and hostile sequences and sends them through the bridge, the model-facing tools, the MCP server and the
 operator console (loopback, fake adapter, fake clock), then counts how each class was refused. It ONLY REPORTS: it uses public calls, never reads
