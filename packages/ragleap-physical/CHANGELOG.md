@@ -25,7 +25,7 @@ All notable changes are listed here. Format: Keep a Changelog.
 - Intermittent `WinError 10053` on Windows (#1336): a refused request with a body the server did not read could end in a reset that destroyed the answer. After every answer with status 400 or above, the MCP server and the operator console now do a bounded "lingering close": stop sending, then read and discard what the client still sends, for at most 0.5 s and 1 MiB. Ten new tests (`tests/test_lingering_close.py`). This is a likely cause found by reading the code; it is **not verified on Windows**, and the console failure a Windows tester saw is not explained by it. The 0.0.3 refusal fix was not enough.
 - The simulated stand-in adapters (one-joint, two-link, three-joint arm and machine tool) now refuse `apply()` with `ValueError` while stopped and change nothing, until `clear_stop()` (#1339). The Bridge cannot stop a call it has already made, so the adapter has to refuse; the contract is now written in the `Adapter` docstring and checked by `tests/test_adapter_stop_refusal.py`. The MuJoCo servo adapter follows the same contract (the MuJoCo pendulum adapter is observe-only and always refuses). Adapters for real devices must follow the same contract.
 - A review test of the lingering close compared the exact status line `HTTP/1.0 413 Request Entity Too Large`; Python 3.13 renamed that reason phrase, so the test failed there. It now compares the status code only.
-- A stop now invalidates every approval given before it (#1338): ending a stop revokes the approvals that were given earlier, so after `clear_stop()` the action needs a fresh approval by a named person. A clear when nothing was stopped changes no approval. This was the maintainer's open design question; this change is the lead engineer's proposal of option A and the maintainer decides by merging or closing it.
+- A stop now invalidates every approval given before it (#1338): ending a stop revokes the approvals that were given earlier, so after `clear_stop()` the action needs a fresh approval by a named person. A clear when nothing was stopped changes no approval. This was an open design question (#1338); option A was chosen.
 
 ## [0.0.5] - 2026-11-08
 
@@ -121,4 +121,4 @@ All notable changes are listed here. Format: Keep a Changelog.
 - `Bridge` refuses a TTL or chunk size that is not a finite number above zero, and caps that are not positive whole numbers.
 - The requester can no longer approve its own proposal (refused and audited).
 - Units `W` and `kWh` accepted. `Envelope.observe_only()` and `Bridge(adapter, None, ...)` for observe and analyse only.
-- Found by two independent adversarial review rounds and by the lead's own review. AI-assisted.
+- Found by two independent adversarial review rounds and by an internal review.

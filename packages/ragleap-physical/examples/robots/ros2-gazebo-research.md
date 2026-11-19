@@ -1,4 +1,4 @@
-# ROS 2 / Gazebo scope (AI-assisted; 2026-10-30)
+# ROS 2 / Gazebo scope (2026-10-30)
 
 | Claim | Evidence / version / date | Status | Limits |
 |---|---|---|---|

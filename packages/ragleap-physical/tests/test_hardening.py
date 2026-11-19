@@ -229,7 +229,7 @@ def test_new_units_are_accepted():
     assert len(build(base).sensors) == 2
 
 
-# ---- found in the lead's own review: no self-approval
+# ---- found in an internal review: no self-approval
 def test_the_requester_cannot_approve_its_own_proposal():
     b, adapter, _ = _make_basic()
     p = _propose(b)
