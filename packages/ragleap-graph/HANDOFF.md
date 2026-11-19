@@ -152,7 +152,7 @@ vector. Don't carry this over unguarded.
 - `ragleap-rag` v0.11.2 published to PyPI (README diagram fixes,
   benchmark DB isolation bug fixed)
 - Full 9-page GitHub wiki written and pushed
-  (`github.com/antonyrag/ragleap-core/wiki`)
+  (`github.com/ragleap/ragleap-core/wiki`)
 - Marketing/launch copy prepared in a separate handoff doc (Product
   Hunt, LinkedIn, Dev.to) — for `ragleap-rag` specifically, not
   `ragleap.com` the commercial platform (these are different products,
