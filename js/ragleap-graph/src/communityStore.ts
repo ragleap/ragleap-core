@@ -94,7 +94,7 @@ LIMIT $limit
 `;
 const MEMBER_NAMES = `
 MATCH (e:Entity)-[:IN_COMMUNITY]->(c:Community {composite_key: $community_id})
-WHERE coalesce(e.user_id, '') = $user_id
+WHERE e.namespace = $namespace AND coalesce(e.user_id, '') = $user_id
 RETURN e.display_name AS entity_name
 ORDER BY entity_name
 LIMIT $limit
@@ -422,7 +422,7 @@ export async function findIndexCommunities(
       };
       if (options.includeMembers) {
         const members: string[] = [];
-        for (const m of await runner.run(MEMBER_NAMES, { community_id: row.community_id, user_id: uid, limit: MEMBER_LIMIT })) {
+        for (const m of await runner.run(MEMBER_NAMES, { community_id: row.community_id, namespace: ns, user_id: uid, limit: MEMBER_LIMIT })) {
           members.push(m.entity_name as string);
         }
         hit.members = members;
