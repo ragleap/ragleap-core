@@ -74,3 +74,15 @@ Same setup as section 5.
 - Consequence: with a sender that stops transmitting during silence, the idle timeout (10 s without a valid packet) ends the call on our side. Without signalling there is no way to tell a long silence from a dead call, so this is a design decision that is still open; the value 10 s remains an untested starting value.
 - Closing our side stops the media only: Asterisk kept sending until its channels were hung up from the console, as the design notes say about hangup().
 - Not tested: sending audio back to Asterisk, a hang-up from the signalling side, packet loss and jitter, SRTP, and any real PBX or trunk.
+
+## 7. Third result: sending audio back with the real UDP endpoint (2026-11-19, one run, loopback, UnicastRTP route)
+
+Same setup as section 5. The dialplan extension used Echo(). The endpoint (RtpMediaEndpoint) was given 100 frames of 16 kHz audio (a 440 Hz tone, 2.0 s) with send_audio() after the expected remote had been set with expect_remote().
+
+- Asterisk echoed 100 packets back. Our receiver accepted 100 with no other counter above zero and no socket errors, and read 101 frames (2.0 s) of audio back.
+- A capture of the datagrams from our side (100 of them) shows RTP version 2, no extension, payload type 0, marker bit 0 on all of them, one SSRC, sequence and timestamp starting at random values and stepping by exactly 1 and 160 (the last sequence number was the first plus 99).
+- The returned tone had about 921 sign changes per second among loud samples (a 440 Hz tone gives about 880); the frequency was not measured more precisely, so this only says it is about right. An earlier figure of 1040, which counted across quiet samples too, was an artefact of the counting.
+- The events were call.started, playback.finished twice (120 ms apart, about 1.9 s after the start) and call.ended. The second playback.finished was not explained; a likely cause, not checked, is the padded last packet that flush_playback() queues.
+- A correction to the method: the text "Got RTP" does not appear in the Asterisk log of this version when rtp set debug is on, so the packets Asterisk received were shown by the echo and by the capture, not by its own log.
+- Not tested: the marker bit after a pause (our code never sets it), uneven bursts, loss and jitter, a hang-up from the signalling side, SRTP, and any real PBX or trunk.
+- With no configuration files, autoload=yes made Asterisk log "declined to load" errors for modules such as app_followme, chan_unistim and pbx_dundi; they were not investigated and did not affect these tests.
