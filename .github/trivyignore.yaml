@@ -46,3 +46,8 @@ vulnerabilities:
       - "usr/local/bin/gosu"
     statement: "gosu, the privilege-dropping helper in the official Postgres images, is built with Go 1.24.6, which carries the crypto/tls CVE-2025-68121 (fixed in Go 1.24.13). Present in postgres:16, postgres:16-alpine and pgvector/pgvector:pg16 on 2026-11-13. Reachability from these images was not assessed. Needs an upstream rebuild; re-check before the expiry, then remove this entry."
     expired_at: 2027-01-12
+  - id: CVE-2026-99306
+    purls:
+      - "pkg:deb/debian/linux-libc-devx"
+    statement: "linux-libc-dev (the Linux kernel header files, not a kernel) in neo4j:5-community, built on Debian 13.7, carries kernel CVE-2026-99306, fixed in 6.12.117-1. The upstream image was last rebuilt on 2026-11-12 and does not include the fix. A container runs on its host kernel; reachability has not been assessed. Temporary: remove this entry when neo4j publishes a rebuilt image, or at the expiry date, whichever comes first."
+    expired_at: 2026-12-17
