@@ -329,11 +329,11 @@
   },
   {
    "id": "C24",
-   "claim": "not verified on Windows",
+   "claim": "It has not been run by the project on Windows and has not been repeated by anyone else",
    "where": "CHANGELOG.md",
    "status": "limitation",
    "evidence": [],
-   "note": "Linux keeps the answer after the close, so it cannot show the symptom. A Windows retest of commit 99c47b1b or later is requested (issue 1114)."
+   "note": "Linux keeps the answer after the close, so it cannot show the symptom. One volunteer's run on Windows 11 with Python 3.11.4, reported in issue 1114: the commit before the change (e22693e) failed 9 of 50 iterations, the commit with it (99c47b1) 0 of 50. The two commits differ only by this change. A single machine and a single Python version; which test failed and the error text were asked for in the thread."
   },
   {
    "id": "C25",
