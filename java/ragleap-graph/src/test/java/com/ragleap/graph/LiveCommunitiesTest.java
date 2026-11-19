@@ -75,11 +75,20 @@ class LiveCommunitiesTest {
 
                 List<CommunityStore.Hit> all = graph.findCommunities(null, ns, null, 25, true);
                 assertEquals(expected.size(), all.size());
-                for (int i = 0; i < all.size(); i++) {
-                    assertEquals(expected.get(i).size(), all.get(i).size());
-                    assertEquals(expected.get(i).internalWeight(), all.get(i).internalWeight());
-                    assertEquals("S " + expected.get(i).size(), all.get(i).summary());
-                    assertEquals(expected.get(i).size(), all.get(i).members().size());
+                // Same-size communities have no fixed stored order (the id is a hash that contains the random namespace),
+                // so every stored community is matched to its expected one by id, not by position.
+                for (CommunityStore.Hit hit : all) {
+                    Communities.Community want = null;
+                    for (Communities.Community c : expected) {
+                        if (CompositeKey.of(ns, "", "community", c.membersHash()).equals(hit.communityId())) {
+                            want = c;
+                        }
+                    }
+                    assertTrue(want != null, "stored community not in the expected set: " + hit.communityId());
+                    assertEquals(want.size(), hit.size());
+                    assertEquals(want.internalWeight(), hit.internalWeight());
+                    assertEquals("S " + want.size(), hit.summary());
+                    assertEquals(want.size(), hit.members().size());
                 }
                 List<CommunityStore.Hit> byEntity = graph.findCommunities(List.of("Alpha One", "alpha two"), ns, null, 5, true);
                 assertEquals(1, byEntity.size(), byEntity.toString());
