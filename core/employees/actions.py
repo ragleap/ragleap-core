@@ -51,6 +51,13 @@ ACTION_TOOLS = {
 }
 
 
+def _blank(text) -> bool:
+    """True for an empty reply and for the placeholder the provider paths return instead of one."""
+    from core.generation import NO_ANSWER
+    t = (text or "").strip()
+    return not t or t == NO_ANSWER
+
+
 class ProviderTimeout(Exception):
     """A provider did not answer a planning call within ACTION_PROVIDER_TIMEOUT seconds."""
 
@@ -103,9 +110,9 @@ def call_with_fallback(service, prompt: str, max_tokens: int) -> str:
         for attempt in (0, 1):
             try:
                 text, _u = _call_limited(service, config, prompt, max_tokens)
-                if not (text or "").strip():
+                if _blank(text):
                     text, _u = _call_limited(service, config, prompt, max_tokens * 2)
-                if (text or "").strip():
+                if not _blank(text):
                     return text
                 break  # this provider answered but said nothing: try the next one
             except ProviderTimeout as e:

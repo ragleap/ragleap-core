@@ -179,6 +179,11 @@ def _split_reasoning_and_answer(text: str) -> Tuple[Optional[str], str]:
     return (reasoning or None), answer
 
 
+# What the provider paths return when a model answers with no visible text (a reasoning model that spent its whole
+# token budget thinking). Callers that retry on an empty answer must treat this text as empty too.
+NO_ANSWER = "No answer generated."
+
+
 class GenerationService:
     """
     Generates a grounded answer using the configured LLM_PROVIDER,
@@ -587,7 +592,7 @@ Reply with ONLY the number of the best answer."""
                 thinking_config=types.ThinkingConfig(thinking_budget=GEMINI_THINKING_BUDGET),
             ),
         )
-        text = response.text.strip() if response.text else "No answer generated."
+        text = response.text.strip() if response.text else NO_ANSWER
         finish_reason = None
         if response.candidates:
             fr = response.candidates[0].finish_reason
@@ -633,7 +638,7 @@ Reply with ONLY the number of the best answer."""
             temperature=temperature,
             messages=[{"role": "user", "content": prompt}],
         )
-        text = response.content[0].text.strip() if response.content else "No answer generated."
+        text = response.content[0].text.strip() if response.content else NO_ANSWER
         usage = None
         if getattr(response, "usage", None):
             usage = {
@@ -671,7 +676,7 @@ Reply with ONLY the number of the best answer."""
             max_tokens=max_tokens,
         )
         content = response.choices[0].message.content if response.choices else None
-        text = content.strip() if content else "No answer generated."   # same fallback as the Gemini and Anthropic paths
+        text = content.strip() if content else NO_ANSWER   # same fallback as the Gemini and Anthropic paths
         usage = None
         if getattr(response, "usage", None):
             usage = {
