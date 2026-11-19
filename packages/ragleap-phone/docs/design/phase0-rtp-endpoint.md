@@ -91,3 +91,19 @@ Read on 2026-11-16 at rfc-editor.org (RFC 4733, sections 2, 3, 5 and 6). Off by 
 ## Idle timeout on a route that stops sending in silence (measured 2026-11-18)
 
 Measured once on loopback with the UnicastRTP channel of Asterisk 22.12.0 (details in real-traffic-test-asterisk.md, section 6): when the sender stopped transmitting for 14 s, the call ended by idle_timeout 10 s after the last packet and the audio that followed was never delivered. The default of 10 s is therefore not safe for such a sender. No change was made; what to do (a longer value, a value per backend, or a liveness signal from the signalling side) is open.
+
+## Idle timeout: the options (written 2026-11-19, nothing changed in the code)
+
+What the code does today (read, and measured once, see the section above): the endpoint checks the timeouts about once a second, and ends the call with the reason idle_timeout when no packet has been accepted for idle_timeout_seconds. That value is a setting of EndpointConfig with a default of 10 and no upper limit, so an operator whose sender stops transmitting in silence can already raise it. max_call_seconds (default 3600) still limits the total length of a call.
+
+What is open is the default and what an adapter should say about its sender. Measured on one route only: the UnicastRTP channel of Asterisk 22.12.0 stops sending when nothing is played, and a silence of 14 s ended the call at 13 s. How a real PBX or trunk behaves was not measured.
+
+Options:
+
+1. Keep the default of 10 s and document that a sender which stops in silence needs a larger value. No code change. A caller who pauses longer than that on such a route loses the call, unless the operator has raised the value.
+2. Raise the default (for example to 60 s). Fewer cut calls on such a route, but a dead call then stays open longer, and without data on real senders the new number would be a guess like the old one.
+3. Keep the default, and let each backend adapter declare how its sender behaves in silence (for example that it stops sending), so the setting can be chosen per backend. This changes the adapter contract (Capabilities is a frozen dataclass with fixed fields), so it needs a design decision and tests before any code.
+
+A liveness signal from the signalling side (a backend that says the call is still up) would remove the need to guess, but the package has no signalling today, so none of the options above depends on it.
+
+Recommendation, not a decision: option 1 now, with this section as the documentation, and option 3 only after a second kind of backend has been measured. The decision belongs to the owner of the package.
