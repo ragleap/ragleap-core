@@ -32,8 +32,8 @@ real cluster:
   a human. Firing and resolved delivery were verified end to end on a live
   cluster against a Slack-compatible stand-in; a real Slack/email
   send has not yet been confirmed.
-- Images pinned to current releases (AlertManager v0.34.1, Loki 3.6.17,
-  Grafana 12.4.15, Prometheus v3.13.4). The Trivy counts are point-in-time
+- Images pinned to current releases (AlertManager v0.35.0, Loki 3.7.10,
+  Grafana 12.4.15, Prometheus v3.16.0). The Trivy counts are point-in-time
   measurements (findings with a fix available fell from 383 to 14 across
   these four images on 2026-10-03, with the earlier Grafana pin); the weekly
   scan in .github/workflows/trivy.yml reports the current ones. PostgreSQL exporter

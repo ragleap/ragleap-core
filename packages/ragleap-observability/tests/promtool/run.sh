@@ -2,7 +2,7 @@
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 chart="$here/../../helm/ragleap-observability"
-img=prom/prometheus:v3.13.4
+img=prom/prometheus:v3.16.0
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 helm template t "$chart" --set slo.enabled=true -s templates/prometheus-rules-configmap.yaml \

@@ -27,7 +27,7 @@ neo4jExporter:
 
 prometheus:
   enabled: true
-  image: prom/prometheus:v3.13.4
+  image: prom/prometheus:v3.16.0
   retention: 15d
   scrapeInterval: 30s
 
@@ -62,7 +62,7 @@ grafana:
 
 loki:
   enabled: true
-  image: grafana/loki:3.6.17
+  image: grafana/loki:3.7.10
   port: 3100
   retention: 168h   # 7 days -- UNVERIFIED, size for real retention needs
 
@@ -82,7 +82,7 @@ alloy:
 
 alertmanager:
   enabled: true
-  image: prom/alertmanager:v0.34.1
+  image: prom/alertmanager:v0.35.0
   port: 9093
   # No real receiver configured yet -- the default route logs to a
   # webhook receiver pointed at a placeholder URL that will fail
