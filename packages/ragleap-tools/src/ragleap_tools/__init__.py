@@ -64,6 +64,7 @@ from ragleap_tools._schema import ToolDefinitionError, validate_arguments
 from ragleap_tools.base import Tool, ToolError, ToolResult
 from ragleap_tools.decorator import tool
 from ragleap_tools.toolkit import Toolkit
+from ragleap_tools.governed import GovernedToolkit
 from ragleap_tools.calculator import CALCULATOR_TOOL
 from ragleap_tools.datetime_tools import ADD_TO_DATE_TOOL, CURRENT_DATETIME_TOOL, DATE_DIFFERENCE_TOOL
 from ragleap_tools.file_ops import FileOpsConfig, make_file_tools
@@ -121,6 +122,7 @@ __all__ = [
     "ToolDefinitionError",
     "tool",
     "Toolkit",
+    "GovernedToolkit",
     "default_toolkit",
     "validate_arguments",
     "STATELESS_TOOLS",

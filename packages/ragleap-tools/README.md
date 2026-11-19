@@ -91,6 +91,51 @@ decide something between validating the arguments and running the handler
 without running the handler, and `run(tool, arguments)` runs the handler with
 the same containment as `call`.
 
+## Run tools for several tenants (GovernedToolkit)
+
+`GovernedToolkit` wraps a `Toolkit` for a host that serves several tenants.
+Every call carries a `Scope` (a tenant, and optionally a subject, agent and
+session) that your own code has already established, and your rules decide what
+that scope may do:
+
+```python
+from ragleap_tools import GovernedToolkit
+from ragleap_tools.governed import RateLimit, Scope
+
+gk = GovernedToolkit(
+    kit,
+    allow_for=lambda scope: ["calculator"] if scope.tenant == "free" else kit.names(),
+    require_approval=["write_file"],        # approve() must say exactly True
+    approve=lambda scope, tool, arguments: ask_a_human(scope, tool, arguments),
+    rate_limit=RateLimit(calls=60, per_seconds=60),   # per tenant, per process
+    on_event=audit_sink,                    # one small dict per call attempt
+)
+result = gk.call(Scope(tenant="acme", subject="alice"), name, arguments)
+```
+
+The checks run in this order and the first failure stops the call: the scope
+must be exactly a `Scope`; the tool must exist and be named by
+`allow_for(scope)` (deny by default, and an unknown tool and a tool that is not
+allowed get the same answer, "tool not available"); the tenant's rate limit
+must have room; the arguments are validated; `approve` must return exactly
+`True` for a tool named in `require_approval`; then the handler runs. `call`
+never raises. The events never contain arguments or results, and `allow_for` or
+`approve` raising means refused.
+
+What it does not do:
+
+- It does not authenticate anybody. It trusts the `Scope` you pass, so its
+  isolation is only as strong as your own check of who the caller is.
+- A toolkit shared by several tenants shares its tools' state (one file root,
+  one API key per provider, one `RagLeap` instance). Build one toolkit per
+  tenant from that tenant's own configuration.
+- The rate limit is kept per process. Windows are kept for every tenant seen
+  until `forget(tenant)` is called.
+
+`Scope` is `ragleap_security.Scope` when `pip install ragleap-tools[security]`
+is installed, and an equivalent built-in class otherwise. The design, with the
+rejected alternatives and the limits, is in `docs/design/governed-toolkit.md`.
+
 ## The 12 stateless tools
 
 No configuration needed - import and use directly.
