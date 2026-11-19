@@ -61,3 +61,16 @@ The stream (one call of 15 s, 749 datagrams; a capture with tcpdump and the rece
 Our receiver on the real packets (RtpCall fed by a script that gave the expected remote to expect_remote() once the port was read from the channel variable; the UDP wrapper RtpMediaEndpoint was not used): 645 accepted, 104 remote_not_set (before the port was set, as designed), 146 queue_full; no other counter was above zero. queue_full is consistent with the script not reading audio_in() during the run, so the bounded frame queue (500) filled; the audio handed on was exactly 499 frames of 320 samples.
 
 Not tested: silence suppression, DTMF, hang-up from the signalling side, packet loss or jitter, sending audio back, SRTP, and any real PBX or trunk. Not explained: with no configuration and no call, Asterisk opened two UDP sockets on random ports (one IPv4, one IPv6); the module that does it was not identified.
+
+## 6. Second result: DTMF, silence and the UDP endpoint (2026-11-18, one run per case, loopback, UnicastRTP route)
+
+Same setup as section 5.
+
+- DTMF: the dialplan application SendDTMF(159) ran, and with rtp set debug on Asterisk reported 299 packets sent in that call, all of payload type 0. No telephone-event packets exist on this route, so the receive-DTMF option of the endpoint (dtmf_payload_type) does not apply to it. Whether Asterisk gives the digits another way, for example as events, was not checked.
+- Silence: this channel stops sending when nothing is played. In one call (tone, a pause of about 5 s with a digit command in it, tone) there was a single jump: sequence +1 and timestamp +39016 after 4878 ms. The receiver accepted it; its long_gaps counter went up once (the gap is capped at 1 s by design) and no other drop counter was above zero. Whether the first packet after the pause carried the marker bit was not recorded.
+- The real UDP endpoint (RtpMediaEndpoint, the expected remote given with expect_remote() after run() had started, audio_in() read continuously):
+  - Case A, a call of 15 s: 746 packets accepted, 3 remote_not_set, nothing else; 747 frames read (14.9 s of audio); socket errors 0; the call ended with idle_timeout 25.0 s after the start, 10 s after the audio stopped.
+  - Case B, tone 3 s, silence 14 s, tone 3 s: the call ended with idle_timeout at 13.0 s, 148 frames (2.9 s) were read, and the second tone was never delivered.
+- Consequence: with a sender that stops transmitting during silence, the idle timeout (10 s without a valid packet) ends the call on our side. Without signalling there is no way to tell a long silence from a dead call, so this is a design decision that is still open; the value 10 s remains an untested starting value.
+- Closing our side stops the media only: Asterisk kept sending until its channels were hung up from the console, as the design notes say about hangup().
+- Not tested: sending audio back to Asterisk, a hang-up from the signalling side, packet loss and jitter, SRTP, and any real PBX or trunk.

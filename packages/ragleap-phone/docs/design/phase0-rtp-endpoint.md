@@ -87,3 +87,7 @@ Read on 2026-11-16 at rfc-editor.org (RFC 4733, sections 2, 3, 5 and 6). Off by 
 - No integrity: RFC 4733 section 6 says integrity must be provided for this payload, and names SRTP, which this package does not have. A sender that passes the source check can forge digits. Do not use DTMF for secrets such as PINs until SRTP exists.
 - Tests use the example of RFC 4733 section 5 (the digits 9, 1, 1; the timestamps, durations and repeated final reports of its Table 5; the rows the table leaves out are filled in by its pattern) and hand-built bytes: this shows self-consistency, not interoperability.
 - The class-level flag capabilities.dtmf of RtpMediaEndpoint stays False because DTMF is off unless the operator turns it on. Not built: sending digits, packed reports, RFC 2198 redundant payloads, tone payloads.
+
+## Idle timeout on a route that stops sending in silence (measured 2026-11-18)
+
+Measured once on loopback with the UnicastRTP channel of Asterisk 22.12.0 (details in real-traffic-test-asterisk.md, section 6): when the sender stopped transmitting for 14 s, the call ended by idle_timeout 10 s after the last packet and the audio that followed was never delivered. The default of 10 s is therefore not safe for such a sender. No change was made; what to do (a longer value, a value per backend, or a liveness signal from the signalling side) is open.
