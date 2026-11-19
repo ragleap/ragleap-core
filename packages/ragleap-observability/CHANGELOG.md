@@ -13,6 +13,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Loki image pinned to 3.7.10 (was 3.6.17). Proven on a throwaway tag before this change: the Trivy image scan gate passed (run 44293034880), chart install, upgrade and uninstall on the same three Kubernetes versions with Loki datasource health OK after install and after upgrade (run 44293076392), and the end-to-end alert test (run 44293116070, all checks passed).
 - Prometheus image pinned to v3.16.0 (was v3.13.4). Proven on a throwaway tag before this change: the Trivy image scan gate passed with 1 HIGH and 0 CRITICAL rows on the Prometheus image (run 44302752855), chart install, upgrade and uninstall on the same three Kubernetes versions (run 44302794989), and the end-to-end alert test (run 44302835660): 4 rules loaded and healthy, the fast-burn alert fired during the outage and cleared, and RagleapTargetAbsent fired for a vanished target. The rule unit tests in `tests/promtool` now run on v3.16.0.
 
+- Combined stack: all three new images together in one chart (throwaway tag test-rel-observability-0.8.6): chart install, upgrade and uninstall run 44455114984 and end-to-end alert test run 44455142128, both successful. In the Trivy run 44455087589 of the same tag the gate passed on the three new images; the only failing job was neo4j:5-community, an image this chart does not deploy, which fails the same way on main (run 44458607496) because of a fixable CRITICAL finding in one of its Debian packages (linux-libc-dev, CVE-2026-99306, fixed in 6.12.117-1).
+
 ### Documentation
 
 - README: the pinned image versions are updated.
