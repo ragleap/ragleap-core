@@ -83,7 +83,8 @@ const DOCUMENT_ENTITIES = `
 MATCH (d:Document {id: $document_id, namespace: $namespace})
 WHERE coalesce(d.user_id, '') = $user_id
 MATCH (d)-[:CONTAINS]->(e:Entity)
-WHERE coalesce(e.user_id, '') = $user_id
+WHERE e.namespace = $namespace
+  AND coalesce(e.user_id, '') = $user_id
 RETURN e.name AS entity_id,
        e.display_name AS entity_name
 LIMIT 50
@@ -96,6 +97,8 @@ WHERE start.name IN $entity_names
 MATCH path = (start)-[*1..{max_depth}]-(related:Entity)
 WHERE related.namespace = $namespace
   AND coalesce(related.user_id, '') = $user_id
+  AND ALL(n IN nodes(path) WHERE n.namespace = $namespace
+          AND coalesce(n.user_id, '') = $user_id)
 RETURN DISTINCT related.name AS entity_id,
        related.display_name AS entity_name,
        type(relationships(path)[0]) AS relationship,
