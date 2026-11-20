@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "note": "LEGACY exceptions, not permission. Connector code under core/integrations must use HostServices (a later phase) instead of the network, the environment or a subprocess. These entries are today's uses; they are to be removed in Phase 2. The list can only shrink: the test also fails when an entry is no longer needed.",
+  "legacy_connectors": {
+    "airtable_connector.py": ["requests"],
+    "notion_connector.py": ["requests"],
+    "razorpay_connector.py": ["requests"],
+    "rest_api.py": ["requests"],
+    "slack_connector.py": ["requests"],
+    "woocommerce_connector.py": ["requests"]
+  },
+  "host_side": {
+    "base.py": {"os.environ": ["ADDON_ENCRYPTION_KEY"]},
+    "service.py": {"os.environ": ["DATABASE_URL"]}
+  }
+}
