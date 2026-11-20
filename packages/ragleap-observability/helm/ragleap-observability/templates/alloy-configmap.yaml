@@ -43,7 +43,7 @@ data:
         source_labels = ["__meta_kubernetes_pod_uid", "__meta_kubernetes_pod_container_name"]
         separator     = "/"
         target_label  = "__path__"
-        replacement   = "/var/log/pods/*$1/*.log"
+        replacement   = "/var/log/podz/*$1/*.log"
       }
     }
 
