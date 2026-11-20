@@ -63,7 +63,7 @@ data:
 
     loki.write "default" {
       endpoint {
-        url = "http://ragleap-loki.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.loki.port }}/loki/api/v1/push"
+        url = "http://ragleap-loki.{{ .Release.Namespace }}.svc.cluster.local:3199/loki/api/v1/push"
       }
     }
 {{- end }}
