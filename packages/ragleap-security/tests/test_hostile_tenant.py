@@ -84,12 +84,13 @@ def test_audit_data_cannot_forge_extra_records(tmp_path):
 
 
 def test_secret_values_do_not_leak_through_containers_or_exceptions():
-    s = SecretStr("sk-very-secret-value-123")
+    value = "fake-credential-for-tests-only-123"
+    s = SecretStr(value)
     shown = [repr({"k": s}), repr([s]), repr((s,)), str({"k": s}), f"{[s]}"]
     try:
         json.dumps({"k": s})
     except TypeError as e:
         shown.append(str(e))
     for text in shown:
-        assert "sk-very-secret-value-123" not in text
-    assert s.reveal() == "sk-very-secret-value-123"             # positive control
+        assert value not in text
+    assert s.reveal() == value                                   # positive control
