@@ -1,0 +1,42 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ragleap-flows"
+version = "0.1.0"
+description = "Multi-tenant flows as plain JSON data: tool steps, approval checkpoints and branches, run under a tenant Scope with durable pause and resume, hard limits and an audit trail without text. Built on ragleap-agents state stores and ragleap-security. Not n8n, no code in flow files, no eval. Not independently audited."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [
+    { name = "RagLeap" }
+]
+keywords = ["workflow", "flows", "approval", "human-in-the-loop", "multi-tenant", "llm", "agents", "self-hosted"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+dependencies = [
+    "ragleap-agents>=0.5.1",
+    "ragleap-security>=0.2.0",
+    "ragleap-tools>=0.5.1",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8.0.0"]
+
+[project.urls]
+Homepage = "https://github.com/ragleap/ragleap-core"
+Repository = "https://github.com/ragleap/ragleap-core"
+Issues = "https://github.com/ragleap/ragleap-core/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ragleap_flows"]
