@@ -41,3 +41,19 @@ Status: a proposal. Nothing here is built, no manifest entry exists, and the mod
 - Is an engine that talks to an operator-run local server acceptable, given that the model files can be verified but the server binary cannot?
 - Should the first version carry Hindi and Telugu only?
 - Is a GPU-only recommendation acceptable for a pre-alpha engine, with the CPU figure stated?
+
+## 6. Addendum after reading engine.py and worker.py (2026-11-20): the proposal in section 3 changes
+
+What was read: the Engine protocol (load(model_dirs), run(request), close()), Capabilities (kind, languages, clone, emotion, emotion_languages, streaming, hardware, watermarks_output, isolated, detects_language), Request (kind, language, audio, text, voice, emotion, speed, timestamps, options), Result (text, segments, wav, sample_rate, duration_s, language, notes) and worker.py. WorkerEngine runs a Python script in a separate process, sends it JSON lines (load, run, close), moves audio as files in a private folder, limits the worker's environment to PATH, LANG, LC_ALL, LC_CTYPE, SYSTEMROOT, LD_LIBRARY_PATH and CUDA_VISIBLE_DEVICES, and says in its own docstring that it is not a security sandbox. Timeouts: 900 s to load, 300 s per run; limits of 4 MiB per line and 512 MiB per WAV.
+
+The problem with section 3: with a server started by the operator, nothing ties the folder that models verify checks to the files the server actually loads. The capability list printed by the server in the smoke run showed keys only and no file path, so the engine could not prove which files are in use.
+
+Revised proposal (still a proposal): use WorkerEngine with a small standard-library worker script that starts the server from the verified folder in load (on 127.0.0.1, with no option that enables the studio, projects or helper workers), calls it over HTTP in run, and stops it in close. Gains: the files the server loads are the files that were verified; the worker owns the server's lifetime; the environment the server inherits is the restricted one unless the script passes another; the 900 s load timeout fits the measured start-up times on a laptop CPU (36 s to over 120 s). Costs and open points:
+
+- The server binary is still unverified and still built by the operator; this does not change.
+- The binary path does not reach the worker through model_dirs and the worker environment is restricted; how to pass it (a constructor argument like interpreter, or a subclass as the Parler engine may do) needs parler_engine.py and worker_runtime.py, which were not read.
+- Port choice: the server accepts --port 0 for an ephemeral port, but how the worker learns the port was not tested; picking a free port in the worker leaves a small race.
+- run_timeout of 300 s: a 10 s sentence took about 35 to 40 s on the laptop CPU, so very long texts need a stated limit.
+- What isolated=True promises (api.md section 8) was not read; this proposal does not rely on it yet.
+
+Still true: Hindi and Telugu only, stock voices only, unverified, never chosen by auto, no cloning before the consent design. The questions of section 5 stand; the first one becomes: is an engine that starts an operator-built server binary from a verified folder acceptable, given that the binary itself cannot be verified.
