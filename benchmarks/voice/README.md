@@ -185,6 +185,26 @@ Limits specific to this measurement:
 - Speeds are not like for like: a ggml CUDA server against a library run without optimisation.
 - ZONOS3-Mini can take a speaker recording or embedding as input; any use of that needs the speaker's consent, and none was made here. The model is not in the default path and is not verified.
 
+## ZONOS3-Mini on a laptop CPU (one run, no GPU)
+
+The same model files (the SHA-256 of the three files matched the GPU run) and the same code revision (96d9e0ec1e) as the section above, with the server built for the CPU (the standard cmake build, no CUDA) and started with `--cpu` on 127.0.0.1. Machine: a laptop with an AMD Ryzen 5 7520U (4 cores, 8 threads), run inside WSL2 with 6.8 GB of memory visible to Linux; no GPU. Dates 2026-11-19 and 2026-11-20. Seed 1, the same stock voices, and the first 5 Hindi and the first 5 Telugu sentences of the GPU run (the same filter).
+
+What was measured (generation seconds per second of audio, so below 1.0 is faster than real time):
+
+- Over the 10 clips after the first request the pooled factor was 3.35 (Hindi 3.70, Telugu 2.97; single clips from 2.75 to 4.31). On the T4 the factor for these sentences was 0.13 to 0.16, so the pooled CPU figure is about 23 times higher.
+- The first request after a start is slower: 47.0 s for 10.3 s of audio (about 4.6), and on a later fresh start 39.2 s for 5.0 s of audio (about 7.8, one short sentence). Those two figures are dominated by fixed costs and are not comparable with the pooled one.
+- Start-up took 36 s on the first start, 62 s on a start with `--zac-threads 1`, and the start with the default settings did not answer within 120 s on a later try; the cause of the differences was not established.
+- During generation the server used about 570 to 800 percent of one core out of a possible 800 (all eight threads busy), so a thread setting is unlikely to change the result much. Peak memory was 2.25 GB.
+
+What it shows: on this CPU the model is slower than real time by about three times or more, so it cannot speak live on this machine. A GPU was about 23 times faster in these runs.
+
+Limits specific to this measurement:
+
+- One low-power machine, one run per setting, ten clips in two languages; the start-up times varied between runs, and a Windows power mode or heat limit could not be checked from inside WSL2. A bigger CPU was not tested.
+- WSL2 adds an unknown overhead, and the thread settings of the backbone were not tuned.
+- The audio length differed from the GPU run for the same sentence and seed: nine of the ten clips were longer (by 0.1 to 1.0 s) and one was shorter (by 0.4 s). The CPU audio was not listened to and was not read back by a recogniser, so nothing here says it is as good as the GPU audio.
+- Nothing was measured for Tamil, Malayalam or Kannada on the CPU.
+
 ## Whisper large-v3 on 12 languages from several regions (pilot)
 
 First non-Indian measurement for the language coverage matrix. Scripts: `colab_pilot12.py` (measurement) and `colab_pilot12_analysis.py` (intervals and diagnostics, same Colab session).
