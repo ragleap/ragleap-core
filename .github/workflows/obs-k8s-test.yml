@@ -1,6 +1,7 @@
 name: obs-k8s-test
 
 # Kubernetes test of the ragleap-observability SLO alerts and AlertManager wiring on a throwaway kind cluster.
+# The job alloy-k8s-test tests the optional Alloy log shipper on its own cluster (Loki and Alloy only).
 # Manual (workflow_dispatch) or when a PR changes this file or the test folder. Not a required check.
 on:
   workflow_dispatch:
@@ -26,3 +27,16 @@ jobs:
           kind version || echo "kind is not preinstalled; the test script downloads v0.24.0"
       - name: SLO alerts and AlertManager delivery on kind
         run: bash packages/ragleap-observability/tests/k8s/obs-k8s-test.sh
+
+  alloy-k8s-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Tool versions
+        run: |
+          kubectl version --client
+          helm version --short
+          kind version || echo "kind is not preinstalled; the test script downloads v0.24.0"
+      - name: Alloy log shipper on kind (Loki and Alloy only)
+        run: bash packages/ragleap-observability/tests/k8s/alloy-k8s-test.sh
