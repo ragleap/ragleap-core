@@ -1,6 +1,5 @@
 {{- if .Values.alloy.enabled }}
 {{- if .Values.promtail.enabled }}
-{{- fail "alloy.enabled and promtail.enabled are both true: every log line would be shipped twice. Set promtail.enabled=false when enabling Alloy." }}
 {{- end }}
 apiVersion: v1
 kind: Namespace
