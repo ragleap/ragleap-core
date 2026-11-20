@@ -27,8 +27,9 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
-test = ["pytest>=8.0.0"]
+test = ["pytest>=8.0.0", "ragleap-security>=0.1.0"]
 ingest = ["ragleap-rag>=0.12.0"]
+security = ["ragleap-security>=0.1.0"]
 
 [project.urls]
 Homepage = "https://github.com/ragleap/ragleap-core"

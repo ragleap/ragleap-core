@@ -16,8 +16,26 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   that is not in the toolkit and arguments that are not a dict of string
   keys. `call` is now `prepare` followed by `run` and behaves as before. The
   split is the first step of the governed dispatch proposed in
-  `docs/design/governed-toolkit.md`; nothing else of that proposal is
-  implemented.
+  `docs/design/governed-toolkit.md`.
+- `GovernedToolkit` in the new module `ragleap_tools.governed` (also exported
+  from the package): a wrapper around a `Toolkit` for hosts that serve several
+  tenants, built on `Toolkit.prepare` and `Toolkit.run`. Every call carries a
+  `Scope`. In order: the scope must be exactly a `Scope`; the tool must exist
+  and be named by the owner's `allow_for(scope)` (deny by default; an unknown
+  tool and a tool that is not allowed get the same refusal); a per-tenant
+  sliding-window `RateLimit` must have room; the arguments are validated;
+  tools named in `require_approval` need `approve(scope, tool, arguments)` to
+  return exactly `True`; then the handler runs. A raising or malformed
+  `allow_for` or `approve` refuses the call. `on_event` receives one small dict
+  per call attempt (never arguments or results), shaped like the MCP events of
+  `ragleap-integrations`. `forget(tenant)` drops a tenant's rate window. The
+  module also holds `RateLimit`, `Scope` and `GovernanceConfigError`. `Scope` is
+  `ragleap_security.Scope` when the new optional extra `security` is installed
+  and an equivalent built-in class otherwise.
+- The optional extra `security` (`ragleap-security`), also added to `test`.
+- This is the second step of `docs/design/governed-toolkit.md`. Not part of
+  it: authentication, a per-tenant toolkit hub, persistence of events and a
+  rate limit shared between processes.
 
 ## [0.5.1] - 2026-10-19
 
