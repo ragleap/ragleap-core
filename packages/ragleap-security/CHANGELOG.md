@@ -3,6 +3,14 @@
 All notable changes to `ragleap-security` are documented here. Format
 loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+Tests only. No code change, no behaviour change, no new release needed.
+
+### Added
+
+- `tests/test_hostile_tenant.py`: attacks a hostile tenant would try, each with a positive control: every scope key is unique and parses back; hostile tenant names and keys (newline, NUL, U+2028, non-ASCII digits, fullwidth letters, `/` and `=`) are refused; flooding a rate limiter with new keys cannot reset a throttled key and only blocks *new* keys until buckets refill (documented fail-closed trade-off); audit data cannot forge extra records and moving a record to another tenant is detected; secret wrappers do not leak through containers or exceptions.
+
 ## [0.2.0] - 2026-11-07
 
 Design: #1237. Nothing from 0.1.0 changed: there are no behaviour changes, and every 0.1.0 name still works. The new modules are additive.

@@ -3,6 +3,14 @@
 All notable changes to `ragleap-memory` are documented here. Format
 loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+Tests only. No code change, no behaviour change, no new release needed.
+
+### Added
+
+- `tests/test_hostile_tenant.py`, run against both `SQLiteStore` and `ShardedStore`: a foreign id and an unknown id give the same message for `get`, `supersede` and `derived_from`; 19 hostile search queries (FTS5 operators, column filters, `NEAR`, prefixes, quotes, SQL strings, NUL, U+2028) never return another tenant and leave the tables intact; wildcard and injection ids delete nothing; a crafted import file cannot write into, link to or supersede another tenant's entries and cannot raise its own trust; tenant names that differ only in case get separate files; the database, `-wal` and `-shm` files stay `0600` and the shard directory `0700` under umask 022; a tenant-wide scope reads its narrower scopes by design and never the reverse; 6 threads of mixed operations across 4 tenants produce no cross-tenant read, delete or error.
+
 ## [0.3.1] - 2026-11-12
 
 Design: #1294. Encrypted export and import. No schema change. No new cryptography: every byte is encrypted and decrypted by `ragleap_security.crypto` (AES-256-GCM); this package only frames the file.
