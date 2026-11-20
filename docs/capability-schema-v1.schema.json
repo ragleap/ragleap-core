@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:ragleap:capability:1",
+  "title": "RagLeap capability declaration, version 1 (draft)",
+  "description": "What an integration says it can do. The RagLeap core reads it and enforces its own rules; a declaration can only narrow what is allowed, never widen it. Fields under descriptive are not enforced.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "id", "version", "kind", "operations"],
+  "properties": {
+    "schema": {"const": "ragleap.capability/1"},
+    "id": {"type": "string", "maxLength": 64, "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"},
+    "version": {"type": "string", "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"},
+    "kind": {"enum": ["action", "datasource", "mcp"]},
+    "operations": {"type": "array", "minItems": 1, "maxItems": 64, "items": {"$ref": "#/$defs/operation"}},
+    "scope": {"$ref": "#/$defs/scope"},
+    "network": {"$ref": "#/$defs/network"},
+    "secrets": {"type": "array", "maxItems": 16, "uniqueItems": true, "items": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]*$", "maxLength": 64}},
+    "budgets": {"$ref": "#/$defs/budgets"},
+    "descriptive": {"$ref": "#/$defs/descriptive"}
+  },
+  "$defs": {
+    "operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "effect"],
+      "properties": {
+        "name": {"type": "string", "maxLength": 48, "pattern": "^[a-z][a-z0-9_]*$"},
+        "effect": {"enum": ["read", "write", "external_send", "execute"]},
+        "approval": {"enum": ["always", "per_mode"]},
+        "taint": {"enum": ["none", "tainting", "outbound", "both"]},
+        "args": {"type": "string", "maxLength": 200}
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["level"],
+      "properties": {
+        "level": {"enum": ["organization", "user"]},
+        "user_filter_field": {"type": "string", "maxLength": 64, "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"}
+      }
+    },
+    "network": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "hosts": {"type": "array", "maxItems": 32, "uniqueItems": true, "items": {"type": "string", "maxLength": 253, "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$"}},
+        "https_only": {"const": true},
+        "tcp": {"type": "array", "maxItems": 8, "items": {"$ref": "#/$defs/tcp"}}
+      }
+    },
+    "tcp": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["host", "port"],
+      "properties": {
+        "host": {"type": "string", "maxLength": 253, "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$"},
+        "port": {"type": "integer", "minimum": 1, "maximum": 65535}
+      }
+    },
+    "budgets": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_calls_per_run": {"type": "integer", "minimum": 1, "maximum": 1000},
+        "max_calls_per_day": {"type": "integer", "minimum": 1, "maximum": 100000},
+        "max_bytes": {"type": "integer", "minimum": 1, "maximum": 104857600},
+        "timeout_s": {"type": "integer", "minimum": 1, "maximum": 300}
+      }
+    },
+    "descriptive": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "title": {"type": "string", "maxLength": 100},
+        "notes": {"type": "string", "maxLength": 500},
+        "data_classes": {"type": "array", "maxItems": 16, "uniqueItems": true, "items": {"type": "string", "maxLength": 32, "pattern": "^[a-z][a-z_]*$"}}
+      }
+    }
+  }
+}
