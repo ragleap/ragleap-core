@@ -1,0 +1,14 @@
+{
+  "schema": "ragleap.capability/1",
+  "id": "example.crm",
+  "version": "1.0.0",
+  "kind": "action",
+  "operations": [
+    {"name": "update_crm_record", "effect": "external_send", "approval": "per_mode", "taint": "outbound", "args": "crm-update-args"}
+  ],
+  "scope": {"level": "organization"},
+  "network": {"hosts": ["api.example-crm.com"], "https_only": true},
+  "secrets": ["EXAMPLE_CRM_TOKEN"],
+  "budgets": {"max_calls_per_run": 5, "max_calls_per_day": 100, "max_bytes": 262144, "timeout_s": 20},
+  "descriptive": {"title": "Example CRM updates", "data_classes": ["personal"]}
+}

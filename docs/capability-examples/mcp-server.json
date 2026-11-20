@@ -1,0 +1,11 @@
+{
+  "schema": "ragleap.capability/1",
+  "id": "example.mcp_notes",
+  "version": "1.2.3",
+  "kind": "mcp",
+  "operations": [
+    {"name": "call_tool", "effect": "external_send", "approval": "per_mode", "taint": "both"}
+  ],
+  "network": {"hosts": ["mcp.example-notes.com"], "https_only": true},
+  "budgets": {"max_calls_per_run": 3, "max_bytes": 131072, "timeout_s": 20}
+}

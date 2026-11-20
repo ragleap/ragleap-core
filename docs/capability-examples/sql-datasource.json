@@ -1,0 +1,13 @@
+{
+  "schema": "ragleap.capability/1",
+  "id": "example.sql",
+  "version": "0.1.0",
+  "kind": "datasource",
+  "operations": [
+    {"name": "fetch_rows", "effect": "read", "taint": "tainting"}
+  ],
+  "scope": {"level": "user", "user_filter_field": "user_id"},
+  "network": {"tcp": [{"host": "db.example-company.com", "port": 5432}]},
+  "secrets": ["EXAMPLE_DB_PASSWORD"],
+  "budgets": {"max_calls_per_run": 20, "timeout_s": 30}
+}
