@@ -57,3 +57,22 @@ Revised proposal (still a proposal): use WorkerEngine with a small standard-libr
 - What isolated=True promises (api.md section 8) was not read; this proposal does not rely on it yet.
 
 Still true: Hindi and Telugu only, stock voices only, unverified, never chosen by auto, no cloning before the consent design. The questions of section 5 stand; the first one becomes: is an engine that starts an operator-built server binary from a verified folder acceptable, given that the binary itself cannot be verified.
+
+## 7. What parler_engine.py, worker_runtime.py and the rest of worker.py show (read 2026-11-20)
+
+Read: parler_engine.py (first 70 lines), worker_runtime.py (structure), api.md section 8, worker.py lines 49 to 100 and 173 to 280, and the format policy in locks.py and pull.py. Not read: the rest of locks.py and pull.py (so whether plan_lock has another check for GGUF files is open), the full parler_worker.py, and how the manifest checks a worker engine's declared hardware.
+
+- The Parler engine is a thin subclass of WorkerEngine whose run() refuses speed, emotion and voice before calling the parent (voice is reserved: cloning needs consent, #763). A Zonos engine would do the same.
+- Worker protocol: a worker script calls serve(handlers) from worker_runtime.py (52 lines); each handler takes a message and returns a dict; the operations are load, run and close. The worker answers a run with wav_path (it must stay inside the worker's private folder), sample_rate, duration_s and language; the parent caps a WAV at 512 MiB.
+- The worker's environment is built from PATH, LANG, LC_ALL, LC_CTYPE, SYSTEMROOT, LD_LIBRARY_PATH and CUDA_VISIBLE_DEVICES, plus a private HOME, HF_HOME, XDG_CACHE_HOME and TMPDIR, HF_HUB_OFFLINE=1, TRANSFORMERS_OFFLINE=1, PYTHONUNBUFFERED=1 and PYTHONDONTWRITEBYTECODE=1. load() sends the worker only model_dirs. So a variable such as ZONOS3_SERVER_BIN would not reach the worker.
+- The interpreter comes from the interpreter argument or from an environment variable; a worker script that uses only the standard library can run with sys.executable, so no separate environment would be needed for Zonos.
+- Format policy: the unsafe suffixes are .pt .pth .bin .pkl .pickle .ckpt .joblib and .dill, with one closed exception (ctranslate2 on .bin). .gguf is not among them, so the three weight files can be locked without a policy change; what a GGUF file can contain beyond tensors was not checked.
+- A WorkerEngine must declare capabilities.isolated=True (ValueError otherwise). api.md section 8 names conflicting pins and model-supplied code as the reasons; for Zonos the reason would be a native binary that cannot be verified. The owner should decide whether that is an acceptable use of the flag.
+
+Ways to give the worker the path of the server binary (a proposal, ranked):
+
+1. The operator puts the server binary on PATH, and the worker script finds it with shutil.which. No change to the core. The binary stays unverified and the operator is responsible for it.
+2. A small, explicit extension of the worker framework: an engine declares extra environment variable names that may pass through, or load() carries an engine-specific configuration dictionary. A core change, for the owner.
+3. A binary copied into the verified model folder. Not recommended: a binary is not a model file and no lock would cover it.
+
+Recommendation, not a decision: a first version with option 1, Hindi and Telugu only, stock voices only, unverified, never chosen by auto, GPU recommended with the measured CPU figure stated. Size: an engine class like ParlerEngine, a worker script of about the size of parler_worker.py using serve(), a manifest entry (a protected file, a pull request for the owner) and a lock for the three files and the voices folder. Nothing is built.
