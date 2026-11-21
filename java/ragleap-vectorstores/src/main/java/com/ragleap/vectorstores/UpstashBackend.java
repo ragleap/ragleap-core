@@ -122,6 +122,11 @@ public final class UpstashBackend implements VectorBackend, AutoCloseable {
         if (filter == null || filter.isEmpty()) {
             return "";
         }
+        for (String key : filter.keySet()) {
+            if (key == null || !key.matches("[A-Za-z_][A-Za-z0-9_.]*")) {
+                throw new IllegalArgumentException("Invalid metadata filter key: " + (key == null ? "None" : PyRepr.str(key)));
+            }
+        }
         StringJoiner j = new StringJoiner(" AND ");
         for (Map.Entry<String, Object> e : filter.entrySet()) {
             j.add(e.getKey() + " = " + filterValue(e.getValue()));

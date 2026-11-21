@@ -47,6 +47,10 @@ import java.util.Optional;
  */
 public final class OpenSearchBackend implements VectorBackend {
     private static final ObjectMapper MAPPER = new ObjectMapper();
+    /** The only filterable fields (the others are stored unindexed), sorted like Python's sorted(allowed). */
+    private static final List<String> ALLOWED_FILTER_KEYS =
+            List.of("chunk_index", "document_id", "document_name", "tenant_id", "token_count");
+    private static final System.Logger LOG = System.getLogger("com.ragleap.vectorstores");
     private static final String MISSING_URL = "OpenSearchBackend requires opensearch_url= - e.g. "
             + "'http://localhost:9200'. This must point at a real running OpenSearch instance - there is no "
             + "embedded/local mode for OpenSearch, unlike Chroma/LanceDB.";
@@ -278,7 +282,8 @@ public final class OpenSearchBackend implements VectorBackend {
             request("PUT", indexPath(), null, tree("""
                     {"settings":{"index":{"knn":true}},"mappings":{"properties":{
                     "embedding":{"type":"knn_vector","dimension":%d,"method":{"name":"hnsw","engine":"lucene","space_type":"cosinesimil"}},
-                    "document_id":{"type":"keyword"},"document_name":{"type":"keyword"},"chunk_index":{"type":"integer"},
+                    "document_id":{"type":"keyword"},"document_name":{"type":"keyword"},"tenant_id":{"type":"keyword"},
+                    "chunk_index":{"type":"integer"},
                     "token_count":{"type":"integer"},"text":{"type":"text"},"metadata":{"type":"object","enabled":false}}}}
                     """.formatted(dimensions)));
         } else {
@@ -291,6 +296,13 @@ public final class OpenSearchBackend implements VectorBackend {
                             + "dimension " + dim.asText() + ", but this call requested dimension " + dimensions
                             + ". Use a different index_name or a matching dimension.");
                 }
+            }
+            try {
+                request("PUT", indexPath() + "/_mapping", null, tree("{\"properties\":{\"tenant_id\":{\"type\":\"keyword\"}}}"));
+            } catch (SQLException | RuntimeException e) {
+                // a filter on an unmapped field matches nothing, so this stays safe
+                LOG.log(System.Logger.Level.WARNING, "OpenSearchBackend: could not add the tenant_id mapping to '" + indexName
+                        + "': " + e.getMessage());
             }
         }
         if (!exists(documentsIndexName)) {
@@ -326,6 +338,10 @@ public final class OpenSearchBackend implements VectorBackend {
         body.put("token_count", tokenCount == null ? 0 : tokenCount);
         body.put("text", text);
         body.put("metadata", PyJson.dumps(metadata == null ? Map.of() : metadata));
+        Object tenant = metadata == null ? null : metadata.get("tenant_id");
+        if (tenant != null) {
+            body.put("tenant_id", RedisBackend.pyStr(tenant));
+        }
         request("PUT", indexPath() + "/_doc/" + quote(chunkId), "refresh=true", body);
     }
 
@@ -342,6 +358,18 @@ public final class OpenSearchBackend implements VectorBackend {
         ObjectNode q = MAPPER.createObjectNode();
         q.put("size", topK);
         if (metadataFilter != null && !metadataFilter.isEmpty()) {
+            List<String> unknown = new ArrayList<>();
+            for (String key : metadataFilter.keySet()) {
+                if (!ALLOWED_FILTER_KEYS.contains(key)) {
+                    unknown.add(key);
+                }
+            }
+            if (!unknown.isEmpty()) {
+                unknown.sort(null);
+                throw new IllegalArgumentException("OpenSearchBackend can only filter by " + PyRepr.list(ALLOWED_FILTER_KEYS)
+                        + ", got " + PyRepr.list(unknown) + ": other metadata is stored unindexed, so such a filter would "
+                        + "silently match nothing");
+            }
             ObjectNode bool = q.putObject("query").putObject("bool");
             bool.putArray("must").addObject().set("knn", knn);
             ArrayNode filters = bool.putArray("filter");

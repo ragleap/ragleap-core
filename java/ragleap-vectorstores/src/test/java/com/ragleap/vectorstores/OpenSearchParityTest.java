@@ -233,6 +233,11 @@ class OpenSearchParityTest {
             err.put("error", "RuntimeError");
             err.put("message", e.getMessage());
             return err;
+        } catch (IllegalArgumentException e) {
+            ObjectNode err = MAPPER.createObjectNode();
+            err.put("error", "ValueError");
+            err.put("message", e.getMessage());
+            return err;
         }
         return out;
     }

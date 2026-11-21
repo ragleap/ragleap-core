@@ -156,6 +156,9 @@ def FT(total, *docs):
 
 INFO_OK = A(B("index_name"), B("ragleap_idx"))
 INIT = [mods("search"), INFO_OK]
+INFO_TENANT = A(B("index_name"), B("ragleap_idx"), B("attributes"),
+                A(A(B("identifier"), B("tenant_id"), B("attribute"), B("tenant_id"), B("type"), B("TAG"))))
+INIT_T = [mods("search"), INFO_TENANT]
 P = "ragleap:ragleap_idx:chunk:"
 cases = []
 
@@ -233,7 +236,7 @@ case("search_filters", [
     op("search_dense", [1.0], 2, {}),
     op("search_dense", [1.0], 0, None),
     op("search_dense", [], 2, {"document_id": "x"}),
-], INIT + [FT(0)] * 6)
+], INIT + [FT(0)] * 4)
 case("search_error", [op("init_schema", 8), op("search_dense", [0.5], 2, None)], INIT + [E("Syntax error at offset 1")])
 case("search_doc_missing_field", [op("init_schema", 8), op("search_dense", [0.5], 2, None)],
      INIT + [FT(1, (P + "d:0", [("text", "t"), ("score", "0.1"), ("document_id", "d"), ("chunk_index", "0")]))])
@@ -285,6 +288,37 @@ case("search_score_edge_values", [op("init_schema", 8), op("search_dense", [0.5,
 )])
 
 
+case("search_tenant_filters", [
+    op("init_schema", 8),
+    op("search_dense", [1.0], 2, {"tenant_id": "acme"}),
+    op("search_dense", [1.0], 2, {"document_id": "d1", "tenant_id": "acme"}),
+    op("search_dense", [1.0], 2, {"tenant_id": "acme", "document_id": SPECIAL}),
+    op("search_dense", [1.0], 2, {"tenant_id": SPECIAL}),
+    op("search_dense", [1.0], 2, {"tenant_id": 5}),
+    op("search_dense", [1.0], 2, {"tenant_id": "acme", "other": "x"}),
+    op("search_dense", [1.0], 2, {"other": "x"}),
+], INIT_T + [FT(0)] * 5)
+case("search_tenant_filter_on_index_without_field", [
+    op("init_schema", 8),
+    op("search_dense", [1.0], 2, {"tenant_id": "acme"}),
+    op("search_dense", [1.0], 2, {"other": "x", "tenant_id": "acme"}),
+    op("search_dense", [1.0], 2, {"document_id": "d1"}),
+], INIT + [FT(0)])
+case("search_tenant_filter_on_fresh_index", [
+    op("init_schema", 8),
+    op("search_dense", [1.0], 2, {"tenant_id": "acme"}),
+], [mods("search"), E("Unknown Index name"), OKR, FT(0)])
+case("insert_chunk_tenant_id", [
+    op("init_schema", 8),
+    op("insert_chunk", "d1", "a.txt", 0, "t", 1, [0.5], {"tenant_id": "acme"}),
+    op("insert_chunk", "d1", "a.txt", 1, "t", 1, [0.5], {"tenant_id": 7, "page": 2}),
+    op("insert_chunk", "d1", "a.txt", 2, "t", 1, [0.5], {"tenant_id": None}),
+    op("insert_chunk", "d1", "a.txt", 3, "t", 1, [0.5], {"tenant_id": ""}),
+    op("insert_chunk", "d1", "a.txt", 4, "t", 1, [0.5], {"tenant_id": True}),
+    op("insert_chunk", "d1", "a.txt", 5, "t", 1, [0.5], {"tenant_id": 1.5}),
+], INIT_T + [I(8)] * 6)
+
+
 def classify(e):
     if isinstance(e, RedisError):
         return {"error": "RemoteError"}
@@ -295,7 +329,10 @@ def classify(e):
     if isinstance(e, AttributeError):
         return {"error": "NotInitialized" if "NoneType" in str(e) else "AttributeError"}
     if isinstance(e, ValueError):
-        return {"error": "ValueError"}
+        r = {"error": "ValueError"}
+        if "can only filter" in str(e):
+            r["message"] = str(e)
+        return r
     return {"error": type(e).__name__, "message": str(e)[:120]}
 
 
