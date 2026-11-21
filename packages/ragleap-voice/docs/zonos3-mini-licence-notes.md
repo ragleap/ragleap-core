@@ -22,3 +22,25 @@ The allowlist (licences.py) is applied to the code and weights licences of a man
 ## Not read
 
 NOTICE items 1 to 3 and those after item 4; the licences vendored under servers/ggml/vendor (lmdb, json-schema-validator); the texts in third_party/licenses other than the Unicode one; the licence files of the submodules at their own repositories; whether the CLDR data is part of the weights repository or only of the code repository; the Unicode character data in servers/ggml/src/unicode-data.h, which NOTICE item 4 does not name.
+
+## Update 2026-11-20: the whole NOTICE and the licence files (read at commit 96d9e0ec1e)
+
+The NOTICE (82 lines) lists seven components:
+
+1. Mini-SGLang, MIT: the SGLang-based server under servers/sgl, not the ggml server used in the measurements.
+2. NVIDIA NeMo-text-processing, Apache-2.0 (portions copyright Google): ported in zyphra-textnorm (Rust), which is linked into the ggml server.
+3. sacremoses, MIT: ported in zyphra-textnorm.
+4. Unicode CLDR release 49, Unicode-3.0: data of the added locale grammars in zyphra-textnorm.
+5. mlx-lm, MIT: a Metal kernel of the MLX server (servers/mlx).
+6. FuseAlign (fusealign-multilingual), Apache-2.0: the forced aligner of speech editing, a git submodule; it was not checked out in the runs of benchmarks/voice.
+7. z-speech-alignment, MIT: two functions copied into the Python model code (model/src/zonos3/tts/textmatch.py).
+
+The repository LICENSE is MIT (Zyphra). The files in third_party/licenses are the MIT, Apache-2.0 and Unicode V3 texts named above; only their first lines were read. Where each component is used is taken from the paths named in the NOTICE and was not checked in a built binary.
+
+Vendored in the ggml server and not listed in the NOTICE: servers/ggml/vendor/lmdb/LICENSE begins "The OpenLDAP Public License, Version 2.8, 17 August 2003" (SPDX OLDAP-2.8), which is not on the allowlist; only its first lines were read, so what it asks of someone who redistributes a binary containing it is not recorded here. servers/ggml/vendor/json-schema-validator/LICENSE is the MIT licence (first lines read). The vendor folder also holds httplib.h and json.hpp, whose licences were not read.
+
+Among the texts read, no copyleft, non-commercial or field-of-use clause was seen. This is a reading of texts, not legal advice.
+
+How it relates to the allowlist: the allowlist (licences.py) is applied to the code and weights licences written in a manifest entry, so it does not see components inside a server binary that the operator builds, such as LMDB under OLDAP-2.8. The Kokoro entry in models.toml already carries a comment about its GPLv3 espeak-ng dependency; the same handling is proposed here (a comment in the entry and a line in the documentation), and whether OLDAP-2.8 in an operator-built binary is acceptable is a question for the owner. Nothing in this repository would contain it.
+
+Still not read: the licence of the ggml submodule, the NOTICE and licenses folder of zyphra-textnorm (which reproduces items 2 to 4), httplib.h and json.hpp, the rest of the OLDAP-2.8 text, the committed studio build and the libraries bundled in it, and the terms of the training data behind the weights.
