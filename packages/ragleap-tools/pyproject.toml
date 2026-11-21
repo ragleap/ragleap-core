@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ragleap-tools"
-version = "0.5.1"
+version = "0.6.0"
 description = "Standalone, dependency-light tool implementations (calculator, file ops, datetime, unit conversion, JSON/CSV, text utilities) exposing OpenAI/Gemini-style function-calling schemas. No tool-calling execution loop - wire these into your own LLM tool-calling code, or into ragleap-agents when that ships. BYOK, no vendor lock-in."
 readme = "README.md"
 license = "MIT"
