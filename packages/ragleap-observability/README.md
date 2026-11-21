@@ -110,6 +110,7 @@ helm upgrade ragleap-observability ./ragleap-observability --set alloy.enabled=t
 - Alloy keeps its read positions in `alloy.dataHostPath` (default `/var/lib/ragleap-alloy`) on each node. That is the only writable host path in this chart, and removing Alloy leaves the directory behind.
 - Alloy runs as root, because the node's pod log files are root-owned. Pull its image onto the nodes first to keep the gap between shippers short.
 - Tested on one `kind` node: a marker stream stayed in order, without gaps or repeats, across a switch to Alloy and back. A fresh Alloy replays existing files, and Loki rejects the entries that are too old, which Alloy logs as `entry too far behind`.
+- Automated test: the job `alloy-k8s-test` of the `obs-k8s-test` workflow installs Loki and Alloy only on a throwaway kind cluster, has a test pod write marker lines, and checks that they reach Loki with the namespace, pod and container labels. It also checks the render-time refusal above. It runs manually or on pull requests that touch `tests/k8s/`, and it is not a required check. A wrong Loki port, a wrong log path, a renamed pod label and a removed refusal each made it fail (see the CHANGELOG for the runs).
 
 ## Availability SLO alerts (0.8.0, opt-in)
 
