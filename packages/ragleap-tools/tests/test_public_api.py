@@ -4,7 +4,7 @@ import ragleap_tools
 
 
 def test_version_is_exposed():
-    assert ragleap_tools.__version__ == "0.5.1"
+    assert ragleap_tools.__version__ == "0.6.0"
 
 
 def test_stateless_tools_all_have_valid_openai_schemas():

@@ -5,6 +5,8 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-21
+
 ### Added
 
 - `Toolkit.prepare(name, arguments)` and `Toolkit.run(tool, arguments)`, the
@@ -36,6 +38,44 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - This is the second step of `docs/design/governed-toolkit.md`. Not part of
   it: authentication, a per-tenant toolkit hub, persistence of events and a
   rate limit shared between processes.
+
+### Verified
+
+- The full suite on the merged code (with the `ingest` extra): 525 passed and
+  1 skipped with the built-in `Scope`, 526 passed with `ragleap-security`
+  0.2.0 installed, on Python 3.10.12 and 3.12.3.
+- `Toolkit.call` is unchanged by the `prepare` and `run` split: 4,692
+  deterministic inputs gave identical results from the old and the new code
+  (179 successes among them).
+- `GovernedToolkit` was run over 4,692 cases: 3,321 on existing tools matched
+  the old `Toolkit.call` (179 successes) and 1,371 unknown or non-string tool
+  names got "tool not available"; 0 mismatches and nothing raised.
+- Deliberate-break (mutation) checks of the new code, run against the final
+  test files: 22 of 22 caught for `prepare` and `run` (one equivalent mutant,
+  a redundant guard, was set aside) and 65 of 65 for `GovernedToolkit`.
+- The built-in `Scope` has the same fields, key format and error messages as
+  `ragleap_security.Scope` 0.2.0.
+
+### Not verified
+
+- `GovernedToolkit` has no network component, so there is no live check to
+  report; it was not run inside a real host application or with a real LLM
+  provider.
+- Use with versions of `ragleap-security` other than 0.2.0.
+- Python 3.11 was not run by hand (CI covers 3.10 to 3.12); 3.13 and 3.14 are
+  not run at all yet.
+
+### Known limitations
+
+- It does not authenticate anybody: it trusts the `Scope` the host passes, so
+  its isolation is only as strong as the host's own check of who the caller is.
+- A toolkit shared by several tenants shares its tools' state (one file root,
+  one API key per provider, one `RagLeap` instance). Build one toolkit per
+  tenant; a per-tenant toolkit hub is not part of this release.
+- The rate limit is kept per process, and a tenant's window is kept until
+  `forget(tenant)` is called.
+- Events go only to `on_event`; nothing is stored, and they are not
+  tamper-evident.
 
 ## [0.5.1] - 2026-10-19
 
