@@ -11,8 +11,10 @@ the pieces of sub-agents:
 - Budget: how much delegation one run may use.
 - check_max_depth: depth is 1 to MAX_DEPTH_CEILING.
 
-A child cannot ask a human for approval (see the design issue), so a child tool that
-would need approval is never run on a child's behalf.
+A child cannot ask a human for approval unless the delegate tool is made with nested_approval=True
+(design: issue #963). By default a child tool that would need approval is never run on a child's behalf:
+the child is stopped with approval_not_available. With nested_approval=True the pause comes up to the
+top-level run as one pending approval and one resume() decides it.
 """
 
 from __future__ import annotations
@@ -22,7 +24,7 @@ from typing import Any, Dict
 
 from ragleap_tools import Tool, ToolResult
 
-from ragleap_agents.agent import _NAME_RE, Agent, ToolPolicy
+from ragleap_agents.agent import ANSWER_CAP, _NAME_RE, Agent, DelegateTool, ToolPolicy, _NestedPause
 from ragleap_agents.context import current_run
 
 MAX_DEPTH_CEILING = 3
@@ -83,9 +85,6 @@ def delegate_policy(children: Dict[str, Agent], *, allow_outbound: bool = False)
     return ToolPolicy(taints=taints, outbound=False, requires_approval=False)
 
 
-ANSWER_CAP = 800  # characters of a child's answer returned to the parent
-
-
 def _stop_unapproved(child: Agent, res: Any) -> Any:
     """A child paused for approval. Nobody can give it, so close its saved run as stopped, never to be resumed."""
     try:
@@ -98,13 +97,15 @@ def _stop_unapproved(child: Agent, res: Any) -> Any:
 
 
 def make_delegate_tool(children: Dict[str, Agent], *, max_depth: int = 1, budget: Any = None,
-                       allow_outbound: bool = False, name: str = "delegate") -> Tool:
+                       allow_outbound: bool = False, name: str = "delegate", nested_approval: bool = False) -> Tool:
     """An ordinary Tool that hands one task to a named child agent and returns its short answer.
 
     Declare delegate_policy(children, allow_outbound=...) for it in the parent's Policy. The child runs to
     completion inside this tool call; its answer comes back as an untrusted, fenced observation. A child that
     reaches an action needing approval is stopped with stop_reason "approval_not_available" and the action
-    does not run. Depth, the number of delegations and the children's steps are limited per root run (the
+    does not run, unless nested_approval=True: then the child's pause appears at the top-level run as ONE
+    pending approval (with the child's real tool and arguments and the path to it), and one resume() on the
+    top-level run decides it (design: issue #963). It is separate from allow_outbound. Depth, the number of delegations and the children's steps are limited per root run (the
     counters live in the root run's saved state; a child's own step cap bounds any overshoot)."""
     check_max_depth(max_depth)
     if budget is None:
@@ -113,6 +114,8 @@ def make_delegate_tool(children: Dict[str, Agent], *, max_depth: int = 1, budget
         raise ValueError("budget must be a Budget")
     if not isinstance(name, str) or not _NAME_RE.match(name):
         raise ValueError("invalid tool name: use 1-64 of A-Z a-z 0-9 _ . -")
+    if not isinstance(nested_approval, bool):
+        raise ValueError("nested_approval must be True or False")
     delegate_policy(children, allow_outbound=allow_outbound)
     kids = dict(children)
     names = sorted(kids)
@@ -137,6 +140,8 @@ def make_delegate_tool(children: Dict[str, Agent], *, max_depth: int = 1, budget
         res = child.run(task, tainted=ctx.tainted, scope=ctx.scope)
         counters["child_steps"] += len(res.steps)
         if res.status == "awaiting_approval":
+            if nested_approval and res.pending:
+                raise _NestedPause(agent, res.run_id, res.pending, len(res.steps))
             res = _stop_unapproved(child, res)
         if res.status == "done":
             return ToolResult(True, result={"child_run": res.run_id, "answer": (res.answer or "")[:ANSWER_CAP]})
@@ -148,4 +153,5 @@ def make_delegate_tool(children: Dict[str, Agent], *, max_depth: int = 1, budget
         "properties": {"agent": {"type": "string", "enum": names}, "task": {"type": "string"}},
         "required": ["agent", "task"],
     }
-    return Tool(name, "Hand one task to a sub-agent and get its short answer. Agents: " + ", ".join(names) + ".", schema, handler)
+    return DelegateTool(name, "Hand one task to a sub-agent and get its short answer. Agents: " + ", ".join(names) + ".", schema,
+                        handler, children=kids, nested_approval=nested_approval)

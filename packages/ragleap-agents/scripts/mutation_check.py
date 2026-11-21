@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Mutation check for the tenant-scope work in ragleap-agents 0.5.1 (repository only, not part of the installed package).
+"""Mutation check for the tenant-scope work (0.5.1) and nested approvals (0.6.0) in ragleap-agents (repository only, not part of the installed package).
 
 For each mutation below it copies the package to a temp directory, breaks one protection in the
 copy, and runs the test suite. A mutation is KILLED if a test fails, SURVIVED if every test still
@@ -9,7 +9,7 @@ passes (meaning that protection is not really tested). The real source is never 
 
 Needs ragleap-tools and ragleap-security importable (installed, or on PYTHONPATH). Exit code 0 only if the
 unmodified suite passes and every mutation is killed. Run from the package directory. These mutations cover
-the 0.5.1 scope, rate limit, audit and run id changes only; the older protections (taint, approval, delegation)
+the 0.5.1 scope, rate limit, audit and run id changes and the 0.6.0 nested approvals only; the older protections (taint, approval, delegation)
 have no mutation set yet. A killed mutation shows a protection is exercised by a test; it does not show the
 protection is sufficient."""
 import os
@@ -47,7 +47,7 @@ MUTATIONS = [
     ('the scope is not saved with the run', [(A, '"scope": None if scope is None else scope.key,', '"scope": None,')]),
     ('run.start is not audited', [(A, '        self._audit(state, "run.start", tainted=tainted, task_bytes=len(state["task"].encode("utf-8")))\n', '        pass\n')]),
     ('approval.requested is not audited', [(A, '                self._audit(state, "approval.requested", tool=name, call_id=state["pending"]["call_id"])\n', '                pass\n')]),
-    ('approval.decided is not audited', [(A, '            self._audit(state, "approval.decided", tool=pending["tool"], call_id=call_id, approved=approved)\n', '            pass\n')]),
+    ('approval.decided is not audited', [(A, '            self._audit(state, "approval.decided", tool=pending["tool"], call_id=pending["call_id"], approved=approved,\n                        via_depth=via_depth)\n', '            pass\n')]),
     ('tool.executed is not audited', [(A, '        self._audit(state, "tool.executed", tool=tool.name, status=status, forced=forced, obs_bytes=len(obs.encode("utf-8")))\n', '        pass\n')]),
     ('run.end is not audited', [(A, '        self._audit(state, "run.end", status=status, stop_reason=reason, steps=len(state["steps"]))\n', '        pass\n')]),
     ('the audit log holds the tool arguments', [(A, 'forced=forced, obs_bytes=len(obs.encode("utf-8")))', 'forced=forced, arguments=str(args), obs_bytes=len(obs.encode("utf-8")))')]),
@@ -59,6 +59,40 @@ MUTATIONS = [
     ('the rate limiter is not checked for a check method', [(A, '        if rate_limiter is not None and not callable(getattr(rate_limiter, "check", None)):', '        if False:')]),
     ('a child run loses the parent scope', [(D, 'res = child.run(task, tainted=ctx.tainted, scope=ctx.scope)', 'res = child.run(task, tainted=ctx.tainted)')]),
     ('the run context loses the scope', [(A, 'scope=Scope.parse(state["scope"]) if state.get("scope") else None))', 'scope=None))')]),
+
+    # ---- nested approvals (0.6.0, design #963)
+    ('a nested pause is not recognised on resume', [(A, '        if pending.get("via"):\n            return self._resume_nested', '        if False:\n            return self._resume_nested')]),
+    ('a child run of another scope is accepted', [(A, 'not child._owns(cstate, scope) or ', '')]),
+    ('a child run that is not awaiting is accepted', [(A, ' or cstate.get("status") != "awaiting_approval":', ':')]),
+    ('the child pending is not compared with the top pending', [(A, 'if not isinstance(cp, dict) or any(cp.get(k) != pending.get(k) for k in ("call_id", "tool", "arguments", "sig")):', 'if not isinstance(cp, dict):')]),
+    ('the via path of a middle child is not compared', [(A, 'if cp.get("via") != via[i + 1:]:', 'if False:')]),
+    ('the deepest child may still have a via', [(A, '            elif cp.get("via"):', '            elif False:')]),
+    # dropped as equivalent: the MAX_VIA check in _load_chain is a cheap guard; a via longer than the depth ceiling cannot match a
+    # real child run (the 4th child cannot exist), so an earlier check refuses it anyway and no test can tell the two apart
+    ('a delegate tool without nested approval is followed', [(A, ' or tool.nested_approval is not True:', ':')]),
+    ('any tool may serve as a delegate on resume', [(A, 'if not isinstance(tool, DelegateTool) or tool.nested_approval is not True:', 'if tool is None:')]),
+    ('an unreadable tree is approved anyway', [(A, '            if approved:\n                raise  # fail closed', '            if False:\n                raise')]),
+    ('the claim is not atomic', [(A, '            if not claim(state["run_id"], state, "awaiting_approval"):\n                raise ResumeError("run is not awaiting approval")\n        else:\n            agent.store.save', '            if False:\n                raise ResumeError("run is not awaiting approval")\n        else:\n            agent.store.save')]),
+    ('a rejection is passed down as an approval', [(A, 'child_res = self._resume_tree(levels, i + 1, approved)', 'child_res = self._resume_tree(levels, i + 1, True)')]),
+    ('a rejected child does not end the parent', [(A, 'if child_res.status == "rejected":  # the whole tree', 'if False:  # the whole tree')]),
+    ('the executed-before-pause list is missing', [(A, '"observation": "", "executed_before_pause": self._executed_entries(args["agent"], child_res)})', '"observation": ""})')]),
+    ('an unreadable child is not marked unavailable', [(A, '"run_id": str(v.get("run_id", ""))[:64], "unavailable": True}', '"run_id": str(v.get("run_id", ""))[:64]}')]),
+    ('the executed-before-pause list is not capped', [(A, 'if len(out) > EXECUTED_CAP:', 'if False:')]),
+    ('a second pause is not bubbled up again', [(A, 'if child_res.status == "awaiting_approval":  # a second pause deeper down', 'if False:  # a second pause deeper down')]),
+    ('child steps are not counted after a resume', [(A, 'counters["child_steps"] += max(0, len(child_res.steps) - int(dele.get("counted", 0)))', 'pass')]),
+    ('a forced approval is not shown at the top', [(A, '"forced": cp["forced"], "via": via,', '"forced": False, "via": via,')]),
+    ('the parent does not pause when its child paused', [(A, 'if paused is not None:  # a child paused for approval', 'if False:  # a child paused for approval')]),
+    ('the loop goes on after a nested pause', [(A, 'if state["status"] == "awaiting_approval":  # a delegate whose child paused: the pause is saved', 'if False:  # a delegate whose child paused: the pause is saved')]),
+    ('a decision loop goes on after a second nested pause', [(A, 'if state["status"] == "awaiting_approval":  # the tool was a delegate whose child paused again', 'if False:  # the tool was a delegate whose child paused again')]),
+    ('an ancestor decision is not audited', [(A, '            agent._audit(state, "approval.decided", tool=pending["tool"], call_id=pending["call_id"], approved=approved,\n                         via_depth=len(pending["via"]))\n', '            pass\n')]),
+    ('the nested pause is not audited', [(A, '            self._audit(state, "approval.requested", tool=state["pending"]["tool"], call_id=state["pending"]["call_id"],\n                        via_depth=len(state["pending"]["via"]))\n            return\n', '            return\n')]),
+    ('nested approval is always on', [(D, 'if nested_approval and res.pending:', 'if res.pending:')]),
+    ('nested approval is always off', [(D, 'if nested_approval and res.pending:', 'if False:')]),
+    ('the nested approval flag is not validated', [(D, 'if not isinstance(nested_approval, bool):', 'if False:')]),
+    ('the delegate tool forgets its children', [(D, 'handler, children=kids, nested_approval=nested_approval)', 'handler, children={}, nested_approval=nested_approval)')]),
+    ('a second resume is not refused after a nested decision', [(A, '        for agent, st, _ in reversed(levels):  # deepest first\n            self._claim(agent, st)', '        for agent, st, _ in reversed(levels):  # deepest first\n            st["status"], st["pending"] = "running", None')]),
+    ('a lost parent taint after a nested resume', [(A, '        if self.policy.for_tool(name).taints:\n            state["tainted"] = True\n        self.store.save(state["run_id"], state)\n        self._audit(state, "tool.executed", tool=name, status="executed"', '        self.store.save(state["run_id"], state)\n        self._audit(state, "tool.executed", tool=name, status="executed"')]),
+    ('a nested resume enters the wrong caller context', [(A, 'token = agent._enter(state)  # the child\'s tools must see this run as their caller', 'token = enter_run(current_run() or RunContext(run_id="x", depth=0, tainted=False, delegation={"delegations": 0, "child_steps": 0}))')]),
 ]
 
 TEST_TIMEOUT_SECONDS = 180

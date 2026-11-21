@@ -5,6 +5,36 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-21
+
+Design: #963 (with the executed-before-pause amendment from the outside review by renezander030). Nested approvals: a pause anywhere in the delegation tree appears at the top-level run as one pending approval. Opt-in.
+
+### Behaviour changes (read first)
+
+- **None by default.** `nested_approval` is `False` unless you set it, so a child that reaches an approval still stops with `approval_not_available` as in 0.5.x.
+- `make_delegate_tool` now returns a `DelegateTool` (a `Tool` subclass, exported) that holds its `children` and the `nested_approval` flag. Code that only calls it as a `Tool` is unaffected.
+- `ANSWER_CAP` moved to `ragleap_agents.agent` (it is still importable from `ragleap_agents.delegate`).
+
+### Added
+
+- `make_delegate_tool(..., nested_approval=False)`. With `True`, a child's pause bubbles up: the top run's `pending` shows the child's real `tool`, `arguments` and `forced`, plus `via` (the path: agent and run id at each level) and `delegate` (the top run's own delegate call). Code that reads `pending["tool"]` and `pending["arguments"]` keeps working. `allow_outbound` stays a separate, explicit switch.
+- One `resume(run_id, {call_id: bool}, scope=...)` on the top run decides it. It first checks every run on the path read-only (exists, exactly the same scope, awaiting approval, same call id, tool, arguments and signature, and a consistent `via`), then claims the deepest run first with `save_if_status`, then each parent. Approve: the action runs exactly once and the parent continues; a second pause deeper in the tree bubbles up again. Reject: the whole tree ends rejected and the action never runs.
+- `executed_before_pause` on the parent's rejected delegate step: agent, run id, tool, capped arguments and status of every step a child run on the path had already run (executed or error), up to 20 entries, `truncated` if more. These effects are not undone. A child run that cannot be read back is listed as `unavailable`; the tree still ends rejected.
+- Every child run keeps the parent's scope, and resume refuses a child run of any other scope. The resumed action runs with the right depth, scope, taint and shared budget counters. Audit: `approval.requested` and `approval.decided` carry `via_depth` at each level (ids, tool names and sizes, never text).
+- `scripts/mutation_check.py` now has 30 mutations for the nested approvals, besides the 34 for 0.5.1 (64 in total, all killed on Python 3.10 and 3.12). One more candidate was dropped as an equivalent mutant: the `MAX_VIA` length check in `_load_chain` (a via longer than the depth ceiling cannot match a real child run, so an earlier check refuses it anyway).
+
+### Does not defend
+
+- Who may approve stays the caller's business; `decided_by` is not verified.
+- Every agent in the tree needs a store that survives until the decision. With in-memory stores a restart loses the child run: an approval fails closed, a rejection still closes the top run.
+- A crash between a claim and the end of the call leaves runs at `running` (no recovery in this release). A store without `save_if_status` is not atomic across processes.
+- A child that waits forever keeps the tree awaiting; timeouts are the caller's policy.
+- Compensation for effects a child already produced belongs to the owner of that tool.
+
+### Not verified
+
+No real model provider (all tests use a scripted model; `scripts/live_delegate.py` is not extended in this release); Windows and macOS; store files on network file systems.
+
 ## [0.5.1] - 2026-11-14
 
 Design: #1395. Tenant scope for runs, approvals and audit. A security fix for shared multi-tenant use.

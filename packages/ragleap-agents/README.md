@@ -121,6 +121,19 @@ A wrong scope, an unknown run and a damaged saved state all raise the same `Resu
 
 **What this does not do.** It does not log users in: you pass the right scope. A tool that reads another tenant's data by itself is not stopped. Anyone with access to a shared store file sees every tenant; use one store per tenant for stronger separation. See the CHANGELOG for the 0.5.0 gap this fixes.
 
+## Nested approvals (0.6.0)
+
+A child agent started by `make_delegate_tool` normally runs to the end inside one tool call, so it cannot ask a human: a child action that needs approval is stopped with `approval_not_available`. With `nested_approval=True` that pause comes up to the top-level run instead, as ONE pending approval that shows the child's real tool and arguments and the path to it:
+
+    deleg = make_delegate_tool({"mailer": mailer}, allow_outbound=True, nested_approval=True)
+    result = parent.run("tell the customer", scope=acme)
+    result.pending   # {"call_id", "tool": "send_email", "arguments": {...}, "forced", "via": [{"agent": "mailer", "run_id": ...}], "delegate": {...}}
+    parent.resume(result.run_id, {result.pending["call_id"]: True}, scope=acme)   # one call decides it
+
+It is off by default, so 0.5.x behaviour is unchanged, and it is separate from `allow_outbound` (you set both on purpose). Approve: the action runs exactly once and the parent goes on (a second pause deeper in the tree bubbles up again). Reject: the whole tree ends rejected and the action never runs. The parent's delegate step then lists `executed_before_pause`: what the child runs on the path had already done (agent, run id, tool, capped arguments, status). Those effects are **not undone**; compensating them belongs to the owner of that tool. If a child run cannot be read back, the entry says `unavailable` and the tree still ends rejected.
+
+Resume checks the whole path read-only first: every child run must exist, belong to exactly the same scope, be awaiting approval and hold the same pending action; then the deepest run is claimed first (the atomic gate), then each parent. Anything that does not match raises `ResumeError("the nested run does not match")` and nothing runs. Every agent in the tree needs a store that survives until the decision; with an in-memory store a restart loses the child run, an approval fails closed and a rejection still closes the top run. A store without `save_if_status` is not atomic across processes.
+
 ## The safety model
 
 - **Every proposal is checked.** The tool must exist and the arguments must fit

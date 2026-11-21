@@ -42,6 +42,18 @@ approval; can only tighten); a tools-disabled summary pass; never raises into th
 | Budget | token budget | wall-clock deadline between calls |
 | Storage | `agent_runs` in Postgres | pluggable `StateStore`; in-memory included |
 
+## Nested approvals (0.6.0)
+
+Design: issue #963. A child agent started by `make_delegate_tool` runs inside one tool call of its parent. In 0.5.x a
+child that reached an action needing approval was stopped (`approval_not_available`). With `nested_approval=True` the
+pause comes up to the top-level run as one pending approval (the child's real tool and arguments, plus the path), and
+one `resume()` decides it. Decisions on the open questions in #963: a rejection ends the whole tree, and the parent's
+delegate step records what the child runs had already executed (the outside review by renezander030); the release is
+0.6.0, because a new public parameter is new API; `nested_approval` stays separate from `allow_outbound`.
+Two properties carry the weight: resume reads the whole path before it changes anything (every child run must exist,
+belong to exactly the caller's scope, be awaiting approval and hold the same pending action), and the deepest run is
+claimed first, so only one resume can pass the atomic gate. See the CHANGELOG for what it does not defend.
+
 ## Limits and open risks
 
 - Prompt injection is not prevented, only constrained by the declared policies.

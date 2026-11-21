@@ -61,6 +61,21 @@ class ResumeError(ValueError):
     """resume() was called wrongly: unknown run, run not awaiting approval, or a bad decision."""
 
 
+ANSWER_CAP = 800  # characters of a child's answer returned to the parent
+MAX_VIA = 3  # a nested pause passes through at most this many child runs (the depth ceiling)
+EXECUTED_CAP = 20  # entries kept in an executed_before_pause list
+_ARG_CAP = 200  # characters kept of one entry's arguments
+
+
+class _NestedPause(Exception):
+    """A child run paused for approval and nested approvals are on: carries the pause up to the parent's
+    _run_tool, which saves the parent as awaiting_approval. Never leaves the library."""
+
+    def __init__(self, agent: str, child_run: str, child_pending: Dict[str, Any], counted: int) -> None:
+        super().__init__("nested approval")
+        self.agent, self.child_run, self.child_pending, self.counted = agent, child_run, child_pending, counted
+
+
 @dataclass(frozen=True)
 class ToolPolicy:
     """taints: the result is external content (web page, MCP reply, file from a user).
@@ -88,6 +103,15 @@ class Policy:
 
     def for_tool(self, name: str) -> ToolPolicy:
         return self.tools.get(name, ToolPolicy())
+
+
+@dataclass
+class DelegateTool(Tool):
+    """The tool made by make_delegate_tool. The agent finds the child agents through it when a nested approval
+    is resumed. children: name -> Agent. nested_approval: a child's pause appears at the top-level run."""
+
+    children: Dict[str, "Agent"] = field(default_factory=dict)
+    nested_approval: bool = False
 
 
 @dataclass
@@ -262,17 +286,28 @@ class Agent:
         approved = decisions[call_id]
         if not isinstance(approved, bool):
             raise ResumeError("a decision must be True or False")
-        state["status"] = "running"  # claim the run so a second resume() is refused
+        if pending.get("via"):
+            return self._resume_nested(state, pending, approved, scope)
+        self._claim(self, state)
+        return self._apply_decision(state, pending, approved)
+
+    def _claim(self, agent: "Agent", state: Dict[str, Any]) -> None:
+        """Move a run out of awaiting_approval, atomically where the store can: a second resume() is refused."""
+        state["status"] = "running"
         state["pending"] = None
-        claim = getattr(self.store, "save_if_status", None)
+        claim = getattr(agent.store, "save_if_status", None)
         if claim is not None:
             # atomic: only one resume(), across threads and processes, can move the run out of awaiting_approval
             if not claim(state["run_id"], state, "awaiting_approval"):
                 raise ResumeError("run is not awaiting approval")
         else:
-            self.store.save(state["run_id"], state)
+            agent.store.save(state["run_id"], state)
+
+    def _apply_decision(self, state: Dict[str, Any], pending: Dict[str, Any], approved: bool, via_depth: int = 0) -> RunResult:
+        """Carry out one decision on a run that has just been claimed: reject it, or run the pending tool and go on."""
         try:
-            self._audit(state, "approval.decided", tool=pending["tool"], call_id=call_id, approved=approved)
+            self._audit(state, "approval.decided", tool=pending["tool"], call_id=pending["call_id"], approved=approved,
+                        via_depth=via_depth)
             if not approved:
                 state["steps"].append({"tool": pending["tool"], "arguments": pending["arguments"], "sig": pending["sig"],
                                        "status": "rejected", "forced_approval": pending["forced"], "observation": ""})
@@ -281,10 +316,150 @@ class Agent:
             if tool is None or validate_arguments(tool.parameters, pending["arguments"]):
                 return self._finish(state, "failed", "invalid_pending_call", use_llm=False)
             self._run_tool(state, tool, pending["arguments"], pending["sig"], pending["forced"])
+            if state["status"] == "awaiting_approval":  # the tool was a delegate whose child paused again
+                return self._result(state)
             return self._drive(state, self._deadline())
         except Exception as e:
             logger.error("agent resume failed unexpectedly: %s", type(e).__name__)
             return self._finish(state, "failed", "internal_error", use_llm=False)
+
+    # ---- nested approvals (design: issue #963) ----
+
+    def _resume_nested(self, state: Dict[str, Any], pending: Dict[str, Any], approved: bool, scope: Optional[Scope]) -> RunResult:
+        """Decide a pause that came up from a child run. Everything on the path is checked read-only first;
+        then the deepest run is claimed first (the gate: only one resume() can pass), then each parent."""
+        try:
+            chain = self._load_chain(pending, scope)
+        except ResumeError:
+            if approved:
+                raise  # fail closed: an action is never run from a tree that cannot be read back
+            chain = None
+        if chain is None:  # a rejection of a tree that cannot be read back still closes the top run
+            self._claim(self, state)
+            self._audit(state, "approval.decided", tool=pending["tool"], call_id=pending["call_id"], approved=False,
+                        via_depth=len(pending["via"]) if isinstance(pending["via"], list) else 0)
+            via = [v for v in pending["via"] if isinstance(v, dict)] if isinstance(pending["via"], list) else []
+            entries = [{"agent": str(v.get("agent", ""))[:64], "run_id": str(v.get("run_id", ""))[:64], "unavailable": True}
+                       for v in via] or [{"unavailable": True}]
+            dele = pending.get("delegate") if isinstance(pending.get("delegate"), dict) else {}
+            state["steps"].append({"tool": str(dele.get("tool", "")), "arguments": dele.get("arguments", {}),
+                                   "sig": dele.get("sig"), "status": "rejected", "forced_approval": False, "observation": "",
+                                   "executed_before_pause": entries})
+            return self._finish(state, "rejected", "rejected", use_llm=False)
+        levels = [(self, state, pending)] + chain
+        for agent, st, _ in reversed(levels):  # deepest first
+            self._claim(agent, st)
+        return self._resume_tree(levels, 0, approved)
+
+    def _load_chain(self, pending: Dict[str, Any], scope: Optional[Scope]) -> List[Any]:
+        """Read, without changing anything, every child run on the path. Raises ResumeError unless each one exists,
+        belongs to exactly this scope, is awaiting approval and holds the same pending action as the top run."""
+        bad = ResumeError("the nested run does not match")
+        via, dele = pending.get("via"), pending.get("delegate")
+        if not isinstance(via, list) or not 1 <= len(via) <= MAX_VIA:
+            raise bad
+        chain: List[Any] = []
+        cur_agent, cur_dele = self, dele
+        for i, v in enumerate(via):
+            if (not isinstance(v, dict) or not isinstance(v.get("agent"), str) or not isinstance(v.get("run_id"), str)
+                    or not isinstance(cur_dele, dict) or not isinstance(cur_dele.get("tool"), str)):
+                raise bad
+            tool = cur_agent.tools.get(cur_dele["tool"])
+            if not isinstance(tool, DelegateTool) or tool.nested_approval is not True:
+                raise bad
+            child = tool.children.get(v["agent"])
+            if child is None:
+                raise bad
+            try:
+                cstate = child.store.load(v["run_id"])
+            except ValueError:
+                raise bad from None
+            if not isinstance(cstate, dict) or not child._owns(cstate, scope) or cstate.get("status") != "awaiting_approval":
+                raise bad
+            cp = cstate.get("pending")
+            if not isinstance(cp, dict) or any(cp.get(k) != pending.get(k) for k in ("call_id", "tool", "arguments", "sig")):
+                raise bad
+            if i < len(via) - 1:
+                if cp.get("via") != via[i + 1:]:
+                    raise bad
+            elif cp.get("via"):
+                raise bad
+            chain.append((child, cstate, cp))
+            cur_agent, cur_dele = child, cp.get("delegate")
+        return chain
+
+    def _resume_tree(self, levels: List[Any], i: int, approved: bool) -> RunResult:
+        agent, state, pending = levels[i]
+        if i == len(levels) - 1:
+            return agent._apply_decision(state, pending, approved, via_depth=0)
+        try:
+            agent._audit(state, "approval.decided", tool=pending["tool"], call_id=pending["call_id"], approved=approved,
+                         via_depth=len(pending["via"]))
+            token = agent._enter(state)  # the child's tools must see this run as their caller
+            try:
+                child_res = self._resume_tree(levels, i + 1, approved)
+            finally:
+                leave_run(token)
+            return agent._after_child(state, pending, child_res)
+        except Exception as e:
+            logger.error("agent nested resume failed unexpectedly: %s", type(e).__name__)
+            return agent._finish(state, "failed", "internal_error", use_llm=False)
+
+    def _after_child(self, state: Dict[str, Any], pending: Dict[str, Any], child_res: RunResult) -> RunResult:
+        """The child's resume ended: finish this run's delegate step with its outcome and go on (or pause again)."""
+        dele = pending["delegate"]
+        name, args, sig = dele["tool"], dele["arguments"], dele["sig"]
+        counters = self._shared(state)
+        counters["child_steps"] += max(0, len(child_res.steps) - int(dele.get("counted", 0)))
+        if child_res.status == "awaiting_approval":  # a second pause deeper down: bubble up again
+            state["pending"] = self._nested_pending(child_res.pending or {}, args["agent"], child_res.run_id, name, args, sig,
+                                                    len(child_res.steps))
+            state["status"] = "awaiting_approval"
+            state["stop_reason"] = "awaiting_approval"
+            self.store.save(state["run_id"], state)
+            self._audit(state, "approval.requested", tool=state["pending"]["tool"], call_id=state["pending"]["call_id"],
+                        via_depth=len(state["pending"]["via"]))
+            return self._result(state)
+        if child_res.status == "rejected":  # the whole tree ends rejected; say what already ran
+            state["steps"].append({"tool": name, "arguments": args, "sig": sig, "status": "rejected", "forced_approval": False,
+                                   "observation": "", "executed_before_pause": self._executed_entries(args["agent"], child_res)})
+            self.store.save(state["run_id"], state)
+            return self._finish(state, "rejected", "rejected", use_llm=False)
+        if child_res.status == "done":
+            obs = json.dumps({"child_run": child_res.run_id, "answer": (child_res.answer or "")[:ANSWER_CAP]}, default=str)
+        else:
+            obs = f"error: agent {args['agent']} {child_res.status} ({child_res.stop_reason}); run {child_res.run_id}"
+        state["steps"].append({"tool": name, "arguments": args, "sig": sig, "status": "executed", "forced_approval": False,
+                               "observation": obs[: self.policy.obs_cap]})
+        if self.policy.for_tool(name).taints:
+            state["tainted"] = True
+        self.store.save(state["run_id"], state)
+        self._audit(state, "tool.executed", tool=name, status="executed", forced=False, obs_bytes=len(obs.encode("utf-8")))
+        return self._drive(state, self._deadline())
+
+    @staticmethod
+    def _executed_entries(agent: str, child_res: RunResult) -> List[Dict[str, Any]]:
+        """What a rejected child (and its own children) had already run: agent, run id, tool, arguments, status.
+        Capped. These effects are not undone; the owner of the tool must compensate."""
+        out: List[Dict[str, Any]] = []
+        for s in child_res.steps:
+            if s.get("status") in ("executed", "error"):
+                out.append({"agent": agent, "run_id": child_res.run_id, "tool": s.get("tool"), "status": s.get("status"),
+                            "arguments": json.dumps(s.get("arguments"), default=str)[:_ARG_CAP]})
+            elif s.get("status") == "rejected" and isinstance(s.get("executed_before_pause"), list):
+                out.extend(s["executed_before_pause"])
+        if len(out) > EXECUTED_CAP:
+            out = out[:EXECUTED_CAP] + [{"truncated": True, "omitted": len(out) - EXECUTED_CAP}]
+        return out
+
+    @staticmethod
+    def _nested_pending(cp: Dict[str, Any], agent: str, child_run: str, tool: str, args: Dict[str, Any], sig: List[str],
+                        counted: int) -> Dict[str, Any]:
+        """The pending record of a run whose child run is paused: the child's real action and the path to it."""
+        via = [{"agent": agent, "run_id": child_run}] + list(cp.get("via") or [])
+        return {"call_id": cp["call_id"], "tool": cp["tool"], "arguments": cp["arguments"], "sig": cp["sig"],
+                "forced": cp["forced"], "via": via,
+                "delegate": {"tool": tool, "arguments": args, "sig": sig, "counted": counted}}
 
     # ---- loop ----
 
@@ -354,14 +529,25 @@ class Agent:
             if deadline is not None and _now() >= deadline:
                 return self._finish(state, "stopped", "deadline")
             self._run_tool(state, tool, args, sig, False)
+            if state["status"] == "awaiting_approval":  # a delegate whose child paused: the pause is saved
+                return self._result(state)
+
+    def _enter(self, state: Dict[str, Any]) -> Any:
+        """Make this run the caller for the tools it runs (and for the child runs they start)."""
+        parent = current_run()
+        return enter_run(RunContext(run_id=state["run_id"], depth=0 if parent is None else parent.depth + 1,
+                                    tainted=bool(state["tainted"]), delegation=self._shared(state),
+                                    scope=Scope.parse(state["scope"]) if state.get("scope") else None))
+
+    @staticmethod
+    def _shared(state: Dict[str, Any]) -> Dict[str, int]:
+        """The delegation counters of the root run (kept in its saved state)."""
+        parent = current_run()
+        return parent.delegation if parent is not None else state.setdefault("delegation", {"delegations": 0, "child_steps": 0})
 
     def _run_tool(self, state: Dict[str, Any], tool: Tool, args: Dict[str, Any], sig: List[str], forced: bool) -> None:
-        parent = current_run()
-        shared = parent.delegation if parent is not None else state.setdefault(
-            "delegation", {"delegations": 0, "child_steps": 0})
-        token = enter_run(RunContext(run_id=state["run_id"], depth=0 if parent is None else parent.depth + 1,
-                                     tainted=bool(state["tainted"]), delegation=shared,
-                                     scope=Scope.parse(state["scope"]) if state.get("scope") else None))
+        token = self._enter(state)
+        paused: Optional[_NestedPause] = None
         try:
             res = tool.call(**args)
             if not isinstance(res, ToolResult):
@@ -371,11 +557,22 @@ class Agent:
             else:
                 obs = f"error: {res.error}"
             status = "executed"
+        except _NestedPause as p:
+            paused, obs, status = p, "", "paused"
         except Exception as e:  # the exception text may hold secrets: keep only its type
             logger.warning("tool %s raised %s", tool.name, type(e).__name__)
             obs, status = f"error: tool raised {type(e).__name__}", "error"
         finally:
             leave_run(token)
+        if paused is not None:  # a child paused for approval: this run pauses too, showing the child's real action
+            state["pending"] = self._nested_pending(paused.child_pending, paused.agent, paused.child_run, tool.name, args, sig,
+                                                    paused.counted)
+            state["status"] = "awaiting_approval"
+            state["stop_reason"] = "awaiting_approval"
+            self.store.save(state["run_id"], state)
+            self._audit(state, "approval.requested", tool=state["pending"]["tool"], call_id=state["pending"]["call_id"],
+                        via_depth=len(state["pending"]["via"]))
+            return
         state["steps"].append({"tool": tool.name, "arguments": args, "sig": sig, "status": status,
                                "forced_approval": forced, "observation": obs[: self.policy.obs_cap]})
         if self.policy.for_tool(tool.name).taints:
