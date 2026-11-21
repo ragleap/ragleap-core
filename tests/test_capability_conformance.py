@@ -59,6 +59,7 @@ def test_the_docs_use_the_draft_status_and_the_exact_trust_statement():
 
 def test_every_finding_code_the_checker_can_emit_is_documented():
     source = (ROOT / "scripts" / "ragleap_conformance.py").read_text(encoding="utf-8")
+    source += (ROOT / "core" / "connector_host" / "schema.py").read_text(encoding="utf-8")   # the shared rules live here
     emitted = set(re.findall(r'"([EWI]-[A-Z0-9-]+)"', source))
     assert emitted, "no codes found"
     for code in emitted:
