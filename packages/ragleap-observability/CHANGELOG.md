@@ -5,6 +5,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.7] - 2026-11-21
+
+### Changed
+
+- Alloy image pinned to v1.22.0 (was v1.20.1); Alloy stays off by default. Proven on a throwaway tag before this change: the Trivy image scan gate passed (run 44884585673), chart install, upgrade and uninstall on Kubernetes v1.34.11, v1.36.4 and v1.37.0 (run 44884604249; Alloy is off by default there, so this part does not exercise Alloy), and the Alloy runtime test below passed with the new image (run 44884624530, all checks passed in both jobs of the run). An earlier scan-only run of the same image reported 0 vulnerabilities in its OS and binary rows (run 44297465162).
+
 ### Added
 
 - A Kubernetes test for the optional Alloy log shipper: `tests/k8s/alloy-k8s-test.sh`, run as the job `alloy-k8s-test` of the `obs-k8s-test` workflow (manual, or on pull requests that touch the test folder; not a required check). On a throwaway kind cluster it installs Loki and Alloy only, has a test pod write marker lines, and checks that they arrive in Loki with the namespace, pod and container labels. It also checks that the chart refuses Alloy and Promtail enabled together, that the Alloy DaemonSet is ready and that no Promtail runs next to it. Proven on the default image Alloy v1.20.1 (workflow run 44723601669, all checks passed). Break proofs from throwaway tags, each failing as predicted: wrong Loki port (run 44724751302, 4 checks failed), wrong log path (run 44724801572, 4 checks failed), pod label renamed (run 44724849823, only the pod label check failed) and refusal removed (run 44724897582, only the refusal check failed).
@@ -14,7 +20,7 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The namespace and container label checks were not shown to fail on their own, only together with the marker check.
 - The checks that the Alloy DaemonSet is rendered, that it is ready and that no Promtail runs next to it have no break proof. In the broken-delivery runs the DaemonSet still reported ready, so readiness does not show whether logs arrive.
 - The Alloy error-line count printed by the test is information only: it stayed at 0 when delivery was completely broken.
-- Only the default image (Alloy v1.20.1) was run with this test. Alloy stays off by default.
+- Alloy v1.22.0 was run with this test once (workflow run 44884624530). The break proofs ran on Alloy v1.20.1. Alloy stays off by default.
 
 ## [0.8.6] - 2026-11-18
 
