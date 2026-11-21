@@ -46,7 +46,8 @@ import java.util.regex.Pattern;
  * <p>Differences from Python: the connection is a single socket (no pool); only redis:// and rediss:// urls with
  * optional user, password and database; a filter value that is a list or map throws IllegalArgumentException;
  * malformed server replies and failures throw SQLException; a missing search module throws IllegalStateException
- * (Python: RuntimeError). Like Python, only document_id can be filtered (other filter keys are ignored), an existing
+ * (Python: RuntimeError). Like Python, only document_id and tenant_id can be filtered (any other filter key throws IllegalArgumentException, a tenant_id
+ * filter on an index that was created without that field throws IllegalStateException), an existing
  * index is reused without checking its dimension, and at most 10000 chunks of a document are deleted.
  */
 public final class RedisBackend implements VectorBackend, AutoCloseable {
@@ -64,6 +65,7 @@ public final class RedisBackend implements VectorBackend, AutoCloseable {
     private final Connection conn;
     private final ReentrantLock lock = new ReentrantLock();
     private volatile RespClient client;
+    private volatile boolean tenantField = true;   // false only when an existing index was created without tenant_id
 
     public RedisBackend(String redisUrl) throws SQLException {
         this(redisUrl, "ragleap_idx", null, null);
@@ -115,6 +117,56 @@ public final class RedisBackend implements VectorBackend, AutoCloseable {
             sb.appendCodePoint(cp);
         });
         return sb.toString();
+    }
+
+    /**
+     * The prefilter in front of the KNN clause: only document_id and tenant_id may be filtered (any other key throws
+     * IllegalArgumentException, because ignoring it would be unsafe for tenant isolation); both go into ONE parenthesised
+     * group (RediSearch rejects two groups before =>[KNN ...]); a tenant_id filter on an index created without that field
+     * throws IllegalStateException.
+     */
+    static String filterClause(Map<String, Object> metadataFilter, boolean tenantField, String indexName) {
+        if (metadataFilter == null || metadataFilter.isEmpty()) {
+            return "*";
+        }
+        List<String> unknown = new ArrayList<>();
+        for (String key : metadataFilter.keySet()) {
+            if (!key.equals("document_id") && !key.equals("tenant_id")) {
+                unknown.add(key);
+            }
+        }
+        if (!unknown.isEmpty()) {
+            unknown.sort(null);
+            throw new IllegalArgumentException("RedisBackend can only filter by document_id and tenant_id, got "
+                    + PyRepr.list(unknown) + "; other keys used to be ignored silently, which is unsafe for tenant isolation");
+        }
+        if (metadataFilter.containsKey("tenant_id") && !tenantField) {
+            throw new IllegalStateException("RedisBackend: index '" + indexName + "' was created without a tenant_id field; "
+                    + "use a new index_name to enable tenant filtering");
+        }
+        List<String> clauses = new ArrayList<>();
+        for (String key : List.of("document_id", "tenant_id")) {
+            if (metadataFilter.containsKey(key)) {
+                clauses.add("@" + key + ":{" + escapeTag(pyStr(metadataFilter.get(key))) + "}");
+            }
+        }
+        return "(" + String.join(" ", clauses) + ")";
+    }
+
+    /** True when any string anywhere in the reply contains the text (Python: the text is in repr(info)). */
+    static boolean containsText(Object reply, String needle) {
+        if (reply instanceof byte[] b) {
+            return new String(b, StandardCharsets.UTF_8).contains(needle);
+        }
+        if (reply instanceof List<?> l) {
+            for (Object o : l) {
+                if (containsText(o, needle)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        return reply != null && String.valueOf(reply).contains(needle);
     }
 
     /** numpy.array(embedding, dtype=float32).tobytes(): little-endian float32 values. */
@@ -268,13 +320,15 @@ public final class RedisBackend implements VectorBackend, AutoCloseable {
                     + "not assumed.");
         }
         try {
-            c.command("FT.INFO", indexName);
+            Object info = c.command("FT.INFO", indexName);
+            tenantField = containsText(info, "tenant_id");
             return;   // the index already exists: reused, its dimension is not checked (like Python)
         } catch (SQLException e) {
             // no such index (or any failure): create it
         }
         c.command("FT.CREATE", indexName, "ON", "HASH", "PREFIX", "1", keyPrefix, "SCORE", "1.0", "SCHEMA",
-                "document_id", "TAG", "SEPARATOR", ",", "document_name", "TEXT", "WEIGHT", "1.0",
+                "document_id", "TAG", "SEPARATOR", ",", "tenant_id", "TAG", "SEPARATOR", ",",
+                "document_name", "TEXT", "WEIGHT", "1.0",
                 "chunk_index", "NUMERIC", "token_count", "NUMERIC", "text", "TEXT", "WEIGHT", "1.0",
                 "vector", "VECTOR", "HNSW", "6", "TYPE", "FLOAT32", "DIM", Integer.toString(dimensions),
                 "DISTANCE_METRIC", "COSINE");
@@ -302,10 +356,19 @@ public final class RedisBackend implements VectorBackend, AutoCloseable {
         byte[] vector = floatBytes(embedding);
         lock.lock();
         try {
-            requireClient().command("HSET", key, "document_id", documentId, "document_name", documentName,
+            List<Object> args = new ArrayList<>();
+            for (Object a : new Object[] {"HSET", key, "document_id", documentId, "document_name", documentName,
                     "chunk_index", Integer.toString(chunkIndex), "token_count",
                     Integer.toString(tokenCount == null ? 0 : tokenCount), "text", text, "vector", vector,
-                    "metadata", PyJson.dumps(metadata == null ? Map.of() : metadata));
+                    "metadata", PyJson.dumps(metadata == null ? Map.of() : metadata)}) {
+                args.add(a);
+            }
+            Object tenant = metadata == null ? null : metadata.get("tenant_id");
+            if (tenant != null) {
+                args.add("tenant_id");
+                args.add(pyStr(tenant));
+            }
+            requireClient().command(args.toArray());
         } finally {
             lock.unlock();
         }
@@ -337,10 +400,7 @@ public final class RedisBackend implements VectorBackend, AutoCloseable {
         if (embedding == null || embedding.isEmpty() || c == null) {
             return List.of();
         }
-        String filter = "*";
-        if (metadataFilter != null && metadataFilter.containsKey("document_id")) {
-            filter = "(@document_id:{" + escapeTag(pyStr(metadataFilter.get("document_id"))) + "})";
-        }
+        String filter = filterClause(metadataFilter, tenantField, indexName);
         Object reply = c.command("FT.SEARCH", indexName, filter + "=>[KNN " + topK + " @vector $vec AS score]",
                 "RETURN", "5", "text", "score", "document_id", "document_name", "chunk_index",
                 "SORTBY", "score", "ASC", "DIALECT", "2", "LIMIT", "0", Integer.toString(topK),

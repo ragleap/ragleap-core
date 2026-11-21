@@ -44,7 +44,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 class UpstashParityTest {
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final Pattern ISO = Pattern.compile("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{6})?$");
-    private static final Set<String> MAPPED = Set.of("RemoteError", "IntegrityError", "RuntimeError", "NotInitialized");
+    private static final Set<String> MAPPED = Set.of("RemoteError", "IntegrityError", "RuntimeError", "NotInitialized", "ValueError");
 
     private static final class FakeServer implements AutoCloseable {
         final HttpServer server;
@@ -250,6 +250,10 @@ class UpstashParityTest {
                 return o;
             }
             return err("NotInitialized");
+        } catch (IllegalArgumentException e) {
+            ObjectNode o = err("ValueError");
+            o.put("message", e.getMessage().length() > 120 ? e.getMessage().substring(0, 120) : e.getMessage());
+            return o;
         }
         return out;
     }

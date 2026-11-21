@@ -26,7 +26,7 @@ RagLeapConfig config = RagLeapConfig.builder(databaseUrl, provider, embeddingCon
 - Index with an HNSW k-NN field (engine lucene, cosine); the document registry is a second index named
   `<index>_documents`.
 - Scores are OpenSearch's own, already in [0, 1]; no sparse search (`supportsSparse()` is false).
-- A `metadataFilter` can only use indexed fields (`document_id`, `document_name`, `chunk_index`, `token_count`). A key from the chunk's own metadata matches nothing, because the metadata is stored as an unindexed string; an unknown field matches nothing either. The Python backend behaves the same (confirmed against a live OpenSearch 3.9.0 and copied on purpose).
+- A `metadataFilter` can only use the indexed fields (`document_id`, `document_name`, `tenant_id`, `chunk_index`, `token_count`); any other key throws `IllegalArgumentException` (it used to match nothing, silently, because the other metadata is stored as an unindexed string). `tenant_id` is also stored as its own keyword field when the chunk's metadata has one, and `initSchema` maps it on an existing index (a failure to add the mapping is only logged as a warning). Same as the Python `OpenSearchBackend` of ragleap-vectorstores 0.7.0.
 - Constructor options: index name, documents index name, `useSsl`, basic authentication, your own `HttpClient`.
 
 ### Differences from Python
@@ -76,7 +76,9 @@ search.
 - The url is used exactly as given, like the SDK (no scheme is added; a trailing slash gives `//info`).
 - A namespace is sent percent-encoded; the SDK leaves a few characters raw that `java.net.URI` cannot send
   (invalid percent escapes, square brackets, `|`, `^`). Those two scenarios compare the decoded path.
-- A filter value that is a list or map throws; a missing or non-numeric `chunk_index` comes back as 0.
+- A filter value that is a list or map throws; a filter key must be an identifier (letters, digits, `_` and `.`, not
+  starting with a digit), any other key throws `IllegalArgumentException` instead of reaching the filter string (same as
+  the Python `UpstashBackend` of ragleap-vectorstores 0.7.0); a missing or non-numeric `chunk_index` comes back as 0.
 - `listDocuments` follows the `range` cursor until the scan ends or the cursor repeats, like the fixed Python (before
   that fix Python counted at most 1000 chunks per document); a `nextCursor` that is neither a string nor null throws.
 - Failures throw `SQLException`; a wrong dimension or a hybrid index throws `IllegalStateException`.
@@ -112,9 +114,13 @@ database.
   not covered by the Python parity tests (a small unit test checks the `AUTH` and `SELECT` commands).
 - A filter value that is a list or map throws; failures throw `SQLException`; a missing search module throws
   `IllegalStateException` (Python: `RuntimeError`).
+- A `metadataFilter` can only use `document_id` and `tenant_id` (the index has a `tenant_id` TAG field now); any other key
+  throws `IllegalArgumentException`, because ignoring it would let a tenant filter search all tenants. Both keys go into
+  one parenthesised group. An existing index that was created without the `tenant_id` field (by an older version)
+  rejects a `tenant_id` filter with `IllegalStateException`: use a new `indexName`. Same as the Python `RedisBackend` of
+  ragleap-vectorstores 0.7.0.
 
-Copied from Python on purpose (possible Python issues, not fixed here): only `document_id` can be filtered (other
-keys are accepted and ignored); an existing index is reused without checking its dimension; any failure of `FT.INFO`,
+Copied from Python on purpose (possible Python issues, not fixed here): an existing index is reused without checking its dimension; any failure of `FT.INFO`,
 even a connection failure, makes `initSchema` try to create the index; `deleteDocument` removes at most 10000 chunks
 of a document.
 

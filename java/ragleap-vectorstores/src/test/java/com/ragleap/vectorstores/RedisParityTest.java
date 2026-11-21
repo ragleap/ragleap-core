@@ -267,12 +267,16 @@ class RedisParityTest {
         } catch (SQLException e) {
             return err(call.equals("insert_document") ? "IntegrityError" : "RemoteError");
         } catch (IllegalStateException e) {
-            if (call.equals("init_schema")) {
+            if (call.equals("init_schema") || call.equals("search_dense")) {
                 ObjectNode o = err("RuntimeError");
                 o.put("message", e.getMessage().replace(url, "<url>"));
                 return o;
             }
             return err("NotInitialized");
+        } catch (IllegalArgumentException e) {
+            ObjectNode o = err("ValueError");
+            o.put("message", e.getMessage());
+            return o;
         }
         return out;
     }
@@ -281,7 +285,7 @@ class RedisParityTest {
     private static JsonNode normExpected(String call, JsonNode result) {
         if (call.equals("search_dense") && result.has("error")) {
             String e = result.get("error").asText();
-            if (e.equals("AttributeError") || e.equals("ValueError")) {
+            if (e.equals("AttributeError") || (e.equals("ValueError") && !result.has("message"))) {
                 return err("RemoteError");
             }
         }

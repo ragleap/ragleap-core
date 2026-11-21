@@ -191,6 +191,18 @@ case("search_filters", [
     op("search_dense", [1.0], 2, {}),
     op("search_dense", [], 2, {"a": 1}),
 ], INIT + [J(200, vec_hits()), J(200, vec_hits())])
+case("search_filter_key_validation", [
+    op("init_schema", 8),
+    op("search_dense", [1.0], 2, {"a.b_c": 1, "_x9": "y"}),
+    op("search_dense", [1.0], 2, {"bad key": 1}),
+    op("search_dense", [1.0], 2, {"1abc": 1}),
+    op("search_dense", [1.0], 2, {"ok": 1, "x;drop": 2}),
+    op("search_dense", [1.0], 2, {"": 1}),
+    op("search_dense", [1.0], 2, {"a-b": 1}),
+    op("search_dense", [1.0], 2, {"cl\u00e9": 1}),
+    op("search_dense", [1.0], 2, {"it's": 1}),
+    op("search_dense", [], 2, {"bad key": 1}),
+], INIT + [J(200, vec_hits())])
 case("search_error", [op("init_schema", 8), op("search_dense", [0.5], 2, None)], INIT + [J(200, {"error": "bad filter"})])
 case("search_result_missing_id", [op("init_schema", 8), op("search_dense", [0.5], 2, None)],
      INIT + [J(200, vec_hits({"score": 0.5}))])
