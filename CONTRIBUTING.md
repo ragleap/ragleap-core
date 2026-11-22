@@ -57,6 +57,19 @@ look at the existing pattern first:
   `channels/discord/` — each follows the same shape (a `router.py` with
   `handle_incoming_message()` calling `core.chat.ask()`)
 
+## Adding a connector, tool or integration
+
+**Trust statement.** Until process isolation is available, every connector that runs inside the RagLeap process is trusted code. It can read the same database and secrets as the application. Such connectors are accepted only as reviewed code merged into the repository. Capability declarations and the central gate protect against mistakes and against actions the connector is not meant to take; they do not contain a malicious in-process connector.
+
+What this means for a pull request:
+
+- If you plan a new connector, open an issue first. The host services that connectors will use are not connected to the product yet.
+- Describe what it can do in a capability declaration. The format is a draft; see [docs/capability-schema.md](docs/capability-schema.md). A declaration can only narrow what the core allows, never widen it.
+- Check it offline: `python scripts/ragleap_conformance.py your-declaration.json --source your_connector.py --strict`.
+- Code under `core/integrations` must not use the network, the environment or a subprocess directly. `python scripts/ragleap_boundary_scan.py` checks this; the older uses are in a baseline list that can only shrink.
+- Anything that acts on the outside world goes through the central gate in `core/autonomy.py`.
+- Say in the PR what you tested and what you did not. Do not describe a change as "secure", "certified" or "production-ready" unless there is evidence a reviewer can check.
+
 ## Code of Conduct
 
 Be respectful and constructive. See [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
