@@ -67,12 +67,15 @@ BREAKS = [  # (name, file, old, new, classes that must get worse)
     ("clear-stop does not revoke the approvals given before the stop", BR, 'if was_stopped:\n            for pid, rec in self._ledger.items():', 'if False:\n            for pid, rec in self._ledger.items():',
      ["stale_or_reused_approvals", "console_approval", "random_sequences"]),
     ("console digest check off", CO, "if not hmac.compare_digest(digest.encode(), p.digest().encode()):", "if False:", ["console_approval"]),
+    # #1367 is fixed: the harness now checks that it stays fixed. "regression" is the always-on check, not a class.
+    ("console serves one connection at a time (#1367)", CO, "class _ConsoleServer(socketserver.ThreadingMixIn, HTTPServer):", "class _ConsoleServer(HTTPServer):", ["regression"]),
 ]
 
 
 def run_harness(py, src, seed, per_class, classes, out):
     cmd = [py, str(HERE / "redteam_harness.py"), "--seed", str(seed), "--per-class", str(per_class), "--json", out]
-    for c in classes:
+    only = [c for c in classes if c != "regression"] or ["bad_values"]  # "regression" is the always-on check, not a class
+    for c in only:
         cmd += ["--only", c]
     r = subprocess.run(cmd, env=dict(os.environ, PYTHONPATH=src), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True, timeout=900)
     try:
@@ -82,6 +85,8 @@ def run_harness(py, src, seed, per_class, classes, out):
 
 
 def bad(rep, cls):
+    if cls == "regression":
+        return len(rep.get("regressed", []))
     c = rep["classes"].get(cls, {})
     return c.get("passed", 0) + c.get("unclean", 0) + c.get("error", 0)
 

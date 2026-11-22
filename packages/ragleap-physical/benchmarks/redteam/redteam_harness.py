@@ -59,9 +59,20 @@ INVARIANTS_FILE = Path(__file__).with_name("invariants.json")  # class -> invari
 # Gaps that are already known and marked as expected failures in the repository: reported as known, never counted as new findings.
 KNOWN_GAPS = {
     "#1339": "a stop from another thread can land between the Bridge's last check and the adapter call; the adapters do not refuse a command while stopped",
-    "#1367": "the console's stop waits behind a client that announced a body and never sent it (probed only with --include-slow: about 10 s)",
     "linger-limit": "a refused body above the 1 MiB linger limit is still left partly unread (probed on Linux only)",
 }
+# Fixed on main and checked on every run: a failure here is a finding and a non-zero exit code, not a known gap.
+REGRESSIONS = {
+    "#1367": "the console answers a stop request while a client holds a half-sent request (the console serves each connection in its own thread)",
+}
+STOP_BOUND_S = 3.0  # an absolute bound, below the console's 5 s read timeout: a stop that waited for the stalled client would take longer
+
+
+def regressed_ids(regs: dict) -> list:
+    """Every check that did not hold, or could not run, is a regression."""
+    return sorted(k for k, v in regs.items() if v["status"] != "held")
+
+
 BIDI = [0x202A, 0x202B, 0x202C, 0x202D, 0x202E, 0x2066, 0x2067, 0x2068, 0x2069, 0x200E, 0x200F, 0x061C, 0x200B,
         0x2060, 0xFEFF, 0x00AD, 0x2028, 0x2029, 0x85, 0x1B, 0x7F, 0x00, 0x07, 0x0A, 0x0D, 0x09, 0x9F, 0xE0001,
         0xE0041, 0xD800]
@@ -1148,8 +1159,9 @@ def unread_at_close_probe(factory):
     return unread[0] if unread else None
 
 
-def known_gap_probes(factory, rec, include_slow):
+def known_gap_probes(factory, rec, include_slow=False, regressions=None):
     out = {k: {"description": d, "status": "not probed", "cases": len(rec.known.get(k, []))} for k, d in KNOWN_GAPS.items()}
+    regressions = {} if regressions is None else regressions
     # #1339: a stop lands at the entry of the adapter call
     w = World(factory)
     try:
@@ -1168,8 +1180,8 @@ def known_gap_probes(factory, rec, include_slow):
         out["linger-limit"]["status"] = "open (reproduced)" if unread > 0 else "not reproduced (closed? remove the marker)"
     else:
         out["linger-limit"]["status"] = "not probed (needs fcntl: Linux or macOS)"
-    # #1367: only with --include-slow (about 10 s)
-    if include_slow:
+    # #1367 (fixed): a regression check on every run. A stop must be answered while a client holds a half-sent request.
+    if True:
         w = World(factory, console=True)
         try:
             port = w.console.server_address[1]
@@ -1182,7 +1194,10 @@ def known_gap_probes(factory, rec, include_slow):
                 waited = time.monotonic() - started
             finally:
                 stalled.close()
-            out["#1367"]["status"] = "open (reproduced)" if waited > 5.0 else "not reproduced (closed? remove the marker)"
+            ok = status is not None and 200 <= status < 300 and waited < STOP_BOUND_S
+            regressions["#1367"] = {"description": REGRESSIONS["#1367"], "status": "held" if ok else "REGRESSED", "waited_s": round(waited, 3), "answer": status}
+        except Exception as exc:  # noqa: BLE001
+            regressions["#1367"] = {"description": REGRESSIONS["#1367"], "status": "not checked", "waited_s": None, "answer": type(exc).__name__}
         finally:
             w.close()
     return out
@@ -1304,15 +1319,22 @@ def run(seed: int = 1, per_class: int = 40, factory=default_factory, only=None, 
         s = c["by_scenario"].setdefault(scenario, {v: 0 for v in VERDICTS})
         s[verdict] += 1
         c["codes"][code] = c["codes"].get(code, 0) + 1
+    regs: dict = {}
+    gaps = known_gap_probes(factory, rec, include_slow, regs)
+    regressed = regressed_ids(regs)
+    findings = rec.findings + [{"seed": seed, "class": "regression", "case": 0, "scenario": k, "layer": "console", "verdict": "error",
+                                "detail": "the stop was refused, late or not answered, or the check could not run", "input": ""} for k in regressed]
     body = {"schema": SCHEMA, "seed": seed, "per_class": per_class, "package_version": __version__, "controls": ctl,
             "controls_ok": all(ctl.values()), "classes": {k: classes[k] for k in sorted(classes)},
             "totals": {k: sum(c[k] for c in classes.values()) for k in ("attempts",) + VERDICTS},
-            "findings": rec.findings, "known_gaps": known_gap_probes(factory, rec, include_slow),
+            "findings": findings, "known_gaps": gaps,
+            "regressions": {k: {"description": v["description"], "status": v["status"]} for k, v in regs.items()}, "regressed": regressed,
             "invariants_source": (inv or {}).get("source", "missing: invariants.json has not been written from docs/safety-invariants.md"),
             "invariants_not_covered": sorted(set((inv or {}).get("invariants", [])) - {i for ids in (inv or {}).get("classes", {}).values() for i in ids}, key=lambda s: int(s[1:]))}
     body["report_sha256"] = hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     body["environment"] = {"python": platform.python_version(), "platform": platform.system(),
-                           "python_dependent_observations": python_dependent_observations(factory)}  # not part of the hash
+                           "python_dependent_observations": python_dependent_observations(factory),
+                           "regression_details": {k: {"waited_s": v.get("waited_s"), "answer": v.get("answer")} for k, v in regs.items()}}  # not part of the hash
     return body
 
 
@@ -1332,7 +1354,7 @@ def main(argv=None) -> int:
     ap.add_argument("--per-class", type=int, default=40)
     ap.add_argument("--only", action="append", choices=CLASSES)
     ap.add_argument("--json")
-    ap.add_argument("--include-slow", action="store_true", help="also probe #1367 (about 10 s)")
+    ap.add_argument("--include-slow", action="store_true", help="no effect: #1367 is now checked on every run (kept so old command lines still work)")
     a = ap.parse_args(argv)
     rep = run(a.seed, a.per_class, only=a.only, include_slow=a.include_slow)
     print("ragleap-physical %s | python %s | seed %d | per class %d" % (rep["package_version"], rep["environment"]["python"], a.seed, a.per_class))
@@ -1343,13 +1365,15 @@ def main(argv=None) -> int:
                                                                                   (" trace=" + ",".join(f["trace"])) if f.get("trace") else ""))
     for k, g in rep["known_gaps"].items():
         print("KNOWN %-12s %-45s cases seen: %d  (%s)" % (k, g["status"], g["cases"], g["description"][:70]))
+    for k, g in rep["regressions"].items():
+        print("REGRESSION CHECK %-8s %s  (%s)" % (k, g["status"], g["description"][:80]))
     print("report_sha256", rep["report_sha256"])
     if a.json:
         with open(a.json, "w", encoding="utf-8") as fh:
             json.dump(rep, fh, indent=1, sort_keys=True)
     if not rep["controls_ok"]:
         return 2
-    return 1 if (rep["totals"]["passed"] or rep["totals"]["unclean"] or rep["totals"]["error"]) else 0
+    return 1 if (rep["totals"]["passed"] or rep["totals"]["unclean"] or rep["totals"]["error"] or rep["regressed"]) else 0
 
 
 if __name__ == "__main__":
