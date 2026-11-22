@@ -11,12 +11,18 @@ Routes (JSON):
   POST /v1/apply              {"proposal_id"}: apply an approved proposal in simulation, then verify
   POST /v1/stop               {}: safe state, no approval needed
   POST /v1/clear-stop         {}: leave the safe state
+
+Each connection is served in its own thread, at most MAX_CONNECTIONS at once (the next one is refused at once with 503). A client that stalls,
+or an apply that is still running, therefore never holds a stop request. Every Bridge method except stop() takes the Bridge's lock, and stop() never waits for it.
 """
 from __future__ import annotations
 
 import hmac
 import json
 import re
+import socketserver
+import sys
+import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any, Mapping, Optional
 
@@ -28,6 +34,8 @@ from ._linger import linger
 
 MAX_BODY = 4096
 MIN_TOKEN = 24
+MAX_CONNECTIONS = 32
+READ_TIMEOUT_S = 5.0
 _LOOPBACK = {"127.0.0.1", "::1", "localhost"}
 _ID = re.compile(r"prop_[0-9]{6,12}")
 _DIGEST = re.compile(r"[0-9a-f]{64}")
@@ -37,6 +45,56 @@ def _view(bridge: Bridge, proposal) -> dict:
     d = proposal.to_dict()
     d["digest"] = proposal.digest()
     return d
+
+
+_BUSY = b"HTTP/1.0 503 Service Unavailable\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
+
+
+class _ConsoleServer(socketserver.ThreadingMixIn, HTTPServer):
+    """One thread per connection, at most ``MAX_CONNECTIONS`` at once. A connection that arrives when every slot is taken is answered with 503
+    at once and closed. A client that stalls holds one slot until the read timeout, never the whole console."""
+    daemon_threads = True
+
+    def __init__(self, address, handler, max_connections: Optional[int] = None) -> None:
+        super().__init__(address, handler)
+        self._slots = threading.BoundedSemaphore(MAX_CONNECTIONS if max_connections is None else max_connections)
+        self._counts = threading.Lock()
+        self.lingered_bytes = 0
+        self.lingered_calls = 0
+        self.drained_bytes = 0
+        self.refused_busy = 0
+
+    def count(self, **deltas: int) -> None:
+        with self._counts:
+            for name, n in deltas.items():
+                setattr(self, name, getattr(self, name) + n)
+
+    def process_request(self, request, client_address) -> None:
+        if not self._slots.acquire(blocking=False):
+            self.count(refused_busy=1)
+            try:
+                request.settimeout(0.5)
+                request.sendall(_BUSY)
+            except OSError:
+                pass
+            self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except BaseException:
+            self._slots.release()
+            raise
+
+    def process_request_thread(self, request, client_address) -> None:
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._slots.release()
+
+    def handle_error(self, request, client_address) -> None:
+        if isinstance(sys.exc_info()[1], OSError):  # a client that went away (reset, broken pipe, timeout): nothing to report
+            return
+        super().handle_error(request, client_address)
 
 
 def make_console(bridge: Bridge, tokens: Mapping[str, str], host: str = "127.0.0.1", port: int = 0,
@@ -64,7 +122,7 @@ def make_console(bridge: Bridge, tokens: Mapping[str, str], host: str = "127.0.0
     origins = frozenset(allowed_origins)
 
     class Handler(BaseHTTPRequestHandler):
-        timeout = 10
+        timeout = READ_TIMEOUT_S
         server_version = "ragleap-physical-console"
         sys_version = ""
 
@@ -84,7 +142,7 @@ def make_console(bridge: Bridge, tokens: Mapping[str, str], host: str = "127.0.0
             if 0 < n <= MAX_BODY:
                 try:
                     self.rfile.read(n)
-                    self.server.drained_bytes = getattr(self.server, "drained_bytes", 0) + n
+                    self.server.count(drained_bytes=n)
                 except Exception:
                     pass
 
@@ -104,8 +162,8 @@ def make_console(bridge: Bridge, tokens: Mapping[str, str], host: str = "127.0.0
             if status >= 400:
                 # lingering close: the client can read the refusal even when it is still sending a body we did not read
                 # (Windows clients report WinError 10053 when the socket is closed with unread data)
-                self.server.lingered_bytes = getattr(self.server, "lingered_bytes", 0) + linger(self.connection)
-                self.server.lingered_calls = getattr(self.server, "lingered_calls", 0) + 1
+                n = linger(self.connection)
+                self.server.count(lingered_bytes=n, lingered_calls=1)
 
         def _err(self, status: int, code: str, message: str, extra: Optional[dict] = None) -> None:
             self._send(status, {"error": {"code": code, "message": message}}, extra)
@@ -235,4 +293,4 @@ def make_console(bridge: Bridge, tokens: Mapping[str, str], host: str = "127.0.0
 
         do_PUT = do_DELETE = do_PATCH = _no
 
-    return HTTPServer((host, port), Handler)  # one request at a time: the bridge is not thread-safe
+    return _ConsoleServer((host, port), Handler)

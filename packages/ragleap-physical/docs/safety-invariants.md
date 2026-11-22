@@ -65,8 +65,12 @@ If something needed for a check is missing or unexpected, the answer is no, and 
 - `tests/test_bridge_limits.py::test_stop_does_not_depend_on_capability`
 - `tests/test_known_gaps.py::test_no_adapter_command_when_stop_lands_during_the_dry_run`
 - `tests/test_adapter_stop_refusal.py::test_apply_refuses_while_stopped`
+- `tests/test_console_threaded.py::test_a_stop_is_answered_while_an_apply_is_running`
+- `tests/test_lingering_close_review.py::test_f2_the_console_stop_is_not_held_up_by_a_client_that_never_sends_its_body`
 
-**Open gaps:** the operator console answers one request at a time, so a stop request can wait up to 10 s behind a client that never finishes its request (#1367). Expected failure: `tests/test_lingering_close_review.py::test_f2_the_console_stop_is_not_held_up_by_a_client_that_never_sends_its_body`. A stop from another thread can still land between the bridge's last check and the adapter call; the adapter refusal narrows this for the simulated adapters (#1339). Real devices are out of scope.
+**Console (#1367, fixed):** the operator console serves each connection in its own thread, at most 32 at once. A stop request is answered while an apply is still running and behind a client that never finishes its request. A local client that holds every slot can still delay a stop for up to the read timeout (5 s); the next connection beyond the cap is refused with 503 at once. The MCP server still serves one request at a time; it has no stop tool.
+
+**Open gaps:** a stop from another thread can still land between the bridge's last check and the adapter call; the adapter refusal narrows this for the simulated adapters (#1339). Real devices are out of scope.
 
 ### S9 Device data is untrusted
 Text from a device is never trusted: unknown units are dropped, sizes are capped, duplicate ids are dropped, control and bidirectional characters are refused, and results are marked untrusted. Enforced in `observation.py` and `tools.py`.
