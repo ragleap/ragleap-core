@@ -1,29 +1,34 @@
-"""Capability declarations for the core's own 17 built-in tools (Phase 0, P0-E, draft).
+"""Capability declarations for the core's own built-in tools (Phase 0, P0-E and P0-G, draft).
 
 Generated from the tables in core/connector_host/policy.py, so the declarations cannot disagree with the floor the
-gate applies (tests/test_builtin_declarations.py compares them with the real gate sets). Nothing in the product
-imports this module yet: it describes what the built-in tools already do; it changes no behaviour.
+gate applies (tests/test_builtin_declarations.py compares them with the real gate sets and with core/subagents.py).
+Nothing in the product imports this module yet: it describes what the built-in tools already do; it changes no
+behaviour.
 
-Each tool has its own declaration, because network facts differ per tool. Tools that send to targets the OWNER
-configures by name (webhook and Slack names, the email and CRM settings, MCP servers, the approval chat) say
-network.owner_configured: true instead of listing hosts. `fetch_page` reads a page chosen at run time, so it
-declares no host list; its note says so. `delegate` (sub-agents, off by default) is not declared here: it hands a
-task to another role and is not a connector operation.
+Each tool has its own declaration, because network facts differ per tool. The network.egress class says how far a
+tool reaches: `owner_configured` for tools that send to targets the OWNER configures by name (webhook and Slack
+names, the email and CRM settings, MCP servers, the approval chat), `runtime_chosen` for `fetch_page` (the address
+is chosen while the run goes on, so a host list cannot be declared and the class carries the checks instead).
+`delegate` (sub-agents, off by default) is declared too: it is denied unless the owner explicitly grants it, and
+its `inherits` block states the limits of a delegated run.
 """
 import copy
 from typing import Any, Dict, List
 
-from core.connector_host.policy import (ALWAYS_APPROVAL_OPERATIONS, BUILTIN_EFFECT, OUTBOUND_BUILTINS,
-                                        TAINTING_BUILTINS)
+from core.connector_host.policy import (ALWAYS_APPROVAL_OPERATIONS, BUILTIN_EFFECT, BUILTIN_EGRESS,
+                                        GRANT_REQUIRED_OPERATIONS, OUTBOUND_BUILTINS, TAINTING_BUILTINS)
 
 SCHEMA = "ragleap.capability/1"
 VERSION = "1.0.0"
 ID_PREFIX = "ragleap.builtin."
 
-# Tools whose send target is chosen by the owner's configuration, not by the model or the connector.
-OWNER_CONFIGURED = frozenset({"send_webhook", "send_slack", "send_email", "update_crm_record", "schedule_event",
-                              "notify_owner", "mcp_call"})
 KIND = {"mcp_call": "mcp"}
+
+# The limits of a delegated run. The numbers are the defaults in core/subagents.py (a test compares them with the code).
+# `tools: parent_subset` is the rule the core is meant to apply from Phase 1; today a child gets the same tool list as
+# any run (see the note below).
+DELEGATE_INHERITS = {"max_depth": 1, "max_children": 3, "child_tokens": 8000, "tree_tokens": 30000,
+                     "tools": "parent_subset", "taint": "both_ways"}
 
 _TITLES = {
     "send_webhook": "Send a webhook", "send_slack": "Send a Slack message", "send_email": "Send an email",
@@ -33,7 +38,7 @@ _TITLES = {
     "fetch_page": "Fetch a web page", "list_files": "List files in a granted folder",
     "read_file": "Read a file in a granted folder", "preview_change": "Preview a file change",
     "write_file": "Write a file in a granted folder", "delete_file": "Delete a file in a granted folder",
-    "request_access": "Ask the owner for folder access",
+    "request_access": "Ask the owner for folder access", "delegate": "Hand a task to a colleague role",
 }
 _NOTES = {
     "send_webhook": "The target is a webhook name the owner configured in the environment.",
@@ -46,13 +51,17 @@ _NOTES = {
     "create_task": "Creates a task ticket in the core's own database.",
     "run_code": "Runs in the sandbox runner container, which has no network.",
     "run_shell": "Runs in the sandbox runner container, which has no network.",
-    "fetch_page": "Reads a public page whose address is chosen at run time, so no host list can be declared here.",
+    "fetch_page": "Reads a public page whose address is chosen at run time, so no host list can be declared. "
+                  "The runtime_chosen class carries the checks the core must apply to every address and redirect.",
     "list_files": "Works only inside folders the owner granted.",
     "read_file": "Works only inside folders the owner granted.",
     "preview_change": "Shows a change without applying it. Works only inside folders the owner granted.",
     "write_file": "Works only inside folders the owner granted with a write grant. Off by default.",
     "delete_file": "Works only inside folders the owner granted with a delete grant. Off by default.",
     "request_access": "Asks the owner to grant a folder. Off by default.",
+    "delegate": "Off unless the owner turns sub-agents on and grants this operation. A child run starts with the "
+                "parent's taint, and its taint comes back to the parent. Today a child gets the same tool list as "
+                "any run; cutting it down to the parent's is planned for Phase 1.",
 }
 
 
@@ -70,10 +79,14 @@ def builtin_declaration(tool: str) -> Dict[str, Any]:
         op["approval"] = "always"
     if _taint(tool) != "none":
         op["taint"] = _taint(tool)
+    if tool in GRANT_REQUIRED_OPERATIONS:
+        op["grant"] = "explicit"
+    if tool == "delegate":
+        op["inherits"] = dict(DELEGATE_INHERITS)
     decl: Dict[str, Any] = {"schema": SCHEMA, "id": ID_PREFIX + tool, "version": VERSION,
                             "kind": KIND.get(tool, "action"), "operations": [op]}
-    if tool in OWNER_CONFIGURED:
-        decl["network"] = {"owner_configured": True}
+    if tool in BUILTIN_EGRESS:
+        decl["network"] = {"egress": BUILTIN_EGRESS[tool]}
     decl["descriptive"] = {"title": _TITLES[tool], "notes": _NOTES[tool]}
     return copy.deepcopy(decl)
 

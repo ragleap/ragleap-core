@@ -22,7 +22,7 @@ See `docs/capability-examples/` for three complete examples: an action (`crm-act
 | `kind` | yes | `action`, `datasource` or `mcp`. |
 | `operations` | yes | One or more operations (below). Names must be unique. |
 | `scope` | no | `level` is `organization` or `user`. A `user` scope needs `user_filter_field`, the field that holds the user id. |
-| `network` | no | `hosts`: public host names (no wildcards, no IP addresses, no internal names). `https_only`: must be `true` when present. `owner_configured`: `true` when the owner, not the connector, chooses where it sends (the core's own tools use this); it lists no host and satisfies `E-NET-REQUIRED`. `tcp`: reserved (below). |
+| `network` | no | `hosts`: public host names (no wildcards, no IP addresses, no internal names). `https_only`: must be `true` when present. `egress`: how far the connector reaches: `fixed_hosts` (the hosts listed here), `owner_configured` (targets the owner configures by name; no host list) or `runtime_chosen` (the address is chosen while the run goes on; no host list; carries the obligations in "Egress classes" below). Without it the class is `fixed_hosts` when hosts or `tcp` are listed, otherwise none. `tcp`: reserved (below). |
 | `secrets` | no | Names of settings the connector needs, UPPER_SNAKE_CASE. Names that belong to the core (such as `DATABASE_URL`) cannot be declared. |
 | `budgets` | no | `max_calls_per_run`, `max_calls_per_day`, `max_bytes`, `timeout_s`. The core's own ceilings apply on top. |
 | `descriptive` | no | `title`, `notes`, `data_classes`. **Not enforced** (below). |
@@ -36,6 +36,8 @@ Each **operation** has:
 | `approval` | no | `always` or `per_mode` (default). There is no `never`: the core decides when approval is forced. |
 | `taint` | no | `none` (default), `tainting` (its result is untrusted content, so later outbound actions in the same run need approval), `outbound` (it is an outbound action that is subject to that rule), or `both` |
 | `args` | no | A reference name for the argument schema (descriptive for now). |
+| `grant` | no | `explicit`: the operation is denied unless the owner grants it by name. Nothing is granted by default. |
+| `inherits` | no | Limits of the runs this operation starts: `max_depth` (1 to 3), `max_children` (1 to 8), `child_tokens`, `tree_tokens`, `tools: parent_subset`, `taint: both_ways`. Needs `grant: explicit`. |
 
 ## Design rules (not enforced yet)
 
@@ -46,6 +48,20 @@ These are the rules the core is meant to apply once it reads declarations (Phase
 - File writes, file deletes and access requests always need approval, whatever the declaration says.
 - Declared budgets are clamped to the core's ceilings.
 - Only calls and bytes measured by the host count toward limits; usage reported by a connector is informational.
+
+## Egress classes and obligations (not enforced yet)
+
+| Class | Host list | What the core must apply once it enforces declarations |
+|---|---|---|
+| `fixed_hosts` | required | Only the listed hosts, cut back to the owner's list. Denied when the owner turns egress off. Metadata and link-local addresses blocked. |
+| `owner_configured` | none | The owner picks the target by name. Denied when egress is off. Metadata and link-local addresses blocked. |
+| `runtime_chosen` | none | The address is chosen while the run goes on. Denied when egress is off. Metadata, link-local, loopback and private addresses blocked after DNS resolution as well as before. Every redirect hop checked again. The resolved URL and the status written to the audit event. |
+
+The core's own tools carry a class that a declaration cannot lower: `fetch_page` is `runtime_chosen`, the senders are `owner_configured`. The checks themselves arrive with the shared HTTP client (Phase 1); until then the class and its obligations are only recorded in the effective policy.
+
+## Explicit grants and inheritance (not enforced yet)
+
+An operation with `grant: explicit` is denied unless the owner grants it by name; nothing is granted by default. `delegate` always needs a grant, and a declaration cannot remove that. `inherits` states the limits of the runs an operation starts: a child may use only tools its parent may use (`tools: parent_subset`; the core does not cut the list down yet), and taint travels both ways (`taint: both_ways`: a child starts with the parent's taint and hands its own back). `inherits` needs `grant: explicit`.
 
 ## `descriptive` is not enforced
 
@@ -74,7 +90,9 @@ Exit code 0 means it conforms, 1 means errors (or warnings with `--strict`), 2 m
 | `E-APPROVAL-NEVER` | error | `approval: never` was used. It does not exist. |
 | `E-SCOPE-USER-FIELD` | error | A `user` scope has no `user_filter_field`. |
 | `E-NET-INTERNAL-HOST` | error | A host is an IP address or an internal name. |
-| `E-NET-REQUIRED` | error | An `external_send` operation declares no host, no `tcp` target and no `network.owner_configured`. |
+| `E-NET-REQUIRED` | error | An `external_send` operation declares no host, no `tcp` target and no `owner_configured` or `runtime_chosen` egress class. |
+| `E-NET-EGRESS-HOSTS` | error | Egress `fixed_hosts` lists no host, or `owner_configured` or `runtime_chosen` lists one. |
+| `E-INHERITS-NEEDS-GRANT` | error | An operation declares `inherits` without `grant: explicit`. |
 | `E-SECRET-PROTECTED` | error | A core-owned secret was declared. |
 | `E-SRC-DIRECT-ACCESS` | error | Connector source uses the network, a subprocess, the environment or a dynamic import directly. |
 | `W-TCP-NOT-ENFORCEABLE` | warning | `network.tcp` is declared; it cannot be enforced in-process. |
