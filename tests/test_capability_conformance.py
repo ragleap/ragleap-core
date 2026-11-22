@@ -190,3 +190,34 @@ def test_source_lint_flags_direct_access_and_passes_clean_code(tmp_path):
     rc, out, _ = run(good, "--source", str(driver))
     assert rc == 0 and "W-SRC-DRIVER" in out
     assert run(good, "--source", str(driver), "--strict")[0] == 1
+
+
+# ---------- network.owner_configured (P0-E) ----------
+
+def test_owner_configured_satisfies_the_external_send_host_rule():
+    d = mutate(lambda d: d.update(network={"owner_configured": True}))
+    assert "E-NET-REQUIRED" not in codes(d) and levels(d, "error") == set()
+
+
+def test_owner_configured_only_accepts_true():
+    for bad in (False, "yes", 1):
+        d = mutate(lambda d: d.update(network={"owner_configured": bad}))
+        assert "E-SCHEMA" in levels(d, "error")
+
+
+def test_owner_configured_does_not_excuse_an_internal_host():
+    d = mutate(lambda d: d.update(network={"owner_configured": True, "hosts": ["10.0.0.5"]}))
+    assert "E-NET-INTERNAL-HOST" in levels(d, "error")
+
+
+def test_an_empty_network_still_needs_a_host_for_external_send():
+    d = mutate(lambda d: d.update(network={}))
+    assert "E-NET-REQUIRED" in levels(d, "error")
+
+
+def test_a_constant_is_compared_by_type_so_1_is_not_true():
+    for field in ("owner_configured", "https_only"):
+        for bad in (1, 0, "true"):
+            d = mutate(lambda d: d["network"].update({field: bad}))
+            assert "E-SCHEMA" in levels(d, "error"), (field, bad)
+        assert "E-SCHEMA" not in levels(mutate(lambda d: d["network"].update({field: True})), "error")

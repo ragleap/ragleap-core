@@ -46,6 +46,7 @@
       "properties": {
         "hosts": {"type": "array", "maxItems": 32, "uniqueItems": true, "items": {"type": "string", "maxLength": 253, "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$"}},
         "https_only": {"const": true},
+        "owner_configured": {"const": true},
         "tcp": {"type": "array", "maxItems": 8, "items": {"$ref": "#/$defs/tcp"}}
       }
     },

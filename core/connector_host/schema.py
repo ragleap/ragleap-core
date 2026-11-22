@@ -56,6 +56,7 @@ SCHEMA_V1_JSON = r'''{
       "properties": {
         "hosts": {"type": "array", "maxItems": 32, "uniqueItems": true, "items": {"type": "string", "maxLength": 253, "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$"}},
         "https_only": {"const": true},
+        "owner_configured": {"const": true},
         "tcp": {"type": "array", "maxItems": 8, "items": {"$ref": "#/$defs/tcp"}}
       }
     },
@@ -124,7 +125,7 @@ def validate(instance, schema, root=None, path="$"):
         for part in schema["$ref"].lstrip("#/").split("/"):
             node = node[part]
         return validate(instance, node, root, path)
-    if "const" in schema and instance != schema["const"]:
+    if "const" in schema and (instance != schema["const"] or type(instance) is not type(schema["const"])):
         errors.append((path, f"must be {schema['const']!r}"))
         return errors
     if "enum" in schema and instance not in schema["enum"]:
@@ -203,8 +204,9 @@ def semantic_findings(decl: dict):
     for h in hosts + [x for x in tcp_hosts if x]:
         if _is_internal_host(h):
             out.append(("error", "E-NET-INTERNAL-HOST", f"host {h!r} is an address or an internal name; declare public host names only (private hosts belong in the owner's allow list)"))
-    if any(isinstance(o, dict) and o.get("effect") == "external_send" for o in ops) and not (hosts or tcp_hosts):
-        out.append(("error", "E-NET-REQUIRED", "an operation with effect 'external_send' needs network.hosts (or network.tcp)"))
+    owner_configured = net.get("owner_configured") is True
+    if any(isinstance(o, dict) and o.get("effect") == "external_send" for o in ops) and not (hosts or tcp_hosts or owner_configured):
+        out.append(("error", "E-NET-REQUIRED", "an operation with effect 'external_send' needs network.hosts (or network.tcp, or network.owner_configured when the owner chooses the targets)"))
     for s in decl.get("secrets", []):
         if s in PROTECTED_SECRETS:
             out.append(("error", "E-SECRET-PROTECTED", f"secret {s!r} belongs to the core and cannot be declared"))
