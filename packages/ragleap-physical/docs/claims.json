@@ -606,6 +606,27 @@
     }
    ],
    "note": "Observe-only Bridge only; not tested through the console. Invented data only."
+  },
+  {
+   "id": "C42",
+   "claim": "A set is valid only inside its tested speeds, and the helper below refuses a speed outside them",
+   "where": "examples/wear_study.ipynb",
+   "status": "verified",
+   "evidence": [
+    {
+     "type": "test",
+     "ref": "tests/test_wear_study_sources.py::test_a_speed_outside_the_tested_range_is_refused"
+    }
+   ],
+   "note": "Deliberate breaks of the range guard, of either end of the range and of the type check are caught. REAL. Simulation only; the notebook is still a toy."
+  },
+  {
+   "id": "C43",
+   "claim": "The values above are **derived here**, not taken from the source",
+   "where": "examples/wear_study.ipynb",
+   "status": "limitation",
+   "evidence": [],
+   "note": "Least-squares lines through six published points per lathe (R^2 0.97 and 0.98); the source gives no scatter, and a fit that starts one point later moves n by about 0.06. Not compared with measurements and not reviewed by someone who machines."
   }
  ]
 }
