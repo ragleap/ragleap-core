@@ -524,6 +524,88 @@
    "status": "limitation",
    "evidence": [],
    "note": "At most 32 connections; the next one is refused with 503 at once. The read timeout is 5 s."
+  },
+  {
+   "id": "C37",
+   "claim": "there is no network code, no URL, no subscription, no dependency and no command",
+   "where": "docs/industry/message-feed-adapter.md",
+   "status": "verified",
+   "evidence": [
+    {
+     "type": "test",
+     "ref": "tests/test_message_feed_adapter.py::test_there_is_no_command_and_nothing_is_a_target"
+    },
+    {
+     "type": "test",
+     "ref": "tests/test_message_feed_adapter.py::test_the_module_imports_only_the_standard_library_it_needs_and_has_no_network_code"
+    }
+   ],
+   "note": "Every limit and check has a deliberate-break row; rows where a second guard refuses the same input are reported as equivalent. REAL. Simulated adapter only; no recording from a real system was used."
+  },
+  {
+   "id": "C38",
+   "claim": "A topic with no message yet is **missing**: it has no value and no age, it is never shown as zero",
+   "where": "docs/industry/message-feed-adapter.md",
+   "status": "verified",
+   "evidence": [
+    {
+     "type": "test",
+     "ref": "tests/test_message_feed_adapter.py::test_a_topic_with_no_message_is_missing_and_never_zero"
+    },
+    {
+     "type": "test",
+     "ref": "tests/test_message_feed_adapter.py::test_a_real_zero_is_a_value_and_is_not_missing"
+    }
+   ]
+  },
+  {
+   "id": "C39",
+   "claim": "The caller may ask for less, never for more.",
+   "where": "docs/industry/message-feed-adapter.md",
+   "status": "verified",
+   "evidence": [
+    {
+     "type": "test",
+     "ref": "tests/test_message_feed_adapter.py::test_the_caller_may_ask_for_less_but_never_for_more"
+    },
+    {
+     "type": "test",
+     "ref": "tests/test_message_feed_adapter.py::test_the_hard_caps_are_these_numbers"
+    },
+    {
+     "type": "test",
+     "ref": "tests/test_message_feed_adapter.py::test_the_guide_lists_every_hard_cap_with_its_number"
+    }
+   ]
+  },
+  {
+   "id": "C40",
+   "claim": "Topic and word rules are this adapter's own: they were not checked against any messaging standard. [unverified]",
+   "where": "docs/industry/message-feed-adapter.md",
+   "status": "limitation",
+   "evidence": [],
+   "note": "Not tested through the operator console."
+  },
+  {
+   "id": "C41",
+   "claim": "A replay passes through the Bridge (observe-only) without a sensor being dropped",
+   "where": "docs/industry/message-feed-adapter.md",
+   "status": "verified",
+   "evidence": [
+    {
+     "type": "test",
+     "ref": "tests/test_message_feed_bridge.py::test_the_bridge_accepts_a_replay_and_a_missing_topic_is_left_out_not_zero"
+    },
+    {
+     "type": "test",
+     "ref": "tests/test_message_feed_bridge.py::test_a_longest_sensor_id_keeps_its_age_sensor_through_the_bridge"
+    },
+    {
+     "type": "test",
+     "ref": "tests/test_message_feed_bridge.py::test_the_largest_spec_fits_under_the_sensor_cap"
+    }
+   ],
+   "note": "Observe-only Bridge only; not tested through the console. Invented data only."
   }
  ]
 }

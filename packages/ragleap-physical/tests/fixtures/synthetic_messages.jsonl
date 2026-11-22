@@ -1,0 +1,5 @@
+{"topic":"plant/power","time_s":0,"payload":120.5}
+{"topic":"plant/mode","time_s":1.0,"payload":"idle"}
+{"topic":"plant/power","time_s":2.5,"payload":130}
+{"topic":"plant/mode","time_s":4.0,"payload":"run"}
+{"topic":"plant/power","time_s":4.5,"payload":2400}
