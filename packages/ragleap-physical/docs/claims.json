@@ -487,6 +487,43 @@
    "status": "limitation",
    "evidence": [],
    "note": "The milling signal description is built from the signal table of a data paper and is marked [unverified]; its ranges are loose sanity bounds chosen here."
+  },
+  {
+   "id": "C34",
+   "claim": "A stop request is answered while an apply is still running and behind a client that never finishes its request",
+   "where": "CHANGELOG.md",
+   "status": "verified",
+   "evidence": [
+    {
+     "type": "test",
+     "ref": "tests/test_console_threaded.py::test_a_stop_is_answered_while_an_apply_is_running"
+    },
+    {
+     "type": "test",
+     "ref": "tests/test_console_threaded.py::test_other_requests_are_served_while_a_client_stalls"
+    },
+    {
+     "type": "test",
+     "ref": "tests/test_lingering_close_review.py::test_f2_the_console_stop_is_not_held_up_by_a_client_that_never_sends_its_body"
+    }
+   ],
+   "note": "Issue 1367. REAL, 2026-11-22, Python 3.10.12, loopback, simulated adapters only. Deliberate breaks checked: not threaded, no lock on the counters, no connection cap, busy answer not counted. Says nothing about real devices or about the MCP server."
+  },
+  {
+   "id": "C35",
+   "claim": "The MCP server still serves one request at a time; it has no stop tool",
+   "where": "CHANGELOG.md",
+   "status": "limitation",
+   "evidence": [],
+   "note": "The MCP server has no stop tool (S10), so a stalled client there delays other tool calls only."
+  },
+  {
+   "id": "C36",
+   "claim": "a local client that holds every slot can still delay a stop for up to the read timeout",
+   "where": "CHANGELOG.md",
+   "status": "limitation",
+   "evidence": [],
+   "note": "At most 32 connections; the next one is refused with 503 at once. The read timeout is 5 s."
   }
  ]
 }

@@ -1,7 +1,7 @@
 """Tests for the lingering close (_linger.py and its two call sites in the MCP server and the console).
 
-Three tests fail on purpose today and describe open points: a refused client that keeps its socket open holds the next client, a stalled client
-holds the console's stop, and the standard library's own error answers are not lingered. The others pass and guard the half-close, the time bound,
+One test fails on purpose today and describes an open point: the standard library's own error answers are not lingered. (A stalled client no longer
+holds the console's stop: #1367 is fixed, the console serves each connection in its own thread.) The others pass and guard the half-close, the time bound,
 parallel refusals, a client that never reads the answer, and the console's success path. Linux cannot show the Windows reset itself, so these tests
 check its causes and its cost. The servers handle one request at a time: what one client does while it is served is what the next client waits for.
 Timing bounds are wide on purpose (shared runners are slow); where a break only changes a small time, the test enlarges the time it checks."""
@@ -70,10 +70,8 @@ def test_a_refusal_whose_client_keeps_its_socket_open_holds_the_next_client_for_
             first.close()
 
 
-# Open point 2 (not caused by the lingering close, found while measuring it): a client that announces a body and never sends it holds the single thread
-# until the handler timeout (10 s). The console's stop is behind it. Risk: "stop never waits" does not hold at the console's HTTP layer.
-# (Measured on loopback: stop answered in 0.02 s alone, 10.4 s behind such a client.)
-@pytest.mark.xfail(strict=True, reason="gap: issue 1367")
+# A client that announces a body and never sends it used to hold the console's single thread until the handler timeout, with the console's stop
+# behind it (issue 1367, found while measuring the lingering close; 10.4 s on loopback). The console now serves each connection in its own thread.
 def test_f2_the_console_stop_is_not_held_up_by_a_client_that_never_sends_its_body():
     b, _, _ = make()
     with ConsoleRunning(b) as s:
