@@ -152,7 +152,7 @@ def test_a_delegation_makes_a_child_run_and_returns_its_result_to_the_parent(wor
     assert parent["tokens_used"] > 0 and child["tokens_used"] > 0
     assert "- delegate:" in svc.prompts[0] and "- delegate:" not in svc.prompts[1]           # the child cannot delegate
     assert "Child summary: 42 tickets." in svc.prompts[4]                                     # the parent sees the result
-    assert [e for e, f in world["audit"] if e.startswith("subagent")] == ["subagent_started", "subagent_finished"]
+    assert [e for e, f in world["audit"] if e.startswith("subagent")] == ["subagent_authorized", "subagent_started", "subagent_finished"]
     t = agent_loop.tree(parent["id"])
     assert [c["id"] for c in t["children"]] == [child["id"]] and t["children"][0]["depth"] == 1
 
@@ -326,3 +326,132 @@ def test_the_docs_page_describes_the_switches_and_the_limits():
                  "SUBAGENT_CHILD_TOKENS", "SUBAGENT_SECONDS", "/agent-runs/{id}/tree", "tainted"):
         assert word in text
     assert "{{" not in text and "{%" not in text
+
+
+# ---------------- the gate decides whether a child may start, and what it inherits (Phase 0, P0-H) ----------------
+
+def sensitive(monkeypatch, *names):
+    import core.employees.sensitivity as sens
+    monkeypatch.setattr(sens, "is_sensitive_role", lambda r: r in names)
+
+
+def test_a_child_of_a_sensitive_parent_needs_approval_for_every_action_even_in_full_mode(world, monkeypatch):
+    sensitive(monkeypatch, "legal_intake")
+    svc = FakeService([plan("delegate", "support", TASK), plan("send_webhook", "ops", "hello"), "Parent summary."])
+    out = agent_loop.run(Q, "d", svc, "legal_intake", False)
+    parent, children = parent_and_children()
+    assert world["sent"] == []                                         # nothing went out without the owner
+    assert children[0]["status"] == "waiting_approval" and parent["status"] == "waiting_approval"
+    assert children[0]["steps"][0]["forced_approval"] is True and out["status"] == "pending_approval"
+
+
+def test_the_same_child_runs_in_full_mode_when_the_parent_is_not_sensitive(world, monkeypatch):
+    sensitive(monkeypatch, "legal_intake")
+    svc = FakeService([plan("delegate", "support", TASK), plan("send_webhook", "ops", "hello"), DONE, "Child summary.", DONE, "Parent summary."])
+    agent_loop.run(Q, "d", svc, "sales", False)
+    assert len(world["sent"]) == 1                                     # the rule is about the parent, not about every child
+
+
+def test_a_parent_that_cannot_be_read_counts_as_sensitive(world, monkeypatch):
+    from core import autonomy
+    assert autonomy.inherited_force_semi({"parent_id": "00000000-0000-0000-0000-000000000000", "role": "support"}) is True
+
+    def down(i):
+        raise RuntimeError("database down")
+    monkeypatch.setattr(agent_loop, "get_run", down)
+    assert autonomy.inherited_force_semi({"parent_id": "x", "role": "support"}) is True
+
+
+def test_a_run_without_a_parent_does_not_read_the_database_for_inheritance(world, monkeypatch):
+    from core import autonomy
+    called = []
+    monkeypatch.setattr(agent_loop, "get_run", lambda i: called.append(i))
+    assert autonomy.inherited_force_semi({"role": "support"}) is False and called == []
+
+
+def test_the_gate_authorizes_a_spawn_and_audits_it(world):
+    from core import autonomy
+    d = autonomy.authorize_spawn({"id": None, "depth": 0, "role": "sales"}, "support")
+    assert d == {"allowed": True, "reason": "ok", "force_approval": False}
+    assert "subagent_authorized" in [e for e, _ in world["audit"]]
+
+
+def test_the_gate_refuses_a_spawn_when_the_switch_is_off_or_the_limits_are_reached(world, monkeypatch):
+    from core import autonomy
+    monkeypatch.setenv("SUBAGENTS_ENABLED", "false")
+    assert autonomy.authorize_spawn({"id": None, "depth": 0}, "support")["reason"] == "sub_agents_off"
+    monkeypatch.setenv("SUBAGENTS_ENABLED", "true")
+    assert autonomy.authorize_spawn({"id": None, "depth": subagents.MAX_DEPTH}, "support")["reason"] == "depth_limit"
+    monkeypatch.setattr(subagents, "_count_children", lambda i: subagents.max_children())
+    d = autonomy.authorize_spawn({"id": "11111111-1111-1111-1111-111111111111", "depth": 0}, "support")
+    assert d["allowed"] is False and d["reason"] == "child_limit"
+    assert [e for e, _ in world["audit"]].count("subagent_denied") == 3
+
+
+def test_the_gate_fails_closed_when_it_cannot_decide(world, monkeypatch):
+    from core import autonomy
+
+    def down(i):
+        raise RuntimeError("database down")
+    monkeypatch.setattr(subagents, "_count_children", down)
+    d = autonomy.authorize_spawn({"id": "11111111-1111-1111-1111-111111111111", "depth": 0}, "support")
+    assert d["allowed"] is False and d["reason"] == "check_failed" and d["force_approval"] is True
+
+
+def test_the_authorization_says_when_the_child_will_be_forced_to_ask(world, monkeypatch):
+    from core import autonomy
+    sensitive(monkeypatch, "legal_intake")
+    assert autonomy.authorize_spawn({"id": None, "depth": 0, "role": "legal_intake"}, "support")["force_approval"] is True
+    assert autonomy.authorize_spawn({"id": None, "depth": 0, "role": "sales"}, "support")["force_approval"] is False
+
+
+def test_a_delegation_the_gate_refuses_creates_no_child(world, monkeypatch):
+    from core import autonomy
+    monkeypatch.setattr(autonomy, "authorize_spawn", lambda parent, target: {"allowed": False, "reason": "check_failed", "force_approval": True})
+    assert agent_loop.run(Q, "d", FakeService([plan("delegate", "support", TASK)]), None) is None
+    assert rows() == []
+
+
+def test_a_child_cannot_use_a_tool_its_parent_does_not_have(world, monkeypatch):
+    monkeypatch.setattr(subagents, "parent_tool_names", lambda parent: {"run_code"})
+    svc = FakeService([plan("delegate", "support", TASK), plan("send_webhook", "ops", "hello"), "Child summary.", DONE, "Parent summary."])
+    agent_loop.run(Q, "d", svc, None, False)
+    parent, children = parent_and_children()
+    assert world["sent"] == [] and children[0]["steps"] == []          # refused before anything was proposed to the gate
+    assert children[0]["status"] == "done"
+
+
+def test_the_tool_limit_for_a_child_is_the_intersection_and_fails_closed(world, monkeypatch):
+    monkeypatch.setattr(agent_loop, "get_run", lambda i: {"id": i, "role": "sales"})
+    monkeypatch.setattr(subagents, "parent_tool_names", lambda p: {"a"})
+    assert subagents.limit_to_parent({"a": "1", "b": "2"}, {"parent_id": "p"}) == {"a": "1"}
+    assert subagents.limit_to_parent({"a": "1", "b": "2"}, {}) == {"a": "1", "b": "2"}     # a top-level run is unchanged
+    monkeypatch.setattr(agent_loop, "get_run", lambda i: None)
+    assert subagents.limit_to_parent({"a": "1"}, {"parent_id": "p"}) == {}
+    monkeypatch.setattr(agent_loop, "get_run", lambda i: (_ for _ in ()).throw(RuntimeError("down")))
+    assert subagents.limit_to_parent({"a": "1"}, {"parent_id": "p"}) == {}
+
+
+def test_a_child_is_started_only_after_the_gate_agreed_and_is_driven_with_the_inherited_limits():
+    import inspect
+    ds = inspect.getsource(subagents.delegate_step)
+    assert ds.index("authorize_spawn(") < ds.index("_drive(")
+    drive = inspect.getsource(agent_loop._drive)
+    assert "inherited_force_semi(run)" in drive and "limit_to_parent(" in drive
+
+
+def test_the_docs_page_describes_who_may_start_a_child():
+    text = (ROOT / "docs" / "sub-agents.md").read_text(encoding="utf-8")
+    for word in ("authorize_spawn", "sensitive", "sub_agents_off", "depth_limit", "child_limit", "check_failed"):
+        assert word in text
+    assert "{{" not in text and "{%" not in text
+
+
+def test_a_loop_or_a_very_long_chain_of_parents_counts_as_sensitive(world, monkeypatch):
+    from core import autonomy
+    monkeypatch.setattr(agent_loop, "get_run", lambda i: {"id": i, "role": "support", "parent_id": "b" if i == "a" else "a"})
+    assert autonomy.inherited_force_semi({"parent_id": "a", "role": "support"}) is True            # a -> b -> a
+    monkeypatch.setattr(agent_loop, "get_run", lambda i: {"id": i, "role": "support", "parent_id": i + "x"})
+    assert autonomy.inherited_force_semi({"parent_id": "p", "role": "support"}) is True            # longer than any real tree
+    monkeypatch.setattr(agent_loop, "get_run", lambda i: {"id": i, "role": "support", "parent_id": None})
+    assert autonomy.inherited_force_semi({"parent_id": "p", "role": "support"}) is False           # a normal parent

@@ -60,8 +60,8 @@ _NOTES = {
     "delete_file": "Works only inside folders the owner granted with a delete grant. Off by default.",
     "request_access": "Asks the owner to grant a folder. Off by default.",
     "delegate": "Off unless the owner turns sub-agents on and grants this operation. A child run starts with the "
-                "parent's taint, and its taint comes back to the parent. Today a child gets the same tool list as "
-                "any run; cutting it down to the parent's is planned for Phase 1.",
+                "parent's taint, and its taint comes back to the parent. A child's tools are cut down to the parent's, and "
+                "a sensitive role anywhere above a child forces approval for every child action.",
 }
 
 
