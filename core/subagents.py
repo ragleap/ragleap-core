@@ -126,6 +126,29 @@ def with_delegate(tools: Dict[str, str], run: Dict) -> Dict[str, str]:
         return tools
 
 
+def parent_tool_names(parent: Dict) -> set:
+    """The tool names a parent run may use. Today every run has the same list; this is the one place to narrow it per run."""
+    from core.employees import actions
+    return set(actions.available_tools())
+
+
+def limit_to_parent(tools: Dict[str, str], run: Dict) -> Dict[str, str]:
+    """A child's tools are its parent's tools, never more. A top-level run is unchanged. Fails closed (no tools)."""
+    parent_id = (run or {}).get("parent_id")
+    if not parent_id:
+        return tools
+    try:
+        from core import agent_loop
+        parent = agent_loop.get_run(parent_id)
+        if parent is None:
+            return {}
+        allowed = parent_tool_names(parent)
+        return {k: v for k, v in tools.items() if k in allowed}
+    except Exception as e:
+        logger.warning("Sub-agent tool limit failed, giving the child no tools: %s", e)
+        return {}
+
+
 def over_budget(run: Dict) -> bool:
     """True when this run (a child, or a parent that has delegated) must stop because a token cap was reached."""
     try:
@@ -168,10 +191,14 @@ def delegate_step(parent: Dict, plan: Dict, service, role: Optional[str]) -> Opt
         return agent_loop._finish(parent, None, role, "cancelled", "Stopped: cancelled by the owner.")
     target = str(plan.get("target", "")).strip()
     task = str(plan.get("content", "")).strip()
-    if not task or len(task) > TASK_CAP or target not in _active_roles() or int(parent.get("depth") or 0) >= MAX_DEPTH:
+    if not task or len(task) > TASK_CAP or target not in _active_roles():
         return agent_loop._finish(parent, service, role, "done", "The proposed sub-agent task was not allowed.")
-    if parent.get("id") and _count_children(parent["id"]) >= max_children():
-        return agent_loop._finish(parent, service, role, "done", f"Stopped: the limit of {max_children()} sub-agents was reached.")
+    from core import autonomy
+    auth = autonomy.authorize_spawn(parent, target)          # the gate decides; nothing below runs without its yes
+    if not auth["allowed"]:
+        if auth["reason"] == "child_limit":
+            return agent_loop._finish(parent, service, role, "done", f"Stopped: the limit of {max_children()} sub-agents was reached.")
+        return agent_loop._finish(parent, service, role, "done", "The proposed sub-agent task was not allowed.")
     sig = ["delegate", target, hashlib.sha256(task.encode()).hexdigest()[:16]]
     if any(s.get("sig") == sig for s in parent["steps"]):
         return agent_loop._finish(parent, service, role, "done", "Stopped: the same action was proposed twice.")

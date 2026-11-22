@@ -449,8 +449,8 @@ def _finish(run: Dict, service, role: Optional[str], status: str, note: str = ""
 
 
 def _drive(run: Dict, service, role: Optional[str]) -> Optional[Dict]:
-    from core.autonomy import execute_or_request  # lazy: avoids an import cycle
-    tools = subagents.with_delegate(actions.available_tools(), run)
+    from core.autonomy import execute_or_request, inherited_force_semi  # lazy: avoids an import cycle
+    tools = subagents.limit_to_parent(subagents.with_delegate(actions.available_tools(), run), run)
     limit = max_steps()
     while True:
         if _cancelled(run):
@@ -489,7 +489,7 @@ def _drive(run: Dict, service, role: Optional[str]) -> Optional[Dict]:
             return _finish(run, service, role, "done", "Stopped: the same action was proposed twice.")
         if _cancelled(run):          # asked to stop while the model was planning: do not execute the planned action
             return _finish(run, None, role, "cancelled", "Stopped: cancelled by the owner.")
-        force = bool(run["tainted"] and valid["tool"] in OUTBOUND_TOOLS)
+        force = bool((run["tainted"] and valid["tool"] in OUTBOUND_TOOLS) or inherited_force_semi(run))
         res = execute_or_request(
             action_type=valid["tool"], channel=valid["channel"], target=valid["target"],
             content=valid["content"], subject=valid["subject"], role=role, force_semi=force,

@@ -19,6 +19,15 @@ Set in the app environment (all optional, shown with their defaults):
 - What a child returns is untrusted text for the parent, like any tool result.
 - A child that needs an approval puts its parent on hold. The parent goes on when the child ends (approved and finished, or rejected). Cancelling the parent cancels the child and rejects its pending action.
 
+## Who may start a child, and what it inherits
+
+The gate decides every start (`authorize_spawn` in `core/autonomy.py`) and writes an audit event for each decision, allowed or denied, with the reason: `sub_agents_off`, `depth_limit`, `child_limit` or `check_failed` (a check that cannot be made also denies). A child inherits its parent's limits:
+
+- If the parent, or any run above it, is a sensitive role (legal, medical and similar), **every action of the child needs approval**, whatever role the child has. The parent chain is read each time, and a parent that cannot be read counts as sensitive.
+- A child's tools are the tools its parent has, never more.
+- A child starts with its parent's taint, and its own taint comes back to the parent.
+- A child cannot start a child.
+
 ## Watching and stopping
 
 The Runs tab of the dashboard shows sub-agent runs under their parent and has a Cancel run button (it asks for a second click). `GET /agent-runs/{id}/tree` shows a run with its children. `POST /agent-runs/{id}/cancel` stops a run and everything below it. AUDIT lines `subagent_started`, `subagent_finished` and `agent_run_cancel` are written.

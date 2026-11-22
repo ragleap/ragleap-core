@@ -449,6 +449,64 @@ def file_pair_error(action_type: str, channel: str) -> Optional[str]:
     return None
 
 
+def _role_is_sensitive(role) -> bool:
+    from core.employees.sensitivity import is_sensitive_role
+    return bool(role) and bool(is_sensitive_role(role))
+
+
+def inherited_force_semi(run: Dict) -> bool:
+    """True when a run that another run started must have EVERY action approved because a run above it is a sensitive role.
+
+    A child's own role does not matter here: the model picks it, and picking a different role must not lift a rule the
+    parent is under. Runs without a parent never touch the database. A parent that cannot be read counts as sensitive."""
+    if not (run or {}).get("parent_id"):
+        return False
+    try:
+        from core import agent_loop
+        seen, current = set(), run
+        for _ in range(8):
+            pid = current.get("parent_id")
+            if not pid:
+                return False
+            if pid in seen:
+                return True
+            seen.add(pid)
+            parent = agent_loop.get_run(pid)
+            if parent is None or _role_is_sensitive(parent.get("role")):
+                return True
+            current = parent
+        return True
+    except Exception as e:
+        logger.warning("Sub-agent inheritance check failed, forcing approval: %s", e)
+        return True
+
+
+def authorize_spawn(parent: Dict, target_role: str) -> Dict:
+    """THE decision to start a sub-agent (Phase 0, P0-H). core/subagents.delegate_step starts a child only after this said yes.
+
+    Checks the owner's switch, the depth, the number of children, and tells whether the child will be forced to ask for
+    approval for every action (a sensitive role at or above the parent). Every decision is audited. Fails closed."""
+    allowed, reason, force = False, "check_failed", True
+    try:
+        from core import subagents
+        parent = parent or {}
+        if not subagents.enabled():
+            reason = "sub_agents_off"
+        elif int(parent.get("depth") or 0) >= subagents.MAX_DEPTH:
+            reason = "depth_limit"
+        elif parent.get("id") and subagents._count_children(parent["id"]) >= subagents.max_children():
+            reason = "child_limit"
+        else:
+            allowed, reason = True, "ok"
+        force = _role_is_sensitive(parent.get("role")) or inherited_force_semi(parent)
+    except Exception as e:
+        allowed, reason, force = False, "check_failed", True
+        logger.warning("Sub-agent authorization failed, refusing: %s", e)
+    _audit_event("subagent_authorized" if allowed else "subagent_denied", parent_run=str((parent or {}).get("id")),
+                 role=str(target_role), reason=reason, force_approval=force)
+    return {"allowed": allowed, "reason": reason, "force_approval": force}
+
+
 def execute_or_request(action_type: str, channel: str, target: str,
                         content: str, execute_fn: Optional[Callable] = None,
                         subject: str = "", role: Optional[str] = None,
