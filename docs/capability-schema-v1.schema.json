@@ -28,7 +28,9 @@
         "effect": {"enum": ["read", "write", "external_send", "execute"]},
         "approval": {"enum": ["always", "per_mode"]},
         "taint": {"enum": ["none", "tainting", "outbound", "both"]},
-        "args": {"type": "string", "maxLength": 200}
+        "args": {"type": "string", "maxLength": 200},
+        "grant": {"enum": ["explicit"]},
+        "inherits": {"$ref": "#/$defs/inherits"}
       }
     },
     "scope": {
@@ -40,13 +42,26 @@
         "user_filter_field": {"type": "string", "maxLength": 64, "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"}
       }
     },
+    "inherits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_depth", "max_children"],
+      "properties": {
+        "max_depth": {"type": "integer", "minimum": 1, "maximum": 3},
+        "max_children": {"type": "integer", "minimum": 1, "maximum": 8},
+        "child_tokens": {"type": "integer", "minimum": 1, "maximum": 1000000},
+        "tree_tokens": {"type": "integer", "minimum": 1, "maximum": 10000000},
+        "tools": {"enum": ["parent_subset"]},
+        "taint": {"enum": ["both_ways"]}
+      }
+    },
     "network": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
         "hosts": {"type": "array", "maxItems": 32, "uniqueItems": true, "items": {"type": "string", "maxLength": 253, "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$"}},
         "https_only": {"const": true},
-        "owner_configured": {"const": true},
+        "egress": {"enum": ["fixed_hosts", "owner_configured", "runtime_chosen"]},
         "tcp": {"type": "array", "maxItems": 8, "items": {"$ref": "#/$defs/tcp"}}
       }
     },

@@ -8,7 +8,8 @@ import copy
 import types
 from typing import Any, Callable, Dict, List, Optional
 
-from core.connector_host.policy import BUILTIN_EFFECT, EFFECT_RANK, canonical_hash
+from core.connector_host.policy import (BUILTIN_EFFECT, BUILTIN_EGRESS, EFFECT_RANK, GRANT_REQUIRED_OPERATIONS,
+                                        canonical_hash, declared_egress)
 from core.connector_host.schema import SCHEMA_V1, check_declaration
 
 SUPPORTED_SCHEMA = "ragleap.capability/1"
@@ -82,6 +83,11 @@ class DeclarationRegistry:
             core = BUILTIN_EFFECT.get(op["name"])
             if core and EFFECT_RANK[op["effect"]] < EFFECT_RANK[core]:
                 self._reject("effect_weaker_than_core", f"operation {op['name']} claims {op['effect']} but the core classifies it as {core}", decl)
+            core_egress = BUILTIN_EGRESS.get(op["name"])
+            if core_egress and declared_egress(decl) == "none":
+                self._reject("egress_weaker_than_core", f"operation {op['name']} declares no egress but the core classifies it as {core_egress}", decl)
+            if op["name"] in GRANT_REQUIRED_OPERATIONS and op.get("grant") != "explicit":
+                self._reject("grant_weaker_than_core", f"operation {op['name']} must declare grant 'explicit': the core denies it unless the owner grants it", decl)
         digest = canonical_hash(decl)
         existing = self._items.get(decl["id"])
         if existing is not None:

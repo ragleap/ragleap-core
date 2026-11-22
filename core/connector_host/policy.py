@@ -19,12 +19,26 @@ BUILTIN_EFFECT = {
     "update_crm_record": "external_send", "schedule_event": "external_send", "notify_owner": "external_send",
     "mcp_call": "external_send", "create_task": "write", "run_code": "execute", "run_shell": "execute",
     "fetch_page": "read", "list_files": "read", "read_file": "read", "preview_change": "read",
-    "write_file": "write", "delete_file": "write", "request_access": "write",
+    "write_file": "write", "delete_file": "write", "request_access": "write", "delegate": "execute",
 }
 OUTBOUND_BUILTINS = frozenset({"send_webhook", "send_slack", "send_email", "update_crm_record", "schedule_event",
                                "mcp_call", "fetch_page", "write_file", "delete_file"})
 TAINTING_BUILTINS = frozenset({"fetch_page", "mcp_call", "list_files", "read_file", "preview_change"})
 ALWAYS_APPROVAL_OPERATIONS = frozenset({"write_file", "delete_file", "request_access"})
+# Operations denied unless the owner grants them by name (a declaration cannot remove this). `delegate` starts sub-agents.
+GRANT_REQUIRED_OPERATIONS = frozenset({"delegate"})
+# How far an operation reaches: none < fixed_hosts < owner_configured < runtime_chosen. A built-in tool is never declared lower.
+EGRESS_RANK = {"none": 0, "fixed_hosts": 1, "owner_configured": 2, "runtime_chosen": 3}
+BUILTIN_EGRESS = {"send_webhook": "owner_configured", "send_slack": "owner_configured", "send_email": "owner_configured",
+                  "update_crm_record": "owner_configured", "schedule_event": "owner_configured",
+                  "notify_owner": "owner_configured", "mcp_call": "owner_configured", "fetch_page": "runtime_chosen"}
+_EGRESS_BASE = ("deny_when_egress_disabled", "block_metadata_and_link_local")
+# What the core must apply per class once it enforces declarations (Phase 1); today they are only recorded.
+EGRESS_OBLIGATIONS = {
+    "none": (), "fixed_hosts": _EGRESS_BASE, "owner_configured": _EGRESS_BASE,
+    "runtime_chosen": _EGRESS_BASE + ("block_non_public_before_and_after_dns", "revalidate_each_redirect_hop",
+                                      "audit_resolved_url_and_status"),
+}
 EFFECT_RANK = {"read": 0, "write": 1, "execute": 2, "external_send": 3}
 # Rules the gate applies at run time whatever any declaration says.
 RUNTIME_FORCING = ("tainted_run", "sensitive_role")
@@ -33,6 +47,8 @@ CORE_CEILINGS = {"max_calls_per_run": 50, "max_calls_per_day": 1000, "max_bytes"
 D_UNDECLARED = "undeclared_operation"
 D_AUTONOMY_OFF = "autonomy_off"
 D_NOT_ALLOWED_BY_OWNER = "operation_not_allowed_by_owner"
+D_NOT_GRANTED = "operation_not_granted"
+D_EGRESS_DISABLED = "egress_disabled"
 
 
 @dataclass(frozen=True)
@@ -41,6 +57,8 @@ class OwnerPolicy:
     mode: str = "semi"                                  # off | semi | full
     allowed_operations: Optional[frozenset] = None
     allowed_hosts: Optional[frozenset] = None
+    granted_operations: frozenset = frozenset()          # operations the owner granted by name; nothing is granted by default
+    egress_enabled: bool = True                          # False: every operation that reaches outside is denied
 
 
 def canonical_hash(obj: Any) -> str:
@@ -61,6 +79,9 @@ class EffectivePolicy:
     taint: str = "none"                                 # none | tainting | outbound | both
     runtime_forcing: Tuple[str, ...] = RUNTIME_FORCING
     hosts: Tuple[str, ...] = ()
+    egress: str = "none"                                # none | fixed_hosts | owner_configured | runtime_chosen
+    egress_obligations: Tuple[str, ...] = ()
+    inherits: Mapping[str, Any] = field(default_factory=dict)
     scope_level: str = "organization"
     user_filter_field: str = ""
     budgets: Mapping[str, int] = field(default_factory=dict)
@@ -74,11 +95,23 @@ class EffectivePolicy:
              "operation": self.operation, "allowed": self.allowed, "denial_code": self.denial_code, "effect": self.effect,
              "approval": self.approval, "approval_reasons": list(self.approval_reasons), "taint": self.taint,
              "runtime_forcing": list(self.runtime_forcing), "hosts": list(self.hosts),
+             "egress": self.egress, "egress_obligations": list(self.egress_obligations),
+             "inherits": dict(sorted(self.inherits.items())),
              "scope": {"level": self.scope_level, "user_filter_field": self.user_filter_field},
              "budgets": dict(sorted(self.budgets.items())), "narrowed": list(self.narrowed), "clamped": list(self.clamped),
              "notes": list(self.notes)}
         d["policy_hash"] = canonical_hash(d)
         return d
+
+
+def declared_egress(declaration: Any) -> str:
+    """The egress class a declaration states or implies: its network.egress, else fixed_hosts when hosts or tcp are listed."""
+    net = declaration.get("network") if isinstance(declaration, Mapping) else None
+    net = net if isinstance(net, Mapping) else {}
+    e = net.get("egress")
+    if isinstance(e, str) and e in EGRESS_RANK:
+        return e
+    return "fixed_hosts" if (net.get("hosts") or net.get("tcp")) else "none"
 
 
 def _taint_set(taint: str):
@@ -104,7 +137,19 @@ def resolve_policy(declaration: Mapping[str, Any], operation: str, owner: OwnerP
         return EffectivePolicy(allowed=False, denial_code=D_AUTONOMY_OFF, **base)
     if owner.allowed_operations is not None and operation not in owner.allowed_operations:
         return EffectivePolicy(allowed=False, denial_code=D_NOT_ALLOWED_BY_OWNER, **base)
+    if (op.get("grant") == "explicit" or operation in GRANT_REQUIRED_OPERATIONS) and operation not in owner.granted_operations:
+        return EffectivePolicy(allowed=False, denial_code=D_NOT_GRANTED, **base)
+    # egress: never lower than the core's own class for a built-in tool; every class is denied when the owner turns egress off
+    egress = declared_egress(decl)
+    core_egress = BUILTIN_EGRESS.get(operation, "none")
+    egress_raised = EGRESS_RANK[core_egress] > EGRESS_RANK[egress]
+    if egress_raised:
+        egress = core_egress
+    if egress != "none" and not owner.egress_enabled:
+        return EffectivePolicy(allowed=False, denial_code=D_EGRESS_DISABLED, egress=egress, **base)
     notes = []
+    if egress_raised:
+        notes.append("egress_raised_to_core")
     # effect: never weaker than the core's own classification of a built-in tool
     declared_effect = op.get("effect", "read")
     core_effect = BUILTIN_EFFECT.get(operation)
@@ -151,6 +196,7 @@ def resolve_policy(declaration: Mapping[str, Any], operation: str, owner: OwnerP
             budgets[k] = ceiling
     scope = decl.get("scope") or {}
     return EffectivePolicy(allowed=True, effect=effect, approval="always" if reasons else "per_mode",
-                           approval_reasons=tuple(reasons), taint=_taint_name(taint), hosts=tuple(sorted(declared_hosts)),
+                           approval_reasons=tuple(reasons), taint=_taint_name(taint), hosts=tuple(sorted(declared_hosts)), egress=egress, egress_obligations=EGRESS_OBLIGATIONS[egress],
+                           inherits=dict(op["inherits"]) if isinstance(op.get("inherits"), dict) else {},
                            scope_level=scope.get("level", "organization"), user_filter_field=scope.get("user_filter_field", "") or "",
                            budgets=budgets, narrowed=tuple(sorted(narrowed)), clamped=tuple(clamped), notes=tuple(notes), **base)

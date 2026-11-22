@@ -192,32 +192,60 @@ def test_source_lint_flags_direct_access_and_passes_clean_code(tmp_path):
     assert run(good, "--source", str(driver), "--strict")[0] == 1
 
 
-# ---------- network.owner_configured (P0-E) ----------
+# ---------- network.egress, grant and inherits (P0-E, P0-G) ----------
 
-def test_owner_configured_satisfies_the_external_send_host_rule():
-    d = mutate(lambda d: d.update(network={"owner_configured": True}))
-    assert "E-NET-REQUIRED" not in codes(d) and levels(d, "error") == set()
-
-
-def test_owner_configured_only_accepts_true():
-    for bad in (False, "yes", 1):
-        d = mutate(lambda d: d.update(network={"owner_configured": bad}))
-        assert "E-SCHEMA" in levels(d, "error")
+def test_an_egress_class_without_hosts_satisfies_the_external_send_host_rule():
+    for cls in ("owner_configured", "runtime_chosen"):
+        d = mutate(lambda d: d.update(network={"egress": cls}))
+        assert "E-NET-REQUIRED" not in codes(d) and levels(d, "error") == set(), cls
 
 
-def test_owner_configured_does_not_excuse_an_internal_host():
-    d = mutate(lambda d: d.update(network={"owner_configured": True, "hosts": ["10.0.0.5"]}))
+def test_an_unknown_egress_class_is_refused():
+    for bad in ("any", "", 1, True, None, ["runtime_chosen"]):
+        d = mutate(lambda d: d.update(network={"egress": bad, "hosts": ["api.example.com"]}))
+        assert "E-SCHEMA" in levels(d, "error"), bad
+
+
+def test_fixed_hosts_needs_hosts_and_the_other_classes_must_not_list_any():
+    assert "E-NET-EGRESS-HOSTS" in levels(mutate(lambda d: d.update(network={"egress": "fixed_hosts"})), "error")
+    for cls in ("owner_configured", "runtime_chosen"):
+        d = mutate(lambda d: d.update(network={"egress": cls, "hosts": ["api.example.com"]}))
+        assert "E-NET-EGRESS-HOSTS" in levels(d, "error"), cls
+        d = mutate(lambda d: d.update(network={"egress": cls, "tcp": [{"host": "db.example.com", "port": 5432}]}))
+        assert "E-NET-EGRESS-HOSTS" in levels(d, "error"), cls
+
+
+def test_an_egress_class_does_not_excuse_an_internal_host():
+    d = mutate(lambda d: d.update(network={"egress": "fixed_hosts", "hosts": ["10.0.0.5"]}))
     assert "E-NET-INTERNAL-HOST" in levels(d, "error")
 
 
 def test_an_empty_network_still_needs_a_host_for_external_send():
-    d = mutate(lambda d: d.update(network={}))
-    assert "E-NET-REQUIRED" in levels(d, "error")
+    assert "E-NET-REQUIRED" in levels(mutate(lambda d: d.update(network={})), "error")
+    assert "E-NET-REQUIRED" in levels(mutate(lambda d: d.update(network={"egress": "fixed_hosts"})), "error")
+
+
+def test_inherits_needs_an_explicit_grant():
+    inh = {"max_depth": 1, "max_children": 3}
+    bad = mutate(lambda d: d["operations"][0].update(inherits=inh))
+    assert "E-INHERITS-NEEDS-GRANT" in levels(bad, "error")
+    ok = mutate(lambda d: d["operations"][0].update(inherits=inh, grant="explicit"))
+    assert levels(ok, "error") == set()
+
+
+def test_inherits_bounds_and_the_grant_value_are_checked():
+    for inh in ({"max_depth": 4, "max_children": 3}, {"max_depth": 0, "max_children": 3}, {"max_depth": 1},
+                {"max_depth": 1, "max_children": 3, "tools": "all"}, {"max_depth": 1, "max_children": 3, "x": 1},
+                {"max_depth": True, "max_children": 3}):
+        d = mutate(lambda d: d["operations"][0].update(inherits=inh, grant="explicit"))
+        assert "E-SCHEMA" in levels(d, "error"), inh
+    for bad in ("never", "", True, 1):
+        d = mutate(lambda d: d["operations"][0].update(grant=bad))
+        assert "E-SCHEMA" in levels(d, "error"), bad
 
 
 def test_a_constant_is_compared_by_type_so_1_is_not_true():
-    for field in ("owner_configured", "https_only"):
-        for bad in (1, 0, "true"):
-            d = mutate(lambda d: d["network"].update({field: bad}))
-            assert "E-SCHEMA" in levels(d, "error"), (field, bad)
-        assert "E-SCHEMA" not in levels(mutate(lambda d: d["network"].update({field: True})), "error")
+    for bad in (1, 0, "true"):
+        d = mutate(lambda d: d["network"].update({"https_only": bad}))
+        assert "E-SCHEMA" in levels(d, "error"), bad
+    assert "E-SCHEMA" not in levels(mutate(lambda d: d["network"].update({"https_only": True})), "error")

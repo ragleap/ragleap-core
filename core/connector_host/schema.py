@@ -38,7 +38,9 @@ SCHEMA_V1_JSON = r'''{
         "effect": {"enum": ["read", "write", "external_send", "execute"]},
         "approval": {"enum": ["always", "per_mode"]},
         "taint": {"enum": ["none", "tainting", "outbound", "both"]},
-        "args": {"type": "string", "maxLength": 200}
+        "args": {"type": "string", "maxLength": 200},
+        "grant": {"enum": ["explicit"]},
+        "inherits": {"$ref": "#/$defs/inherits"}
       }
     },
     "scope": {
@@ -50,13 +52,26 @@ SCHEMA_V1_JSON = r'''{
         "user_filter_field": {"type": "string", "maxLength": 64, "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"}
       }
     },
+    "inherits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_depth", "max_children"],
+      "properties": {
+        "max_depth": {"type": "integer", "minimum": 1, "maximum": 3},
+        "max_children": {"type": "integer", "minimum": 1, "maximum": 8},
+        "child_tokens": {"type": "integer", "minimum": 1, "maximum": 1000000},
+        "tree_tokens": {"type": "integer", "minimum": 1, "maximum": 10000000},
+        "tools": {"enum": ["parent_subset"]},
+        "taint": {"enum": ["both_ways"]}
+      }
+    },
     "network": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
         "hosts": {"type": "array", "maxItems": 32, "uniqueItems": true, "items": {"type": "string", "maxLength": 253, "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$"}},
         "https_only": {"const": true},
-        "owner_configured": {"const": true},
+        "egress": {"enum": ["fixed_hosts", "owner_configured", "runtime_chosen"]},
         "tcp": {"type": "array", "maxItems": 8, "items": {"$ref": "#/$defs/tcp"}}
       }
     },
@@ -204,9 +219,16 @@ def semantic_findings(decl: dict):
     for h in hosts + [x for x in tcp_hosts if x]:
         if _is_internal_host(h):
             out.append(("error", "E-NET-INTERNAL-HOST", f"host {h!r} is an address or an internal name; declare public host names only (private hosts belong in the owner's allow list)"))
-    owner_configured = net.get("owner_configured") is True
-    if any(isinstance(o, dict) and o.get("effect") == "external_send" for o in ops) and not (hosts or tcp_hosts or owner_configured):
-        out.append(("error", "E-NET-REQUIRED", "an operation with effect 'external_send' needs network.hosts (or network.tcp, or network.owner_configured when the owner chooses the targets)"))
+    egress = net.get("egress")
+    if egress == "fixed_hosts" and not (hosts or tcp_hosts):
+        out.append(("error", "E-NET-EGRESS-HOSTS", "egress 'fixed_hosts' needs network.hosts (or network.tcp)"))
+    if egress in ("owner_configured", "runtime_chosen") and (hosts or tcp_hosts):
+        out.append(("error", "E-NET-EGRESS-HOSTS", f"egress {egress!r} must not list hosts: the declaration does not fix the target"))
+    if any(isinstance(o, dict) and o.get("effect") == "external_send" for o in ops) and not (hosts or tcp_hosts or egress in ("owner_configured", "runtime_chosen")):
+        out.append(("error", "E-NET-REQUIRED", "an operation with effect 'external_send' needs network.hosts (or network.tcp, or a network.egress class when the owner or the run chooses the target)"))
+    for o in ops:
+        if isinstance(o, dict) and o.get("inherits") is not None and o.get("grant") != "explicit":
+            out.append(("error", "E-INHERITS-NEEDS-GRANT", f"operation {o.get('name')!r} declares inherits but not grant 'explicit': an operation that starts other runs must be granted by name"))
     for s in decl.get("secrets", []):
         if s in PROTECTED_SECRETS:
             out.append(("error", "E-SECRET-PROTECTED", f"secret {s!r} belongs to the core and cannot be declared"))

@@ -53,7 +53,7 @@ def test_the_core_floor_tables_equal_the_real_sets():
     from core import autonomy
     from core import agent_loop
     from core.employees import actions
-    assert set(policy.BUILTIN_EFFECT) == set(actions.ACTION_TOOLS)
+    assert set(policy.BUILTIN_EFFECT) == set(actions.ACTION_TOOLS) | {"delegate"}   # delegate is handled by the agent loop itself
     assert policy.OUTBOUND_BUILTINS == set(agent_loop.OUTBOUND_TOOLS)
     assert policy.TAINTING_BUILTINS == set(agent_loop.TAINTING_TOOLS)
     assert policy.ALWAYS_APPROVAL_OPERATIONS == set(autonomy._FORCED_ACTION_TYPES)
