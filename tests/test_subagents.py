@@ -59,7 +59,7 @@ def parent_and_children():
 def world(monkeypatch):
     import core.autonomy as au
     import core.employees.sensitivity as sens
-    for k, v in (("AGENT_LOOP_ENABLED", "true"), ("CODE_EXEC_ENABLED", "true"), ("SANDBOX_TOKEN", "t"), ("SUBAGENTS_ENABLED", "true"),
+    for k, v in (("AGENT_LOOP_ENABLED", "true"), ("CODE_EXEC_ENABLED", "true"), ("SANDBOX_TOKEN", "t"), ("SUBAGENTS_ENABLED", "true"), ("ADDON_ENCRYPTION_KEY", "test-key-for-spawn-records"),
                  ("BROWSER_FETCH_ENABLED", "true"), ("BROWSER_ALLOWED_DOMAINS", "docs.example.com"),
                  ("WEBHOOK_TARGETS", "ops=https://hooks.example.com/x")):
         monkeypatch.setenv(k, v)
@@ -372,7 +372,7 @@ def test_a_run_without_a_parent_does_not_read_the_database_for_inheritance(world
 def test_the_gate_authorizes_a_spawn_and_audits_it(world):
     from core import autonomy
     d = autonomy.authorize_spawn({"id": None, "depth": 0, "role": "sales"}, "support")
-    assert d == {"allowed": True, "reason": "ok", "force_approval": False}
+    assert d["allowed"] is True and d["reason"] == "ok" and d["force_approval"] is False and d["spawn_id"]
     assert "subagent_authorized" in [e for e, _ in world["audit"]]
 
 
@@ -455,3 +455,161 @@ def test_a_loop_or_a_very_long_chain_of_parents_counts_as_sensitive(world, monke
     assert autonomy.inherited_force_semi({"parent_id": "p", "role": "support"}) is True            # longer than any real tree
     monkeypatch.setattr(agent_loop, "get_run", lambda i: {"id": i, "role": "support", "parent_id": None})
     assert autonomy.inherited_force_semi({"parent_id": "p", "role": "support"}) is False           # a normal parent
+
+
+# ---------------- a signed start record, budgets drawn as the minimum, steps shared by the tree (Phase 0, P0-I) ----------------
+
+def unrecorded_child():
+    parent = {"id": None, "role": None, "query": Q, "context_answer": "", "status": "running", "steps": [], "tainted": False,
+              "pending_action_id": None, "summary": "", "depth": 0, "tokens_used": 0}
+    agent_loop._save(parent)
+    child = dict(parent, id=None, query=TASK, parent_id=parent["id"], depth=1, role="support")
+    agent_loop._save(child)
+    return parent, child
+
+
+def test_a_started_child_carries_a_valid_signed_start_record(world):
+    from core import autonomy
+    agent_loop.run(Q, "d", FakeService(basic_replies()), None)
+    parent, children = parent_and_children()
+    c = children[0]
+    assert c["spawn_id"] and c["spawn_sig"] and c["spawn_forced"] is False
+    assert autonomy.verify_spawn_record(c) is True                          # still valid after every later save of the row
+    ids = {e: f.get("spawn_id") for e, f in world["audit"] if e.startswith("subagent")}
+    assert ids["subagent_authorized"] == ids["subagent_started"] == c["spawn_id"]
+
+
+def test_the_record_of_a_sensitive_parents_child_says_forced_and_is_valid(world, monkeypatch):
+    from core import autonomy
+    sensitive(monkeypatch, "legal_intake")
+    agent_loop.run(Q, "d", FakeService([plan("delegate", "support", TASK), plan("send_webhook", "ops", "hello"), "Parent summary."]), "legal_intake", False)
+    _, children = parent_and_children()
+    assert children[0]["spawn_forced"] is True and autonomy.verify_spawn_record(children[0]) is True
+
+
+def test_a_record_that_was_changed_or_made_with_another_key_does_not_verify(world, monkeypatch):
+    from core import autonomy
+    good = {"id": "c", "role": "support", "depth": 1, "parent_id": "p"}
+    good.update(autonomy.spawn_record("11111111-1111-1111-1111-111111111111", "p", "support", 1, False))
+    assert autonomy.verify_spawn_record(good) is True
+    for field, value in (("role", "sales"), ("depth", 2), ("parent_id", "q"), ("spawn_forced", True),
+                         ("spawn_id", "22222222-2222-2222-2222-222222222222"), ("spawn_sig", good["spawn_sig"][:-1]),
+                         ("spawn_sig", None), ("spawn_id", None), ("spawn_forced", None), ("parent_id", None)):
+        assert autonomy.verify_spawn_record(dict(good, **{field: value})) is False, (field, value)
+    monkeypatch.setenv("ADDON_ENCRYPTION_KEY", "another-key")
+    assert autonomy.verify_spawn_record(good) is False
+    monkeypatch.delenv("ADDON_ENCRYPTION_KEY")
+    assert autonomy.verify_spawn_record(good) is False and autonomy.spawn_record("s", "p", "r", 1, False) is None
+
+
+def test_a_child_row_without_a_valid_record_is_refused_and_does_nothing(world):
+    parent, child = unrecorded_child()
+    agent_loop._drive(child, FakeService([plan("send_webhook", "ops", "hi")]), "support")
+    assert world["sent"] == [] and agent_loop.get_run(child["id"])["status"] == "failed"
+
+
+def test_without_a_signing_key_no_sub_agent_starts(world, monkeypatch):
+    from core import autonomy
+    monkeypatch.delenv("ADDON_ENCRYPTION_KEY")
+    d = autonomy.authorize_spawn({"id": None, "depth": 0, "role": "sales"}, "support")
+    assert d["allowed"] is False and d["reason"] == "no_signing_key" and d["spawn_id"] is None
+    assert agent_loop.run(Q, "d", FakeService([plan("delegate", "support", TASK)]), None) is None
+    assert rows() == []
+
+
+def test_every_authorization_gets_its_own_spawn_id_and_a_refusal_gets_none(world, monkeypatch):
+    from core import autonomy
+    a = autonomy.authorize_spawn({"id": None, "depth": 0}, "support")["spawn_id"]
+    b = autonomy.authorize_spawn({"id": None, "depth": 0}, "support")["spawn_id"]
+    assert a and b and a != b
+    assert autonomy.authorize_spawn({"id": None, "depth": subagents.MAX_DEPTH}, "support")["spawn_id"] is None
+
+
+def test_the_recorded_force_flag_cannot_be_lowered_by_the_live_chain(world, monkeypatch):
+    from core import autonomy
+    monkeypatch.setattr(agent_loop, "get_run", lambda i: {"id": i, "role": "support", "parent_id": None})
+    assert autonomy.inherited_force_semi({"parent_id": "p", "spawn_forced": True}) is True       # recorded at the start
+    assert autonomy.inherited_force_semi({"parent_id": "p", "spawn_forced": False}) is False
+    assert autonomy.inherited_force_semi({"parent_id": None, "spawn_forced": True}) is True        # even if the chain was pruned
+
+
+def test_a_missing_parent_is_refused_by_its_own_check_not_by_the_error_handler(world, caplog):
+    import logging
+    from core import autonomy
+    with caplog.at_level(logging.WARNING):
+        assert autonomy.inherited_force_semi({"parent_id": "00000000-0000-0000-0000-000000000000", "role": "support"}) is True
+    assert "forcing approval" not in caplog.text          # the explicit check answered; the exception path did not run
+
+
+def test_the_role_budget_left_is_the_smallest_remaining_cap_and_none_without_a_cap(monkeypatch):
+    from core import budget
+    for k in ("BUDGET_ROLE_DAILY_TOKENS", "BUDGET_ROLE_MONTHLY_TOKENS", "BUDGET_ROLE_DAILY_OVERRIDES", "BUDGET_ROLE_MONTHLY_OVERRIDES",
+              "BUDGET_DAILY_TOKENS", "BUDGET_MONTHLY_TOKENS"):
+        monkeypatch.delenv(k, raising=False)
+    assert budget.remaining("sales") is None and budget.remaining(None) is None
+    monkeypatch.setenv("BUDGET_ROLE_DAILY_TOKENS", "1000")
+    monkeypatch.setenv("BUDGET_ROLE_MONTHLY_OVERRIDES", "sales=5000")
+    monkeypatch.setattr(budget, "_used", lambda role, period: {"day": 400, "month": 4900}[period])
+    assert budget.remaining("sales") == 100 and budget.remaining("support") == 600
+    monkeypatch.setenv("BUDGET_DAILY_TOKENS", "10")                    # a global cap is not a role's own cap
+    assert budget.remaining("support") == 600
+    monkeypatch.setattr(budget, "_used", lambda role, period: (_ for _ in ()).throw(RuntimeError("down")))
+    assert budget.remaining("sales") is None                           # fails open, like every token budget
+
+
+def test_a_child_stops_when_its_parents_remaining_budget_is_spent(world, monkeypatch):
+    from core import budget
+    monkeypatch.setenv("BUDGET_ROLE_DAILY_OVERRIDES", "sales=100000")
+    monkeypatch.setattr(budget, "_used", lambda role, period: 99950 if role == "sales" else 0)     # the parent role has 50 tokens left
+    svc = FakeService([plan("delegate", "support", TASK), plan("run_code", content="print(1)"), DONE, "Parent summary."])
+    agent_loop.run(Q, "d", svc, "sales", False)
+    parent, children = parent_and_children()
+    assert children[0]["status"] == "budget" and len(children[0]["steps"]) == 1       # one step, then the parent's budget ran out
+    assert len(world["sent"]) == 1
+
+
+def test_a_child_whose_own_role_is_over_budget_does_not_start_work_the_model_call_checks_it(world, monkeypatch):
+    monkeypatch.setattr(agent_loop.budget, "check_budget",
+                        lambda role=None: {"scope": "role", "role": role, "period": "day", "limit": 1, "used": 1} if role == "support" else None)
+    svc = FakeService([plan("delegate", "support", TASK), DONE, "Parent summary."])
+    agent_loop.run(Q, "d", svc, None, False)
+    _, children = parent_and_children()
+    assert children[0]["status"] == "budget" and children[0]["steps"] == [] and world["sent"] == []
+
+
+def test_the_budget_stop_fails_open_when_it_cannot_read_and_stops_nobody_without_a_parent(world, monkeypatch):
+    assert subagents.budget_stop({"steps": []}) is False
+    monkeypatch.setattr(agent_loop, "get_run", lambda i: (_ for _ in ()).throw(RuntimeError("down")))
+    assert subagents.budget_stop({"parent_id": "p", "role": "support", "steps": []}) is False
+
+
+def test_the_whole_run_tree_shares_one_step_limit(world, monkeypatch):
+    monkeypatch.setenv("AGENT_LOOP_MAX_STEPS", "3")
+    svc = FakeService([plan("delegate", "support", TASK), plan("run_code", content="print(1)"), plan("run_code", content="print(2)"),
+                       "Child summary.", "Parent summary."])
+    agent_loop.run(Q, "d", svc, None)
+    parent, children = parent_and_children()
+    assert len(parent["steps"]) + len(children[0]["steps"]) == 3 and len(world["sent"]) == 2
+    assert parent["status"] == "done" and children[0]["status"] == "done"
+
+
+def test_a_plain_run_never_reads_the_database_for_the_step_limit_and_the_tree_check_fails_closed(world, monkeypatch):
+    monkeypatch.setattr(subagents, "_other_steps", lambda root, me: (_ for _ in ()).throw(AssertionError("must not be called")))
+    assert subagents.steps_exhausted({"id": None, "steps": [{}], "tainted": False}, 3) is False
+    assert subagents.steps_exhausted({"id": None, "steps": [{}, {}, {}]}, 3) is True
+    monkeypatch.setattr(subagents, "_other_steps", lambda root, me: (_ for _ in ()).throw(RuntimeError("down")))
+    assert subagents.steps_exhausted({"id": "c", "parent_id": "p", "steps": []}, 3) is True      # an action cap that cannot be read stops
+
+
+def test_the_docs_page_describes_the_start_record_and_the_shared_budgets():
+    text = (ROOT / "docs" / "sub-agents.md").read_text(encoding="utf-8")
+    for word in ("spawn_id", "start record", "ADDON_ENCRYPTION_KEY", "smaller of", "step limit", "fails closed", "fail open"):
+        assert word in text
+    assert "{{" not in text and "{%" not in text
+
+
+def test_the_schema_adds_the_three_start_record_columns_once_and_additively():
+    sql_text = (ROOT / "db" / "schema.sql").read_text(encoding="utf-8")
+    for col, kind in (("spawn_id", "UUID"), ("spawn_forced", "BOOLEAN"), ("spawn_sig", "TEXT")):
+        assert sql_text.count(f"ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS {col} {kind};") == 1
+    assert "DROP COLUMN" not in sql_text.split("spawn_id UUID")[1].split("\n\n")[0]

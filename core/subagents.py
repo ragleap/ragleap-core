@@ -149,6 +149,76 @@ def limit_to_parent(tools: Dict[str, str], run: Dict) -> Dict[str, str]:
         return {}
 
 
+def _children_tokens(parent_id: str, self_id) -> int:
+    """Tokens the OTHER children of this parent already spent (they are booked to their own roles, not to the parent's)."""
+    from core.employees._db import get_connection
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT coalesce(sum(tokens_used), 0) FROM agent_runs WHERE parent_id::text = %s AND id::text <> %s",
+                    (str(parent_id), str(self_id or "")))
+        n = cur.fetchone()[0]
+        cur.close()
+        return int(n)
+    finally:
+        conn.close()
+
+
+def budget_stop(run: Dict) -> bool:
+    """True when a child must stop because its PARENT's role budget is spent, so a child draws the smaller of its own
+    remaining budget and its parent's. The child's OWN role budget and the global caps need no check here: agent_loop._llm
+    checks them before every model call, children included (a test pins that). What the other children of this parent
+    already spent is subtracted, because it is booked to their own roles. Token budgets are cost control and fail OPEN,
+    like core/budget.py: a ledger that cannot be read stops nobody."""
+    pid = (run or {}).get("parent_id")
+    if not pid:
+        return False
+    try:
+        from core import agent_loop
+        parent = agent_loop.get_run(pid)
+        if parent is None:
+            return False
+        left = budget.remaining(None if parent.get("role") in ("auto", "team") else parent.get("role"))
+        if left is None:
+            return False
+        return left - (_children_tokens(pid, run.get("id")) + int(run.get("tokens_used") or 0)) <= 0
+    except Exception as e:
+        logger.warning("Sub-agent budget stop check failed (not stopping): %s", e)
+        return False
+
+
+def _other_steps(root_id: str, self_id) -> int:
+    """Steps taken by the other runs of this tree (the root and its children)."""
+    from core.employees._db import get_connection
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT coalesce(sum(jsonb_array_length(steps)), 0) FROM agent_runs "
+                    "WHERE (id::text = %s OR parent_id::text = %s) AND id::text <> %s", (str(root_id), str(root_id), str(self_id or "")))
+        n = cur.fetchone()[0]
+        cur.close()
+        return int(n)
+    finally:
+        conn.close()
+
+
+def steps_exhausted(run: Dict, limit: int) -> bool:
+    """True when this run, or its whole run tree, has used the step limit: delegating does not multiply the steps.
+    A step limit is an action cap, so it fails CLOSED: a tree whose count cannot be read stops."""
+    own = len(run.get("steps") or [])
+    if own >= limit:
+        return True
+    parent = run.get("parent_id")
+    if not parent and not any(s.get("tool") == "delegate" for s in run.get("steps", [])):
+        return False
+    try:
+        root = parent or run.get("id")
+        return bool(root) and own + _other_steps(root, run.get("id")) >= limit
+    except Exception as e:
+        logger.warning("Sub-agent step check failed (stopping): %s", e)
+        return True
+
+
 def over_budget(run: Dict) -> bool:
     """True when this run (a child, or a parent that has delegated) must stop because a token cap was reached."""
     try:
@@ -206,6 +276,9 @@ def delegate_step(parent: Dict, plan: Dict, service, role: Optional[str]) -> Opt
         return agent_loop._finish(parent, None, role, "budget", "Stopped: the sub-agent token cap was reached.")
     if parent.get("id") is None:
         agent_loop._save(parent)
+    record = autonomy.spawn_record(auth.get("spawn_id"), parent["id"], target, int(parent.get("depth") or 0) + 1, auth["force_approval"])
+    if record is None:
+        return agent_loop._finish(parent, service, role, "done", "The proposed sub-agent task was not allowed.")
     step = {"tool": "delegate", "target": target, "content": task[:600], "sig": sig, "status": "running",
             "forced_approval": False, "observation": "", "child_run_id": None}
     sem = _semaphore()
@@ -219,12 +292,12 @@ def delegate_step(parent: Dict, plan: Dict, service, role: Optional[str]) -> Opt
         child = {"id": None, "role": target, "query": task[:agent_loop.TEXT_CAP], "context_answer": "", "status": "running",
                  "steps": [], "tainted": bool(parent["tainted"]), "pending_action_id": None, "summary": "",
                  "parent_id": parent["id"], "depth": int(parent.get("depth") or 0) + 1, "tokens_used": 0,
-                 "deadline": time.time() + child_seconds()}
+                 "deadline": time.time() + child_seconds(), **record}
         agent_loop._save(child)
         step["child_run_id"] = child["id"]
         parent["steps"].append(step)
         agent_loop._save(parent)
-        _emit("subagent_started", parent_run=parent["id"], child_run=child["id"], role=target, depth=child["depth"])
+        _emit("subagent_started", parent_run=parent["id"], child_run=child["id"], role=target, depth=child["depth"], spawn_id=record["spawn_id"])
         previous = budget.get_role()
         try:
             budget.set_role(None if target in ("auto", "team") else target)

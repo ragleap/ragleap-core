@@ -76,7 +76,7 @@ def _service():
 # ---------------- storage ----------------
 
 _COLS = ("id, role, query, context_answer, status, steps, tainted, pending_action_id, summary, created_at, updated_at, "
-         "parent_id, depth, cancel_requested, tokens_used")
+         "parent_id, depth, cancel_requested, tokens_used, spawn_id, spawn_forced, spawn_sig")
 
 
 def _row(r) -> Dict:
@@ -84,6 +84,8 @@ def _row(r) -> Dict:
     d["id"] = str(d["id"])
     if d.get("parent_id") is not None:
         d["parent_id"] = str(d["parent_id"])
+    if d.get("spawn_id") is not None:
+        d["spawn_id"] = str(d["spawn_id"])
     if isinstance(d["steps"], str):
         d["steps"] = json.loads(d["steps"])
     for k in ("created_at", "updated_at"):
@@ -100,11 +102,12 @@ def _save(run: Dict) -> None:
         if run.get("id") is None:
             cur.execute(
                 "INSERT INTO agent_runs (role, query, context_answer, status, steps, tainted, "
-                "pending_action_id, summary, parent_id, depth, tokens_used) "
-                "VALUES (%s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s) RETURNING id",
+                "pending_action_id, summary, parent_id, depth, tokens_used, spawn_id, spawn_forced, spawn_sig) "
+                "VALUES (%s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
                 (run.get("role"), run["query"], run["context_answer"], run["status"], steps,
                  run["tainted"], run.get("pending_action_id"), run.get("summary", ""),
-                 run.get("parent_id"), int(run.get("depth") or 0), int(run.get("tokens_used") or 0)),
+                 run.get("parent_id"), int(run.get("depth") or 0), int(run.get("tokens_used") or 0),
+                 run.get("spawn_id"), run.get("spawn_forced"), run.get("spawn_sig")),
             )
             run["id"] = str(cur.fetchone()[0])
         else:
@@ -449,8 +452,10 @@ def _finish(run: Dict, service, role: Optional[str], status: str, note: str = ""
 
 
 def _drive(run: Dict, service, role: Optional[str]) -> Optional[Dict]:
-    from core.autonomy import execute_or_request, inherited_force_semi  # lazy: avoids an import cycle
+    from core.autonomy import execute_or_request, inherited_force_semi, verify_spawn_record  # lazy: avoids an import cycle
     tools = subagents.limit_to_parent(subagents.with_delegate(actions.available_tools(), run), run)
+    if run.get("parent_id") and not verify_spawn_record(run):          # a child the gate did not start is never driven
+        return _finish(run, None, role, "failed", "Stopped: this sub-agent has no valid start record.")
     limit = max_steps()
     while True:
         if _cancelled(run):
@@ -459,9 +464,11 @@ def _drive(run: Dict, service, role: Optional[str]) -> Optional[Dict]:
             return _finish(run, None, role, "failed", "Stopped: the sub-agent time limit was reached.")
         if subagents.over_budget(run):
             return _finish(run, None, role, "budget", "Stopped: the sub-agent token cap was reached.")
+        if subagents.budget_stop(run):
+            return _finish(run, None, role, "budget", "Stopped: the usage limit was reached.")
         if not tools:
             return _finish(run, service, role, "done", "No actions are available.")
-        if len(run["steps"]) >= limit:
+        if subagents.steps_exhausted(run, limit):
             return _finish(run, service, role, "done", "Step limit reached.")
         try:
             prompt = _build_prompt(run, tools, limit - len(run["steps"]))

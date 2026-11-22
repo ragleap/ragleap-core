@@ -27,6 +27,8 @@ The gate decides every start (`authorize_spawn` in `core/autonomy.py`) and write
 - A child's tools are the tools its parent has, never more.
 - A child starts with its parent's taint, and its own taint comes back to the parent.
 - A child cannot start a child.
+- Every child row carries a signed **start record**: `spawn_id`, `spawn_forced` and a signature made with a key derived from `ADDON_ENCRYPTION_KEY`. The gate issues it when it allows the start, it is written once and never updated, and a child without a valid record is refused every time it runs or resumes. Without that key no sub-agent starts. A child that was forced to ask stays forced even if the rows above it are pruned. The same `spawn_id` is in the audit events.
+- A child may draw at most the **smaller of** its own role's remaining token budget and its parent's (what the other children already spent is subtracted). The whole run tree shares one **step limit**, so delegating does not multiply the steps. Token budgets fail open when the ledger cannot be read, because they are cost control; the step limit fails closed.
 
 ## Watching and stopping
 

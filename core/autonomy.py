@@ -459,6 +459,8 @@ def inherited_force_semi(run: Dict) -> bool:
 
     A child's own role does not matter here: the model picks it, and picking a different role must not lift a rule the
     parent is under. Runs without a parent never touch the database. A parent that cannot be read counts as sensitive."""
+    if (run or {}).get("spawn_forced") is True:
+        return True                    # recorded when the child started: pruning the chain later cannot lower it
     if not (run or {}).get("parent_id"):
         return False
     try:
@@ -472,7 +474,11 @@ def inherited_force_semi(run: Dict) -> bool:
                 return True
             seen.add(pid)
             parent = agent_loop.get_run(pid)
-            if parent is None or _role_is_sensitive(parent.get("role")):
+            # A missing parent is refused HERE on purpose. Do not fold this into the check below or rely on the exception
+            # handler: without this line current=None would raise and still fail closed, but only by accident.
+            if parent is None:
+                return True
+            if _role_is_sensitive(parent.get("role")):
                 return True
             current = parent
         return True
@@ -481,13 +487,49 @@ def inherited_force_semi(run: Dict) -> bool:
         return True
 
 
+def _spawn_key() -> Optional[bytes]:
+    """The key of the start records, derived from ADDON_ENCRYPTION_KEY. None when that key is not set."""
+    import hashlib
+    raw = os.environ.get("ADDON_ENCRYPTION_KEY", "").strip()
+    return hashlib.sha256(b"ragleap-spawn-record-v1|" + raw.encode("utf-8")).digest() if raw else None
+
+
+def _spawn_mac(key: bytes, spawn_id, parent_id, role, depth, forced) -> str:
+    import hashlib
+    import hmac
+    msg = "|".join(("spawn1", str(spawn_id), str(parent_id), str(role), str(int(depth)), "1" if forced else "0"))
+    return hmac.new(key, msg.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def spawn_record(spawn_id, parent_id, role, depth, forced) -> Optional[Dict]:
+    """The signed start record of a child (written once, with the child's row). None when it cannot be made."""
+    key = _spawn_key()
+    if key is None or not spawn_id or not parent_id:
+        return None
+    return {"spawn_id": spawn_id, "spawn_forced": bool(forced), "spawn_sig": _spawn_mac(key, spawn_id, parent_id, role, depth, forced)}
+
+
+def verify_spawn_record(run: Dict) -> bool:
+    """True only when the run's start record is complete and its signature matches the row's parent, role, depth and flag."""
+    try:
+        import hmac
+        key, rec = _spawn_key(), (run or {})
+        if key is None or not rec.get("spawn_id") or not rec.get("spawn_sig") or rec.get("spawn_forced") is None or not rec.get("parent_id"):
+            return False
+        want = _spawn_mac(key, rec["spawn_id"], rec["parent_id"], rec.get("role"), int(rec.get("depth") or 0), bool(rec["spawn_forced"]))
+        return hmac.compare_digest(want, str(rec["spawn_sig"]))
+    except Exception:
+        return False
+
+
 def authorize_spawn(parent: Dict, target_role: str) -> Dict:
     """THE decision to start a sub-agent (Phase 0, P0-H). core/subagents.delegate_step starts a child only after this said yes.
 
     Checks the owner's switch, the depth, the number of children, and tells whether the child will be forced to ask for
     approval for every action (a sensitive role at or above the parent). Every decision is audited. Fails closed."""
-    allowed, reason, force = False, "check_failed", True
+    allowed, reason, force, spawn_id = False, "check_failed", True, None
     try:
+        import uuid
         from core import subagents
         parent = parent or {}
         if not subagents.enabled():
@@ -496,15 +538,17 @@ def authorize_spawn(parent: Dict, target_role: str) -> Dict:
             reason = "depth_limit"
         elif parent.get("id") and subagents._count_children(parent["id"]) >= subagents.max_children():
             reason = "child_limit"
+        elif _spawn_key() is None:
+            reason = "no_signing_key"                 # a start record cannot be signed, so no child starts
         else:
-            allowed, reason = True, "ok"
+            allowed, reason, spawn_id = True, "ok", str(uuid.uuid4())
         force = _role_is_sensitive(parent.get("role")) or inherited_force_semi(parent)
     except Exception as e:
-        allowed, reason, force = False, "check_failed", True
+        allowed, reason, force, spawn_id = False, "check_failed", True, None
         logger.warning("Sub-agent authorization failed, refusing: %s", e)
     _audit_event("subagent_authorized" if allowed else "subagent_denied", parent_run=str((parent or {}).get("id")),
-                 role=str(target_role), reason=reason, force_approval=force)
-    return {"allowed": allowed, "reason": reason, "force_approval": force}
+                 role=str(target_role), reason=reason, force_approval=force, spawn_id=spawn_id)
+    return {"allowed": allowed, "reason": reason, "force_approval": force, "spawn_id": spawn_id}
 
 
 def execute_or_request(action_type: str, channel: str, target: str,
