@@ -113,6 +113,17 @@ def _used(role: Optional[str], period: str) -> int:
         conn.close()
 
 
+def remaining(role: Optional[str]) -> Optional[int]:
+    """Tokens left under this role's OWN caps (the smallest across day and month), or None when it has none. A global cap
+    is not counted here. Fails OPEN (None), like check_budget."""
+    try:
+        left = [limit - _used(r, period) for scope, r, period, limit in _limits(role) if scope == "role"]
+        return min(left) if left else None
+    except Exception as e:
+        logger.warning(f"Budget remaining check failed (treating as no cap): {e}")
+        return None
+
+
 def check_budget(role: Optional[str] = None) -> Optional[Dict]:
     """None if the call may proceed, else {"scope", "role", "period", "limit", "used"}."""
     try:

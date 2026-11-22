@@ -358,6 +358,10 @@ ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS parent_id UUID;
 ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS depth INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS cancel_requested BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS tokens_used INTEGER NOT NULL DEFAULT 0;
+-- The start record of a sub-agent, written once when the gate allowed it and never updated (spawn_sig is an HMAC).
+ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS spawn_id UUID;
+ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS spawn_forced BOOLEAN;
+ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS spawn_sig TEXT;
 CREATE INDEX IF NOT EXISTS agent_runs_parent_idx ON agent_runs (parent_id) WHERE parent_id IS NOT NULL;
 DO $$
 BEGIN
