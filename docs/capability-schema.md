@@ -22,7 +22,7 @@ See `docs/capability-examples/` for three complete examples: an action (`crm-act
 | `kind` | yes | `action`, `datasource` or `mcp`. |
 | `operations` | yes | One or more operations (below). Names must be unique. |
 | `scope` | no | `level` is `organization` or `user`. A `user` scope needs `user_filter_field`, the field that holds the user id. |
-| `network` | no | `hosts`: public host names (no wildcards, no IP addresses, no internal names). `https_only`: must be `true` when present. `tcp`: reserved (below). |
+| `network` | no | `hosts`: public host names (no wildcards, no IP addresses, no internal names). `https_only`: must be `true` when present. `owner_configured`: `true` when the owner, not the connector, chooses where it sends (the core's own tools use this); it lists no host and satisfies `E-NET-REQUIRED`. `tcp`: reserved (below). |
 | `secrets` | no | Names of settings the connector needs, UPPER_SNAKE_CASE. Names that belong to the core (such as `DATABASE_URL`) cannot be declared. |
 | `budgets` | no | `max_calls_per_run`, `max_calls_per_day`, `max_bytes`, `timeout_s`. The core's own ceilings apply on top. |
 | `descriptive` | no | `title`, `notes`, `data_classes`. **Not enforced** (below). |
@@ -74,7 +74,7 @@ Exit code 0 means it conforms, 1 means errors (or warnings with `--strict`), 2 m
 | `E-APPROVAL-NEVER` | error | `approval: never` was used. It does not exist. |
 | `E-SCOPE-USER-FIELD` | error | A `user` scope has no `user_filter_field`. |
 | `E-NET-INTERNAL-HOST` | error | A host is an IP address or an internal name. |
-| `E-NET-REQUIRED` | error | An `external_send` operation declares no host. |
+| `E-NET-REQUIRED` | error | An `external_send` operation declares no host, no `tcp` target and no `network.owner_configured`. |
 | `E-SECRET-PROTECTED` | error | A core-owned secret was declared. |
 | `E-SRC-DIRECT-ACCESS` | error | Connector source uses the network, a subprocess, the environment or a dynamic import directly. |
 | `W-TCP-NOT-ENFORCEABLE` | warning | `network.tcp` is declared; it cannot be enforced in-process. |
