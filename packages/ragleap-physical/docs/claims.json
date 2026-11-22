@@ -627,6 +627,23 @@
    "status": "limitation",
    "evidence": [],
    "note": "Least-squares lines through six published points per lathe (R^2 0.97 and 0.98); the source gives no scatter, and a fit that starts one point later moves n by about 0.06. Not compared with measurements and not reviewed by someone who machines."
+  },
+  {
+   "id": "C44",
+   "claim": "The red-team harness checks on every run that a stop request is answered within 3 s while a client holds a half-sent request to the console",
+   "where": "CHANGELOG.md",
+   "status": "verified",
+   "evidence": [
+    {
+     "type": "test",
+     "ref": "benchmarks/redteam/test_redteam.py::test_1367_is_a_regression_check_and_not_a_known_gap"
+    },
+    {
+     "type": "test",
+     "ref": "benchmarks/redteam/test_redteam.py::test_a_stop_that_is_refused_busy_or_not_answered_is_a_regression"
+    }
+   ],
+   "note": "A regression check, not an invariant class. A console that serves one connection at a time is caught (a deliberate-break row of the harness). REAL. Simulated adapters only; a client that holds every connection slot is not covered."
   }
  ]
 }

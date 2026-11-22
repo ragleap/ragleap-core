@@ -312,9 +312,9 @@ def test_a_control_that_raises_is_a_failed_control_not_a_crash():
 def test_known_gaps_are_named_and_never_counted_as_findings():
     rep = h.run(seed=1, per_class=SMALL)
     gaps = rep["known_gaps"]
-    assert set(gaps) == set(h.KNOWN_GAPS) == {"#1339", "#1367", "linger-limit"}  # #1338 is closed on main: it is no longer a known gap
+    assert set(gaps) == set(h.KNOWN_GAPS) == {"#1339", "linger-limit"}  # #1338 and #1367 are fixed on main: they are no longer known gaps
     assert gaps["#1339"]["status"] in ("open (reproduced)", "not reproduced (closed? remove the marker)"), gaps["#1339"]
-    assert gaps["#1367"]["status"] == "not probed"  # slow (about 10 s): only with --include-slow
+    assert "#1367" not in gaps and rep["regressions"]["#1367"]["status"] == "held"  # a regression check now, on every run
     assert gaps["linger-limit"]["status"].startswith(("open", "not reproduced", "not probed")), gaps["linger-limit"]
     assert rep["totals"]["passed"] == 0 and rep["findings"] == []
     seen = sum(g["cases"] for g in gaps.values())
@@ -380,3 +380,73 @@ def test_the_report_says_which_invariants_no_class_covers():
     assert rep["invariants_not_covered"] == sorted(set(inv["invariants"]) - covered, key=lambda s: int(s[1:]))
     assert {"S3", "S6", "S11", "S12", "S13"} <= set(rep["invariants_not_covered"])
     assert rep["classes"]["bad_values"]["invariants"] == inv["classes"]["bad_values"]
+
+
+# ---- #1367 is a regression check now: the console serves each connection in its own thread, and the harness checks that it stays so
+def _regression_with(stub):
+    real = h.creq
+    h.creq = stub
+    try:
+        regs = {}
+        h.known_gap_probes(h.default_factory, h.Recorder(1), False, regs)
+    finally:
+        h.creq = real
+    assert h.creq is real
+    return regs["#1367"]
+
+
+def test_1367_is_a_regression_check_and_not_a_known_gap():
+    assert "#1367" not in h.KNOWN_GAPS and "#1367" in h.REGRESSIONS
+    rep = h.run(seed=1, per_class=SMALL, only=["bad_values"])
+    assert rep["regressions"]["#1367"]["status"] == "held", rep["regressions"]
+    assert rep["regressed"] == [] and "#1367" not in rep["known_gaps"] and rep["findings"] == []
+    assert rep["environment"]["regression_details"]["#1367"]["waited_s"] < 4.5
+
+
+def test_the_stop_bound_is_an_absolute_number_below_the_console_read_timeout():
+    assert 1.0 <= h.STOP_BOUND_S <= 4.5
+
+
+def test_a_stop_that_is_answered_counts_as_held():
+    assert _regression_with(lambda *a, **k: (200, {}))["status"] == "held"
+    assert _regression_with(lambda *a, **k: (202, {}))["status"] == "held"
+
+
+def test_a_stop_that_is_refused_busy_or_not_answered_is_a_regression():
+    for answer in ((503, None), (None, None), (500, None), (302, None)):
+        got = _regression_with(lambda *a, _x=answer, **k: _x)
+        assert got["status"] == "REGRESSED", answer
+
+
+def test_a_check_that_cannot_run_is_not_a_pass():
+    def boom(*args, **kwargs):
+        raise RuntimeError("no answer")
+    assert _regression_with(boom)["status"] == "not checked"
+    assert h.regressed_ids({"x": {"status": "not checked"}}) == ["x"]
+    assert h.regressed_ids({"x": {"status": "REGRESSED"}}) == ["x"]
+    assert h.regressed_ids({"x": {"status": "held"}}) == []
+
+
+def test_a_regression_is_a_finding_and_a_nonzero_exit_code():
+    real = h.STOP_BOUND_S
+    h.STOP_BOUND_S = 0.0  # any wait is now too long: this checks the wiring, not the console
+    try:
+        rep = h.run(seed=1, per_class=2, only=["bad_values"])
+        code = h.main(["--seed", "1", "--per-class", "2", "--only", "bad_values"])
+    finally:
+        h.STOP_BOUND_S = real
+    assert h.STOP_BOUND_S == real
+    assert rep["regressed"] == ["#1367"] and rep["regressions"]["#1367"]["status"] == "REGRESSED"
+    assert [f["scenario"] for f in rep["findings"]] == ["#1367"] and rep["findings"][0]["verdict"] == "error"
+    assert code == 1
+
+
+def test_the_report_hash_does_not_depend_on_the_measured_wait():
+    a = h.run(seed=2, per_class=2, only=["bad_values"])
+    b = h.run(seed=2, per_class=2, only=["bad_values"])
+    assert a["report_sha256"] == b["report_sha256"]
+    assert set(a["regressions"]["#1367"]) == {"description", "status"}  # the measured wait is kept out of the hashed report
+
+
+def test_the_old_slow_flag_is_still_accepted_and_changes_nothing():
+    assert h.main(["--seed", "1", "--per-class", "2", "--only", "bad_values", "--include-slow"]) == 0
