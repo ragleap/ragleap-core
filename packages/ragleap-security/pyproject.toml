@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ragleap-security"
-version = "0.2.0"
+version = "0.3.0"
 description = "Small, auditable security primitives for the ragleap libraries: immutable tenant scopes, a tamper-evident hash-chained audit log, secret handling and redaction, hard input limits, rate limits, keys with rotation, file integrity manifests and optional authenticated encryption. Standard library only, except optional AES-256-GCM encryption (extra: crypto). Not independently audited."
 readme = "README.md"
 license = "MIT"

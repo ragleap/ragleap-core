@@ -3,13 +3,29 @@
 All notable changes to `ragleap-security` are documented here. Format
 loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [0.3.0] - 2026-11-23
 
-Tests only. No code change, no behaviour change, no new release needed.
+Design: #1506. One new module, `ragleap_security.net`; nothing from 0.2.0 changed, so there are no behaviour changes and every 0.2.0 name still works. It is standard library only and is imported on its own (`from ragleap_security.net import ...`).
 
 ### Added
 
-- `tests/test_hostile_tenant.py`: attacks a hostile tenant would try, each with a positive control: every scope key is unique and parses back; hostile tenant names and keys (newline, NUL, U+2028, non-ASCII digits, fullwidth letters, `/` and `=`) are refused; flooding a rate limiter with new keys cannot reset a throttled key and only blocks *new* keys until buckets refill (documented fail-closed trade-off); audit data cannot forge extra records and moving a record to another tenant is detected; secret wrappers do not leak through containers or exceptions.
+- `ragleap_security.net`: `SafeFetcher`, `FetchPolicy`, `FetchResult`, `NetError`, `address_allowed`. Outbound HTTP (GET and HEAD) that is safe by default and per tenant. On every request and every redirect hop it applies strict URL parsing (https only unless the policy allows http; no userinfo, no number-like hosts such as `2130706433` or `0x7f.1`, no IP literals, ASCII only), a host allowlist from the tenant's own policy (deny by default; a missing, wrong-typed or failing policy refuses), one DNS lookup whose EVERY address must pass the address rule, and a connection to the checked address (the name is never resolved twice, so DNS rebinding does not work). The address rule unwraps an embedded IPv4 (IPv4-mapped, NAT64, 6to4) and then allows only global addresses outside an explicit blocklist (verified on Python 3.10.20 and 3.12.3: the `ipaddress` flags for mapped addresses differ between versions, and multicast, NAT64 and IPv4-compatible forms can report `is_global`). Redirects are followed by this module only, with the caller's headers sent to the first origin and never again after leaving it. One monotonic deadline covers connect, TLS and reading; the body is capped and refused (never truncated); `Accept-Encoding: identity` is sent and any content encoding is refused; no proxy or `.netrc` from the environment; TLS verification is always on (system CA store, TLS 1.2 or newer). Every refusal is one fixed reason code. Optional `AuditLog` (`net.request`, `net.redirect`, `net.blocked`: scope, host, port, status, byte count, hop count, reason; never the path, query, headers or body; a failed write raises) and `RateLimiter` (per scope, before any lookup).
+- `tests/test_net.py` (258 tests) with a local server; only the DNS answer and the connection target use a documented, underscore-named test seam (loopback is blocked by design).
+- `tests/test_hostile_tenant.py` (28 tests; merged earlier, no code change): attacks a hostile tenant would try against scope keys, rate limits, the audit log and secret wrappers.
+- 46 more mutations in `scripts/mutation_check.py` for the net module (181 in total, all killed on Python 3.10 and 3.12). The net mutations run against `tests/test_net.py` only, and `python scripts/mutation_check.py net:` runs just them. The first run found 5 survivors: missing tests (the unwrapping of mapped addresses was only caught on Python versions whose flags disagree, the four-tries cap, the deadline between reads and between hops) and one redundant explicit `close()`, which was removed.
+
+### Does not defend
+
+- A host on the allowlist is trusted: a compromised allowed host, or one that redirects to another allowed host, is followed.
+- A DNS answer that is consistently wrong (an allowed name pointed at an attacker's public server) is not detected. A slow DNS server can exceed the deadline before the check happens (the lookup cannot be interrupted).
+- TLS certificate-authority compromise; local tampering with the hosts file or resolver settings.
+- The response is untrusted data: mark steps that fetch as `external` (tainting) in flows and agents.
+- Non-HTTP egress; internal services on private names (refused by design, there is no `allow_private`); POST and other methods; IDN names must be given as punycode.
+- Windows and macOS are not tested; no independent security review.
+
+### Not verified
+
+Real traffic to the public internet and a real TLS handshake with a valid certificate (the tests use a local plain-HTTP server and check the TLS settings directly); IPv6-only networks; Windows and macOS.
 
 ## [0.2.0] - 2026-11-07
 
