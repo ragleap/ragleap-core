@@ -19,6 +19,7 @@ from pathlib import Path
 
 PKG = Path(__file__).resolve().parent.parent
 S, A, K, L = "src/ragleap_security/scope.py", "src/ragleap_security/audit.py", "src/ragleap_security/secrets.py", "src/ragleap_security/limits.py"
+NT = "src/ragleap_security/net.py"
 KY, CR, RL, IN = ("src/ragleap_security/keys.py", "src/ragleap_security/crypto.py",
                   "src/ragleap_security/ratelimit.py", "src/ragleap_security/integrity.py")
 
@@ -164,6 +165,53 @@ MUTATIONS = [
     ("integrity: extra files do not fail verification", [(IN, "ok = not (changed or missing or extra)", "ok = not (changed or missing)")]),
     ('integrity: listed symlink reported as extra', [(IN, '(changed if rel in listed else extra).append(rel)', 'extra.append(rel)')]),
     ('integrity: signature check not reported', [(IN, 'tuple(sorted(extra)), mac_checked)', 'tuple(sorted(extra)), False)')]),
+    # ---- net (0.3.0, design #1506)
+    ("net: mapped IPv4 is not unwrapped", [(NT, "    if mapped is not None:\n        return _v4_ok(mapped)\n", "    if False:\n        return _v4_ok(mapped)\n")]),
+    ("net: NAT64 is not unwrapped", [(NT, "    if ip in _NAT64:", "    if False:")]),
+    ("net: 6to4 is not unwrapped", [(NT, "    if ip in _SIX_TO_FOUR:", "    if False:")]),
+    ("net: IPv6 special ranges are not blocked", [(NT, "    if any(ip in net for net in _V6_BLOCK):\n        return False\n", "")]),
+    ("net: IPv4 multicast is allowed", [(NT, "ip.is_global and not ip.is_multicast and not any(ip in n for n in _V4_BLOCK)", "ip.is_global and not any(ip in n for n in _V4_BLOCK)"), (NT, '"224.0.0.0/4", "240.0.0.0/4")]', '"240.0.0.0/4")]')]),
+    ("net: IPv6 multicast is allowed", [(NT, "    return ip.is_global and not ip.is_multicast\n", "    return ip.is_global\n"), (NT, '"fec0::/10", "ff00::/8")]', '"fec0::/10")]')]),
+    ("net: IPv6 zone ids are accepted", [(NT, 'if not isinstance(text, str) or "%" in text:', "if not isinstance(text, str):")]),
+    ("net: userinfo is accepted", [(NT, 'if "@" in authority:', "if False:")]),
+    ("net: number-like hosts are accepted", [(NT, 'if last.isdigit() or last.startswith("0x"):\n        raise NetError("ip_literal")', 'if False:\n        raise NetError("ip_literal")')]),
+    ("net: IP literals in brackets are accepted", [(NT, 'if authority.startswith("["):', "if False:")]),
+    ("net: wildcard matches without a dot", [(NT, "if host.endswith(suffix) and len(host) > len(suffix):", "if host.endswith(suffix[1:]) and len(host) > len(suffix):")]),
+    ("net: the port is not checked", [(NT, "if port not in policy.allow_ports:", "if False:")]),
+    ("net: http without the policy switch", [(NT, '(scheme == "http" and not policy.allow_http)', "False")]),
+    ("net: any scheme is accepted", [(NT, 'if scheme not in ("https", "http") or', "if False or")]),
+    ("net: non-ASCII or control characters in the URL", [(NT, "if any(not 0x21 <= ord(c) <= 0x7E for c in url) or", "if False or")]),
+    ("net: fragments and backslashes in the URL", [(NT, '"\\\\" in url or "#" in url:', "False:")]),
+    ("net: the host allowlist is not applied", [(NT, "if not _host_allowed(host, policy.allow_hosts):", "if False:")]),
+    ("net: policy accepts IP entries", [(NT, '            if last.isdigit() or last.startswith("0x"):\n                raise ValueError("allow_hosts takes host names, not IP addresses")\n', "")]),
+    ("net: policy accepts a one-label wildcard", [(NT, '_PATTERN = re.compile(r"(\\*\\.)?[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+\\Z")', '_PATTERN = re.compile(r"(\\*\\.)?[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*\\Z")')]),
+    ("net: one blocked address among several is tolerated", [(NT, "if not all(self._address_rule(a) for a in found):", "if not any(self._address_rule(a) for a in found):")]),
+    ("net: too many addresses are accepted", [(NT, "if not found or len(found) > MAX_ADDRESSES:", "if not found:")]),
+    ("net: connects to the name instead of the checked address", [(NT, "sock = self._connector(ip, t.port, max(0.001, deadline.remaining()))", "sock = self._connector(t.host, t.port, max(0.001, deadline.remaining()))")]),
+    ("net: tries more than four addresses", [(NT, "for ip in found[:MAX_TRIES]:", "for ip in found:")]),
+    ("net: the redirect cap is off by one", [(NT, "if hops >= policy.max_redirects:", "if hops > policy.max_redirects:")]),
+    ("net: caller headers follow a cross-origin redirect", [(NT, "                elif origin != first:\n                    left_first_origin = True", "                elif origin != first:\n                    left_first_origin = False")]),
+    ("net: the redirect location is not checked", [(NT, '"\\\\" in location:\n            raise NetError("bad_redirect", host)', 'False:\n            raise NetError("bad_redirect", host)')]),
+    ("net: certificates are not verified", [(NT, "ctx = ssl.create_default_context()", "ctx = ssl._create_unverified_context()")]),
+    ("net: old TLS versions are accepted", [(NT, "ctx.minimum_version = ssl.TLSVersion.TLSv1_2\n", "")]),
+    ("net: content encoding is accepted", [(NT, 'if enc is not None and enc.strip().lower() not in ("", "identity"):', "if False:")]),
+    ("net: the body cap is not enforced while reading", [(NT, "            if total > policy.max_bytes:\n                raise NetError(\"response_too_large\", t.host)\n            chunks.append(chunk)", "            chunks.append(chunk)")]),
+    ("net: the deadline is not checked while reading", [(NT, "            if remaining <= 0:\n                raise NetError(\"timeout\", t.host)\n            sock.settimeout(remaining)", "            sock.settimeout(max(remaining, 0.001))")]),
+    ("net: the response header size is not capped", [(NT, "if sum(len(k) + len(v) + 4 for k, v in pairs) > policy.max_header_bytes:", "if False:")]),
+    ("net: forbidden caller headers are accepted", [(NT, "or k.lower() in _FORBIDDEN_HEADERS", "")]),
+    ("net: caller header values are not checked", [(NT, "or any(not 0x20 <= ord(c) <= 0x7E for c in v)):", "):")]),
+    ("net: too many caller headers", [(NT, "or len(headers) > MAX_HEADERS_FROM_CALLER:", ":")]),
+    ("net: a policy subclass is trusted", [(NT, "if type(policy) is not FetchPolicy:", "if not isinstance(policy, FetchPolicy):")]),
+    ("net: an exception in policy_for escapes", [(NT, 'raise NetError("bad_policy") from None\n        if policy is None:', 'raise\n        if policy is None:')]),
+    ("net: no policy still fetches", [(NT, 'if policy is None:\n            raise NetError("no_policy")', 'if False:\n            raise NetError("no_policy")')]),
+    ("net: the rate limit is ignored", [(NT, "        if not decision.allowed:\n            raise RateLimitError", "        if False:\n            raise RateLimitError")]),
+    ("net: the scope is not required", [(NT, "        scope = require_scope(scope)\n        self._limit(scope)", "        self._limit(scope)")]),
+    ("net: the audit record holds the URL", [(NT, 'self._record(scope, "net.request", host=host, port=port, status=status, bytes=len(body), hops=hops)', 'self._record(scope, "net.request", host=host, port=port, status=status, bytes=len(body), hops=hops, url=current)')]),
+    ("net: refusals are not audited", [(NT, '            self._record(scope, "net.blocked", reason=e.reason, host=e.host or host or "", hops=hops)\n', "")]),
+    ("net: redirects are not audited", [(NT, '                    self._record(scope, "net.redirect", host=host, port=port, hops=hops)\n', "                    pass\n")]),
+    ("net: the connection is not closed", [(NT, "            resp.close()\n            conn.close()\n", "            resp.close()\n")]),
+    ("net: the deadline is not checked before a hop", [(NT, "        if deadline.expired():\n            raise NetError(\"timeout\", t.host)\n        try:\n            found", "        try:\n            found")]),
+    ("net: the status of a redirect without Location is followed", [(NT, 'if status in _REDIRECTS and resp_headers.get("location"):', "if status in _REDIRECTS:")]),
 ]
 
 
@@ -171,10 +219,10 @@ TEST_TIMEOUT_SECONDS = 120
 WORKERS = 4
 
 
-def run_tests(root: Path) -> bool:
+def run_tests(root: Path, target: str = "tests") -> bool:
     env = {"PYTHONPATH": str(root / "src"), "PATH": "/usr/bin:/bin"}
     try:
-        r = subprocess.run([sys.executable, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider", str(root / "tests")],
+        r = subprocess.run([sys.executable, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider", str(root / target)],
                            cwd=root, env={**env, "PYTHONDONTWRITEBYTECODE": "1"}, capture_output=True, text=True,
                            timeout=TEST_TIMEOUT_SECONDS)
     except subprocess.TimeoutExpired:
@@ -207,12 +255,14 @@ def main() -> int:
                     if text.count(old) != 1:
                         return name, None
                     p.write_text(text.replace(old, new))
-                return name, not run_tests(work)
+                # a mutation of net.py can only be caught by the net tests, which are also much faster to run
+                return name, not run_tests(work, "tests/test_net.py" if name.startswith("net:") else "tests")
             finally:
                 shutil.rmtree(work, ignore_errors=True)
 
+        only = sys.argv[1] if len(sys.argv) > 1 else ""  # optional name prefix, for example: net:
         with ThreadPoolExecutor(max_workers=WORKERS) as pool:
-            for name, killed in pool.map(one, enumerate(MUTATIONS)):
+            for name, killed in pool.map(one, [(i, m) for i, m in enumerate(MUTATIONS) if m[0].startswith(only)]):
                 if killed is None:
                     print(f"ERROR    {name}: anchor not found exactly once")
                     survivors.append(name + " (anchor error)")
@@ -220,7 +270,8 @@ def main() -> int:
                 print(("KILLED   " if killed else "SURVIVED ") + name, flush=True)
                 if not killed:
                     survivors.append(name)
-    print(f"\n{len(MUTATIONS) - len(survivors)} of {len(MUTATIONS)} mutations killed")
+    ran = len([m for m in MUTATIONS if m[0].startswith(only)])
+    print(f"\n{ran - len(survivors)} of {ran} mutations killed")
     return 1 if survivors else 0
 
 

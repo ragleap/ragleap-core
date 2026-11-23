@@ -2,7 +2,7 @@
 
 Small, auditable security primitives for the ragleap libraries. The core is standard library only; encryption is an optional extra. Alpha. **Not independently audited**: see `docs/threat-model.md` for exactly what is and is not defended.
 
-## What is in 0.2.0
+## What is in 0.3.0
 
 From 0.1.0:
 
@@ -18,7 +18,14 @@ New in 0.2.0:
 - `RateLimiter`, `SQLiteRateLimiter`: a token bucket per key, in memory or shared between processes on one machine. They refuse when they cannot decide.
 - `build_manifest`, `verify_manifest`, `Manifest`, `file_digest`: detect that files changed, with an optional HMAC so the manifest itself cannot be edited unnoticed.
 
-Nothing in 0.1.0 changed. The new modules are additive.
+New in 0.3.0 (standard library only, imported on its own):
+
+- `ragleap_security.net`: `SafeFetcher`, `FetchPolicy`. Outbound HTTP (GET and HEAD) that an attacker cannot point at your own network: a per-tenant host allowlist (deny by default), strict URL parsing, every resolved address checked, the connection pinned to the checked address, redirects re-checked on every hop, one deadline, a body cap, TLS verification always on, no proxy from the environment. Every refusal is a fixed reason code; the audit record never holds a path, query, header or body.
+
+    fetcher = SafeFetcher(lambda scope: FetchPolicy(allow_hosts=("api.example.com",)), audit=log)
+    res = fetcher.get(Scope("acme"), "https://api.example.com/v1/items")   # NetError(reason) on any refusal
+
+Nothing in 0.1.0 or 0.2.0 changed. The new modules are additive.
 
 ## Examples
 
@@ -68,6 +75,6 @@ Encryption does not protect data while the program is running, and does not help
 
 Without the `cryptography` package the crypto tests are skipped and everything else still runs.
 
-## Not in 0.2.0
+## Not in 0.3.0
 
-Canary tokens (planned: detect and trace leaks), an SSRF-safe HTTP helper, public-key signatures, streaming encryption for very large files, a policy engine, output detectors and a red-team harness are planned (issue #899) and not available yet.
+Canary tokens (planned: detect and trace leaks), `pin`, POST and other methods in `net`, public-key signatures, streaming encryption for very large files, a policy engine, output detectors and a red-team harness are planned (issue #899) and not available yet.
