@@ -96,3 +96,15 @@ Consequences for the engine:
 4. Origin, licence and consent of the four recordings are not stated anywhere that was read. Pinning them records which bytes were used and is not a review of anyone's rights; the entry stays unverified until that is known.
 
 Next steps, in order: a worker script (standard library only) that starts the server from the verified folder in load, talks HTTP over 127.0.0.1 in run and stops it in close; the engine class like the Parler engine (kind tts, languages hi and te, isolated true, a fixed table of the four voices); tests against a fake server; a run through the engine on the laptop; docs. Nothing of this exists yet.
+
+## 9. The engine is on main and ran against the real server (2026-11-23)
+
+Pull request 1531 added zonos3_worker.py, zonos3_engine.py and 14 tests (full voice suite: 550 passed, 2 skipped) [tested]. The engine is not exported and not registered by importing it; make_zonos3_engine() builds it and declares the cpu only.
+
+First run through the engine [measured: laptop CPU, WSL2, one run, seed 1, a clone of main at 040359f, zonos3-server from the operator's own build on the PATH, a folder of the 15 locked files]:
+- verify_dir against the lock: 15 files, no problems, 2.4 s.
+- load 8.2 s with a warm file cache (earlier starts of the same server took 36 to 62 s, once over 120 s).
+- Hindi (Ananya): 2.20 s of audio in 8.3 s. Telugu (Sravya): 2.00 s in 5.7 s. Both clips are byte-identical (SHA-256 prefix) to the clips of the raw server on the full model folder. These are single short sentences and not a benchmark.
+- After close() no server process was left. After kill -9 of the worker the server was gone within 1 s (the Linux parent-death signal).
+
+Not done: no run through synthesize() with the engine registered and the model pulled into the cache (the folder was built by hand and checked against the lock); no GPU run through the engine; nobody has listened to the clips; Windows and macOS are untested (the parent-death hook is Linux only and the tests skip on Windows); the file-name quoting question of section 8, point 3, is still open.
