@@ -362,6 +362,31 @@ ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS tokens_used INTEGER NOT NULL DEF
 ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS spawn_id UUID;
 ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS spawn_forced BOOLEAN;
 ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS spawn_sig TEXT;
+-- The start record of a sub-agent, in its own APPEND-ONLY table (v0.13.8). The three spawn_* columns on agent_runs above are no
+-- longer used (kept: the schema is additive only). A row is written once with its child run and is never updated or deleted:
+-- triggers refuse UPDATE, DELETE and TRUNCATE. There is no foreign key and no cascade, so deleting a run (retention) leaves it.
+CREATE TABLE IF NOT EXISTS agent_run_starts (
+    spawn_id   UUID PRIMARY KEY,
+    run_id     UUID NOT NULL UNIQUE,
+    parent_id  UUID NOT NULL,
+    role       TEXT,
+    depth      INTEGER NOT NULL,
+    forced     BOOLEAN NOT NULL,
+    key_id     TEXT NOT NULL,
+    sig        TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE OR REPLACE FUNCTION agent_run_starts_append_only() RETURNS trigger AS $$
+BEGIN
+    RAISE EXCEPTION 'agent_run_starts is append-only: % is refused', TG_OP;
+END;
+$$ LANGUAGE plpgsql;
+DROP TRIGGER IF EXISTS agent_run_starts_no_update_delete ON agent_run_starts;
+CREATE TRIGGER agent_run_starts_no_update_delete BEFORE UPDATE OR DELETE ON agent_run_starts
+    FOR EACH ROW EXECUTE FUNCTION agent_run_starts_append_only();
+DROP TRIGGER IF EXISTS agent_run_starts_no_truncate ON agent_run_starts;
+CREATE TRIGGER agent_run_starts_no_truncate BEFORE TRUNCATE ON agent_run_starts
+    FOR EACH STATEMENT EXECUTE FUNCTION agent_run_starts_append_only();
 CREATE INDEX IF NOT EXISTS agent_runs_parent_idx ON agent_runs (parent_id) WHERE parent_id IS NOT NULL;
 DO $$
 BEGIN

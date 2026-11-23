@@ -76,7 +76,7 @@ def _service():
 # ---------------- storage ----------------
 
 _COLS = ("id, role, query, context_answer, status, steps, tainted, pending_action_id, summary, created_at, updated_at, "
-         "parent_id, depth, cancel_requested, tokens_used, spawn_id, spawn_forced, spawn_sig")
+         "parent_id, depth, cancel_requested, tokens_used")
 
 
 def _row(r) -> Dict:
@@ -84,8 +84,6 @@ def _row(r) -> Dict:
     d["id"] = str(d["id"])
     if d.get("parent_id") is not None:
         d["parent_id"] = str(d["parent_id"])
-    if d.get("spawn_id") is not None:
-        d["spawn_id"] = str(d["spawn_id"])
     if isinstance(d["steps"], str):
         d["steps"] = json.loads(d["steps"])
     for k in ("created_at", "updated_at"):
@@ -102,12 +100,11 @@ def _save(run: Dict) -> None:
         if run.get("id") is None:
             cur.execute(
                 "INSERT INTO agent_runs (role, query, context_answer, status, steps, tainted, "
-                "pending_action_id, summary, parent_id, depth, tokens_used, spawn_id, spawn_forced, spawn_sig) "
-                "VALUES (%s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
+                "pending_action_id, summary, parent_id, depth, tokens_used) "
+                "VALUES (%s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s) RETURNING id",
                 (run.get("role"), run["query"], run["context_answer"], run["status"], steps,
                  run["tainted"], run.get("pending_action_id"), run.get("summary", ""),
-                 run.get("parent_id"), int(run.get("depth") or 0), int(run.get("tokens_used") or 0),
-                 run.get("spawn_id"), run.get("spawn_forced"), run.get("spawn_sig")),
+                 run.get("parent_id"), int(run.get("depth") or 0), int(run.get("tokens_used") or 0)),
             )
             run["id"] = str(cur.fetchone()[0])
         else:
@@ -119,6 +116,68 @@ def _save(run: Dict) -> None:
             )
         conn.commit()
         cur.close()
+    finally:
+        conn.close()
+
+
+def _save_child(run: Dict, record: Dict) -> None:
+    """Insert a child run and its start record in ONE transaction. The start record row is written once and never changed:
+    the table agent_run_starts is append-only (database triggers refuse UPDATE, DELETE and TRUNCATE)."""
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO agent_runs (id, role, query, context_answer, status, steps, tainted, "
+            "pending_action_id, summary, parent_id, depth, tokens_used) "
+            "VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s)",
+            (record["run_id"], run.get("role"), run["query"], run["context_answer"], run["status"], json.dumps(run["steps"]),
+             run["tainted"], run.get("pending_action_id"), run.get("summary", ""),
+             run.get("parent_id"), int(run.get("depth") or 0), int(run.get("tokens_used") or 0)),
+        )
+        cur.execute(
+            "INSERT INTO agent_run_starts (spawn_id, run_id, parent_id, role, depth, forced, key_id, sig) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+            (record["spawn_id"], record["run_id"], record["parent_id"], record.get("role"), int(record["depth"]),
+             bool(record["forced"]), record["key_id"], record["sig"]),
+        )
+        conn.commit()
+        cur.close()
+        run["id"] = str(record["run_id"])
+    finally:
+        conn.close()
+
+
+def get_start_record(run_id) -> Optional[Dict]:
+    """The start record of a child run (from the append-only table), or None when there is none."""
+    import uuid
+    try:
+        rid = str(uuid.UUID(str(run_id)))
+    except (ValueError, TypeError):
+        return None
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT spawn_id, run_id, parent_id, role, depth, forced, key_id, sig FROM agent_run_starts WHERE run_id = %s", (rid,))
+        r = cur.fetchone()
+        cur.close()
+        if r is None:
+            return None
+        return {"spawn_id": str(r[0]), "run_id": str(r[1]), "parent_id": str(r[2]), "role": r[3], "depth": int(r[4]),
+                "forced": bool(r[5]), "key_id": r[6], "sig": r[7]}
+    finally:
+        conn.close()
+
+
+def start_key_counts() -> List[Dict]:
+    """For every signing key id in the start records: how many records, and how many of their runs are not finished yet."""
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT s.key_id, count(*), count(*) FILTER (WHERE r.status IN ('running', 'waiting_approval')) "
+                    "FROM agent_run_starts s LEFT JOIN agent_runs r ON r.id = s.run_id GROUP BY s.key_id ORDER BY s.key_id")
+        out = [{"key_id": a, "total": int(b), "unfinished": int(c)} for a, b, c in cur.fetchall()]
+        cur.close()
+        return out
     finally:
         conn.close()
 

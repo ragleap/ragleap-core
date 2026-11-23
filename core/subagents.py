@@ -276,7 +276,9 @@ def delegate_step(parent: Dict, plan: Dict, service, role: Optional[str]) -> Opt
         return agent_loop._finish(parent, None, role, "budget", "Stopped: the sub-agent token cap was reached.")
     if parent.get("id") is None:
         agent_loop._save(parent)
-    record = autonomy.spawn_record(auth.get("spawn_id"), parent["id"], target, int(parent.get("depth") or 0) + 1, auth["force_approval"])
+    import uuid
+    child_id = str(uuid.uuid4())
+    record = autonomy.spawn_record(auth.get("spawn_id"), child_id, parent["id"], target, int(parent.get("depth") or 0) + 1, auth["force_approval"])
     if record is None:
         return agent_loop._finish(parent, service, role, "done", "The proposed sub-agent task was not allowed.")
     step = {"tool": "delegate", "target": target, "content": task[:600], "sig": sig, "status": "running",
@@ -292,8 +294,8 @@ def delegate_step(parent: Dict, plan: Dict, service, role: Optional[str]) -> Opt
         child = {"id": None, "role": target, "query": task[:agent_loop.TEXT_CAP], "context_answer": "", "status": "running",
                  "steps": [], "tainted": bool(parent["tainted"]), "pending_action_id": None, "summary": "",
                  "parent_id": parent["id"], "depth": int(parent.get("depth") or 0) + 1, "tokens_used": 0,
-                 "deadline": time.time() + child_seconds(), **record}
-        agent_loop._save(child)
+                 "deadline": time.time() + child_seconds()}
+        agent_loop._save_child(child, record)
         step["child_run_id"] = child["id"]
         parent["steps"].append(step)
         agent_loop._save(parent)
