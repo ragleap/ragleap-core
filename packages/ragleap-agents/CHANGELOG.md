@@ -5,7 +5,7 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-## [0.6.0] - 2026-11-21
+## [0.6.0] - 2026-11-23
 
 Design: #963 (with the executed-before-pause amendment from the outside review by renezander030). Nested approvals: a pause anywhere in the delegation tree appears at the top-level run as one pending approval. Opt-in.
 
