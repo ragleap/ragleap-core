@@ -149,9 +149,12 @@ default = false
 # (docs/design/zonos3-engine.md is a proposal only).
 # Weights licence is the model card's (Apache-2.0). The code is a separate repository (github.com/Zyphra/ZONOS3-Mini at
 # 96d9e0ec1e39083ed336ac78f24e3dbc93721c0f, MIT); the manifest has one source_url, so the code pin is recorded here only.
-# The lock covers three weight files (backbone, codec, speaker encoder) and the reference codes and speaker embeddings of four
-# stock voices (hi: Ananya, Arjun; te: Chaitanya, Sravya). It does NOT cover the server binary, which the operator builds, nor the
-# audio samples of the stock voices: nothing we read states their origin, licence or consent.
+# The lock covers three weight files (backbone, codec, speaker encoder) and, for four stock voices (hi: Ananya, Arjun; te: Chaitanya,
+# Sravya), the audio clip with its reference codes and speaker embedding. The server builds its voice list from the audio clips, so the
+# clips are needed: on a laptop CPU server, one run each, a folder without them listed no speakers, and a folder without the .npy
+# files listed four speakers but every generate request failed. The lock does NOT cover the server binary, which the operator builds.
+# Nothing we read states the origin, licence or consent of the four recordings: pinning them records which bytes were used, it is
+# not a review of their rights, and the entry cannot be verified until that is known.
 # The .npy headers were checked by hand (plain numeric arrays, no object dtype); the lock tooling does not check this.
 # The server vendors LMDB under the OpenLDAP Public License 2.8 (not on the allowlist, not in the NOTICE): docs/zonos3-mini-licence-notes.md.
 # Measured once each: real-time factor 0.13 to 0.23 on a Colab T4 and about 3.35 on a laptop CPU (benchmarks/voice/README.md).
@@ -161,7 +164,7 @@ name = "zonos3-mini"
 kind = "tts"
 source_url = "https://huggingface.co/Zyphra/ZONOS3-Mini"
 revision = "d2d142a86b1e6aeb4252679673c86ecd86177bf8"
-sha256 = "d05b2a551a54316eb1a3bee7399775c09f3d0135b0280a695d407ca142c2a61c"
+sha256 = "162b9b833edfe1d18153f13092446f9acd7174dafaee8f4b1b6048573230755c"
 code_license = "MIT"
 weights_license = "Apache-2.0"
 languages = ["hi", "te"]

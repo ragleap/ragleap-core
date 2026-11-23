@@ -21,6 +21,11 @@
       "size": 896
     },
     {
+      "path": "gguf/voices/Hindi/Ananya_hi_F_1.wav",
+      "sha256": "4c0417c4f1a76d3290281c932a35b5b25b8e4cfe9acb328e24abf68b7f232840",
+      "size": 1123124
+    },
+    {
       "path": "gguf/voices/Hindi/Arjun_hi_M_1.codes.npy",
       "sha256": "dec52799002595008cf710381b5eb5f2acf0edd82fb28636c1bbef4aba9df618",
       "size": 7128
@@ -29,6 +34,11 @@
       "path": "gguf/voices/Hindi/Arjun_hi_M_1.embedding.npy",
       "sha256": "9cb0eb4cc81b79acadedb173e1fbbc0203bf71ea9ae66e56bd76393386f25815",
       "size": 896
+    },
+    {
+      "path": "gguf/voices/Hindi/Arjun_hi_M_1.wav",
+      "sha256": "760b13421993d4d453cf9c3ce789da2425922c54a483a1e1d2daff3a226a6043",
+      "size": 1029044
     },
     {
       "path": "gguf/voices/Telugu/Chaitanya_te_M_1.codes.npy",
@@ -41,6 +51,11 @@
       "size": 896
     },
     {
+      "path": "gguf/voices/Telugu/Chaitanya_te_M_1.wav",
+      "sha256": "327c73a145533f1cb874736e9194048a22a43a10e74c7b9b8c354306068c54b0",
+      "size": 917324
+    },
+    {
       "path": "gguf/voices/Telugu/Sravya_te_F_1.codes.npy",
       "sha256": "e938016bb413c48bb5deb0bf80515f646bd5b7374f5bfb4d616a8ba3e254f373",
       "size": 6928
@@ -49,6 +64,11 @@
       "path": "gguf/voices/Telugu/Sravya_te_F_1.embedding.npy",
       "sha256": "a62e330ccfe900dbc4caac3e57d661adf284da8c967072dbe91bab154df79c0f",
       "size": 896
+    },
+    {
+      "path": "gguf/voices/Telugu/Sravya_te_F_1.wav",
+      "sha256": "931ba97b7fd35bd808d32e4bf082c07da1fe7a813e469336d6eeeac83e7a42a8",
+      "size": 999644
     },
     {
       "path": "gguf/zac-keep2.gguf",
