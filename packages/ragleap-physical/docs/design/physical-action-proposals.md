@@ -6,6 +6,8 @@ DRAFT: Physical-action proposal conventions for RagLeap MCP-style tools
 - Package: `ragleap-physical`
 - Working branch: `docs/physical-action-proposals-v2`
 - Baseline commit: `e1b118ef60159331fbfa96f50dd6fbde22d1bdbe`
+- Follow-up review branch: `docs/physical-action-proposals-followup`
+- Follow-up source commit: `aa305865be48742a6f7d83b1eea6125d16dedff2`
 - Status: design and test-only contribution; simulation-only; no real-device validation.
 - AI assistance disclosure: this document and its test additions were prepared with AI assistance; a human maintainer is responsible for review and merge decisions.
 
@@ -150,6 +152,21 @@ After restoring the temporary Bridge, those three isolated tests passed. The ori
 
 The `pytest -rs` rerun reported 96 skips because optional MuJoCo was not installed, and 12 skips because unknown target/command refusal cases apply only to control adapters, not observe-only adapters; it again reported 192 passed and 108 skipped. No xfail was in the focused selection: the #1338 `test_known_gaps.py` test passed on this baseline. Skips are not passes and do not validate real devices. The conformance fake and Bridge use simulated/in-memory behavior only; physical-device validation is **untested**.
 
+**Historical evidence note:** The REAL run records above describe the original baseline commit `e1b118ef60159331fbfa96f50dd6fbde22d1bdbe`. They predate PRs #1401, #1512, and #1520 and are retained unchanged as historical evidence. They do not represent test results for current main; follow-up validation is recorded separately.
+
+### Follow-up validation on current main
+
+The following results were collected on the follow-up source commit
+`aa305865be48742a6f7d83b1eea6125d16dedff2`.
+
+| Command | Result |
+|---|---|
+| `python -m pytest tests/test_physical_action_proposals_doc.py -q` | **REAL** — 5 passed, 0 failed; 0.48 s. |
+| Focused documentation and regression tests, including the #1367 console stop test | **REAL** — 47 passed, 0 failed; 2.13 s. |
+| `python -m pytest tests -q -rxX` | **REAL** — 667 passed, 148 skipped, 1 xfailed, 0 failed; 51.69 s. |
+
+The full-suite xfail is `test_f3_a_refusal_for_an_unsupported_method_with_a_body_is_lingered_too_on_both_servers` (issue #1336). The #1367 console stop responsiveness test passed in the focused regression run. These results are for the current-main baseline, not the original historical baseline.
+
 Additional executed checks:
 
 | Command | Result |
@@ -166,13 +183,14 @@ Additional executed checks:
 ## 10. Known gaps and issue status
 
 - **#1337 — self-approval identity comparison:** addressed in PR #1340; IDs are compared after Unicode normalization and case folding (`src/ragleap_physical/bridge.py::_same_identity`; `tests/test_known_gaps.py::test_self_approval_with_other_letter_case_is_refused`).
+- **#1338 — approval across stop/clear:** resolved in PR #1401. A stop invalidates every approval given before it. After `clear_stop()`, an action requires fresh approval by a named person. The regression test is `tests/test_known_gaps.py::test_stop_invalidates_an_approval_given_before_it`.
 - **#1339 — stop during dry-run:** narrowed by PRs #1340 and #1366; the Bridge rechecks before its adapter apply call and the simulated adapter refuses while stopped (`tests/test_known_gaps.py::test_no_adapter_command_when_stop_lands_during_the_dry_run`). This is not a guarantee for arbitrary real hardware.
 - **#1338 — approval across stop/clear:** the inspected baseline's `Bridge.clear_stop()` resets approved records to validated and clears their approval; `tests/test_known_gaps.py::test_stop_invalidates_an_approval_given_before_it` asserts refusal. In this checkout that test is not marked `xfail`, contrary to the test-file header and older notes. Whether the policy itself is the intended maintainer decision remains **unresolved**; verify the issue's current status before claiming it is open or resolved.
-- **#1367 — console stop responsiveness:** remains an HTTP serving-layer gap, distinct from Bridge stop enforcement. `tests/test_lingering_close_review.py::test_f2_the_console_stop_is_not_held_up_by_a_client_that_never_sends_its_body` is marked `xfail(strict=True, reason="gap: issue 1367")`; a Bridge-level stop check does not solve a client blocking the console request handler.
+- **#1367 — console stop responsiveness:** fixed in PR #1512. The operator console serves each connection in its own thread, allowing a stop request to be handled while an apply is running or a client holds a partially sent request. PR #1520 adds a red-team regression check on every run. At the historical tested commit, `tests/test_lingering_close_review.py::test_f2_the_console_stop_is_not_held_up_by_a_client_that_never_sends_its_body` was marked `xfail(strict=True, reason="gap: issue 1367")`; that expected-failure marker no longer applies on current main. One limitation remains: a local client holding all 32 console connection slots can delay a stop for up to the 5-second read timeout.
 
 ## 11. Status summary
 
 - Implemented and tested in the baseline: canonical proposal digests; named approver and self-approval checks; expiry and single-use behavior; apply-time S5 re-check; dry-run checks; simulated adapter conformance; outcome verification (`src/ragleap_physical/proposal.py`, `src/ragleap_physical/bridge.py`, and named tests in sections 4 and 7).
 - Newly tested across two independent test targets: proposal, approval, self-approval refusal, altered proposal refusal, stop refusal, and success (`tests/test_physical_action_proposals_conformance.py`).
 - Untested: real hardware; universal adapter behavior; the full MCP specification beyond the exact sections cited; assertions not included in the executed test command.
-- Unresolved: maintainer policy for issue #1338; console stop responsiveness issue #1367 (`tests/test_lingering_close_review.py::test_f2_the_console_stop_is_not_held_up_by_a_client_that_never_sends_its_body`).
+- Resolved since the original baseline: #1338 (PR #1401) and #1367 (PRs #1512 and #1520). The 5-second console read-timeout limitation remains. Real-device behavior remains untested.
