@@ -3,7 +3,7 @@
 All notable changes to `ragleap-flows` are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [0.1.0] - 2026-11-20
+## [0.1.0] - 2026-11-23
 
 First release. The PR block replaces 2026-11-20 with the UTC date of that day.
 
