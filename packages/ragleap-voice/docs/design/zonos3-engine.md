@@ -76,3 +76,23 @@ Ways to give the worker the path of the server binary (a proposal, ranked):
 3. A binary copied into the verified model folder. Not recommended: a binary is not a model file and no lock would cover it.
 
 Recommendation, not a decision: a first version with option 1, Hindi and Telugu only, stock voices only, unverified, never chosen by auto, GPU recommended with the measured CPU figure stated. Size: an engine class like ParlerEngine, a worker script of about the size of parler_worker.py using serve(), a manifest entry (a protected file, a pull request for the owner) and a lock for the three files and the voices folder. Nothing is built.
+
+## 8. Addendum after the entry, the lock and the reduced-folder test (2026-11-23)
+
+Owner's go (2026-11-23): the recommendation of section 7 is accepted as written: an engine that starts an operator-built server binary from the verified folder, Hindi and Telugu only in a first version, and a GPU recommendation with the measured CPU figure stated. Status stays unverified and default false, and there is no cloning before the consent design (#763).
+
+What is on main [read]: pull requests 1524 and 1525 added the manifest entry zonos3-mini and its lock (15 files, digest 162b9b833edfe1d18153f13092446f9acd7174dafaee8f4b1b6048573230755c). The lock holds the three weight files and, for four stock voices (Hindi: Ananya, Arjun; Telugu: Chaitanya, Sravya), the audio clip with its reference codes and speaker embedding. It does not hold the server binary.
+
+What reduced folders showed [measured: laptop CPU server, one run per case, seed 1, 127.0.0.1 only]:
+- The three weights and the eight .npy files of the first lock (11 files, no clips): the server starts in 11 s, lists no speakers, and every generate request returns HTTP 400.
+- The 15 files of the current lock: four speakers and four clips of 2.0 to 2.2 s, byte-identical to the clips of a run on the full model folder (SHA-256 prefixes equal).
+- The three weights and the four clips without the .npy files (7 files): four speakers, but every generate request fails. The response says the default voice could not be read, and the server log says ffmpeg was not found. So the server decodes a clip with ffmpeg when its .npy files are absent, and that machine has none.
+- The server source builds its voice list from audio files; .codes.npy and .embedding.npy are sidecars and not voices (speakers.cpp) [read].
+
+Consequences for the engine:
+1. The verified folder is the 15 files. The engine passes the weights and the folder gguf/voices explicitly (--zac, --spk-encoder, --tts-default-voices-dir), because the server also picks up any companion file it finds next to the backbone [read: its README].
+2. ffmpeg is not needed while the .npy files are present [measured]. Whether the clips decode on a machine that has ffmpeg, without the .npy files, was not tested. If ffmpeg is ever needed it must be on the PATH of the worker: the server's own variable ZONOS3_FFMPEG would be stripped like any other variable that is not in the worker's list [read: worker.py].
+3. Open before any path that passes audio from outside the verified folder (uploads, cloning): on Linux the server runs ffmpeg through a shell (the error line begins with sh). The helper that quotes the file name (shell_quote_path in audio-decode.cpp) was not read. The Windows branch quotes its arguments and its comment says no shell is involved; that was not tested either. Read the quoting before enabling such a path.
+4. Origin, licence and consent of the four recordings are not stated anywhere that was read. Pinning them records which bytes were used and is not a review of anyone's rights; the entry stays unverified until that is known.
+
+Next steps, in order: a worker script (standard library only) that starts the server from the verified folder in load, talks HTTP over 127.0.0.1 in run and stops it in close; the engine class like the Parler engine (kind tts, languages hi and te, isolated true, a fixed table of the four voices); tests against a fake server; a run through the engine on the laptop; docs. Nothing of this exists yet.
