@@ -1,0 +1,63 @@
+{
+  "files": [
+    {
+      "path": "gguf/backbone-ptq.gguf",
+      "sha256": "66fceb6d73a8c30bde80249e4112bb308380ab7f3384fa11c8e4048115e4ceec",
+      "size": 663150624
+    },
+    {
+      "path": "gguf/spk-encoder.gguf",
+      "sha256": "9539f340b70be246005403b9c254732e180e85e0b3c57fb1973f0d6bc6c59bdc",
+      "size": 45385728
+    },
+    {
+      "path": "gguf/voices/Hindi/Ananya_hi_F_1.codes.npy",
+      "sha256": "85288fd646bb836b2424faad617d13f311c4ce129a48d7f9577bbfe29df9aa5b",
+      "size": 7768
+    },
+    {
+      "path": "gguf/voices/Hindi/Ananya_hi_F_1.embedding.npy",
+      "sha256": "f7acf756273d86131de701d51b25a7e0b3323d724b7e98a0c890fcf176f85a14",
+      "size": 896
+    },
+    {
+      "path": "gguf/voices/Hindi/Arjun_hi_M_1.codes.npy",
+      "sha256": "dec52799002595008cf710381b5eb5f2acf0edd82fb28636c1bbef4aba9df618",
+      "size": 7128
+    },
+    {
+      "path": "gguf/voices/Hindi/Arjun_hi_M_1.embedding.npy",
+      "sha256": "9cb0eb4cc81b79acadedb173e1fbbc0203bf71ea9ae66e56bd76393386f25815",
+      "size": 896
+    },
+    {
+      "path": "gguf/voices/Telugu/Chaitanya_te_M_1.codes.npy",
+      "sha256": "7003a4812a759171470f3187955e1b5c27f37bd449eb4bc012d7ac8620d0e9f7",
+      "size": 6368
+    },
+    {
+      "path": "gguf/voices/Telugu/Chaitanya_te_M_1.embedding.npy",
+      "sha256": "ca818012cf5656d12eb3bccdfad4086831a6a892f8e7bf2277ca11bf921e5eb7",
+      "size": 896
+    },
+    {
+      "path": "gguf/voices/Telugu/Sravya_te_F_1.codes.npy",
+      "sha256": "e938016bb413c48bb5deb0bf80515f646bd5b7374f5bfb4d616a8ba3e254f373",
+      "size": 6928
+    },
+    {
+      "path": "gguf/voices/Telugu/Sravya_te_F_1.embedding.npy",
+      "sha256": "a62e330ccfe900dbc4caac3e57d661adf284da8c967072dbe91bab154df79c0f",
+      "size": 896
+    },
+    {
+      "path": "gguf/zac-keep2.gguf",
+      "sha256": "834e5b70b88294afc3c702a478487e0664dcc6b574c16fc6167d72444aabeafd",
+      "size": 452325440
+    }
+  ],
+  "model": "zonos3-mini",
+  "revision": "d2d142a86b1e6aeb4252679673c86ecd86177bf8",
+  "schema": 1,
+  "source_url": "https://huggingface.co/Zyphra/ZONOS3-Mini"
+}
