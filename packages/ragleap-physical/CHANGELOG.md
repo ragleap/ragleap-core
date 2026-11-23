@@ -4,6 +4,8 @@ All notable changes are listed here. Format: Keep a Changelog.
 
 ## [Unreleased]
 
+## [0.0.6] - 2026-11-23
+
 ### Added
 - The red-team harness checks on every run that a stop request is answered within 3 s while a client holds a half-sent request to the console (#1367, fixed). A failure is a finding and a non-zero exit code; #1367 is no longer a known gap, and `--include-slow` is accepted and does nothing.
 - Two sourced parameter sets for the wear-study notebook (`examples/wear_study.ipynb`, section 4b, issue #1141): uncoated carbide on C45 steel, conventional and CNC lathe, fitted here from the published points of one open-access paper (CC BY). Each set carries its source, its licence and a flag that it is derived, and is valid only inside the tested speeds (101.25 to 768.8 m/min); a helper refuses a speed outside them. The notebook is still a toy and the toy default stays; no real machine or process is involved. Tests: `tests/test_wear_study_sources.py`.
