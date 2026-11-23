@@ -354,12 +354,13 @@ def test_the_same_child_runs_in_full_mode_when_the_parent_is_not_sensitive(world
 
 def test_a_parent_that_cannot_be_read_counts_as_sensitive(world, monkeypatch):
     from core import autonomy
-    assert autonomy.inherited_force_semi({"parent_id": "00000000-0000-0000-0000-000000000000", "role": "support"}) is True
+    monkeypatch.setattr(agent_loop, "get_start_record", lambda i: {"forced": False})       # the record alone would say: not forced
+    assert autonomy.inherited_force_semi({"id": "c", "parent_id": "00000000-0000-0000-0000-000000000000", "role": "support"}) is True
 
     def down(i):
         raise RuntimeError("database down")
     monkeypatch.setattr(agent_loop, "get_run", down)
-    assert autonomy.inherited_force_semi({"parent_id": "x", "role": "support"}) is True
+    assert autonomy.inherited_force_semi({"id": "c", "parent_id": "x", "role": "support"}) is True
 
 
 def test_a_run_without_a_parent_does_not_read_the_database_for_inheritance(world, monkeypatch):
@@ -449,12 +450,13 @@ def test_the_docs_page_describes_who_may_start_a_child():
 
 def test_a_loop_or_a_very_long_chain_of_parents_counts_as_sensitive(world, monkeypatch):
     from core import autonomy
+    monkeypatch.setattr(agent_loop, "get_start_record", lambda i: {"forced": False})
     monkeypatch.setattr(agent_loop, "get_run", lambda i: {"id": i, "role": "support", "parent_id": "b" if i == "a" else "a"})
-    assert autonomy.inherited_force_semi({"parent_id": "a", "role": "support"}) is True            # a -> b -> a
+    assert autonomy.inherited_force_semi({"id": "c", "parent_id": "a", "role": "support"}) is True            # a -> b -> a
     monkeypatch.setattr(agent_loop, "get_run", lambda i: {"id": i, "role": "support", "parent_id": i + "x"})
-    assert autonomy.inherited_force_semi({"parent_id": "p", "role": "support"}) is True            # longer than any real tree
+    assert autonomy.inherited_force_semi({"id": "c", "parent_id": "p", "role": "support"}) is True            # longer than any real tree
     monkeypatch.setattr(agent_loop, "get_run", lambda i: {"id": i, "role": "support", "parent_id": None})
-    assert autonomy.inherited_force_semi({"parent_id": "p", "role": "support"}) is False           # a normal parent
+    assert autonomy.inherited_force_semi({"id": "c", "parent_id": "p", "role": "support"}) is False           # a normal parent
 
 
 # ---------------- a signed start record, budgets drawn as the minimum, steps shared by the tree (Phase 0, P0-I) ----------------
@@ -473,10 +475,12 @@ def test_a_started_child_carries_a_valid_signed_start_record(world):
     agent_loop.run(Q, "d", FakeService(basic_replies()), None)
     parent, children = parent_and_children()
     c = children[0]
-    assert c["spawn_id"] and c["spawn_sig"] and c["spawn_forced"] is False
+    rec = agent_loop.get_start_record(c["id"])
+    assert rec and rec["spawn_id"] and rec["sig"] and rec["forced"] is False and rec["key_id"] == autonomy._signing_keys()[0]
+    assert (rec["run_id"], rec["parent_id"], rec["role"], rec["depth"]) == (c["id"], parent["id"], "support", 1)
     assert autonomy.verify_spawn_record(c) is True                          # still valid after every later save of the row
     ids = {e: f.get("spawn_id") for e, f in world["audit"] if e.startswith("subagent")}
-    assert ids["subagent_authorized"] == ids["subagent_started"] == c["spawn_id"]
+    assert ids["subagent_authorized"] == ids["subagent_started"] == rec["spawn_id"]
 
 
 def test_the_record_of_a_sensitive_parents_child_says_forced_and_is_valid(world, monkeypatch):
@@ -484,22 +488,34 @@ def test_the_record_of_a_sensitive_parents_child_says_forced_and_is_valid(world,
     sensitive(monkeypatch, "legal_intake")
     agent_loop.run(Q, "d", FakeService([plan("delegate", "support", TASK), plan("send_webhook", "ops", "hello"), "Parent summary."]), "legal_intake", False)
     _, children = parent_and_children()
-    assert children[0]["spawn_forced"] is True and autonomy.verify_spawn_record(children[0]) is True
+    assert agent_loop.get_start_record(children[0]["id"])["forced"] is True and autonomy.verify_spawn_record(children[0]) is True
 
 
 def test_a_record_that_was_changed_or_made_with_another_key_does_not_verify(world, monkeypatch):
     from core import autonomy
-    good = {"id": "c", "role": "support", "depth": 1, "parent_id": "p"}
-    good.update(autonomy.spawn_record("11111111-1111-1111-1111-111111111111", "p", "support", 1, False))
-    assert autonomy.verify_spawn_record(good) is True
-    for field, value in (("role", "sales"), ("depth", 2), ("parent_id", "q"), ("spawn_forced", True),
-                         ("spawn_id", "22222222-2222-2222-2222-222222222222"), ("spawn_sig", good["spawn_sig"][:-1]),
-                         ("spawn_sig", None), ("spawn_id", None), ("spawn_forced", None), ("parent_id", None)):
-        assert autonomy.verify_spawn_record(dict(good, **{field: value})) is False, (field, value)
+    sid, rid, pid = "11111111-1111-1111-1111-111111111111", "33333333-3333-3333-3333-333333333333", "44444444-4444-4444-4444-444444444444"
+    other = "55555555-5555-5555-5555-555555555555"
+    rec = autonomy.spawn_record(sid, rid, pid, "support", 1, False)
+    run = {"id": rid, "parent_id": pid, "role": "support", "depth": 1}
+
+    def serve(r):
+        monkeypatch.setattr(agent_loop, "get_start_record", lambda i: dict(r) if r is not None else None)
+    serve(rec)
+    assert autonomy.verify_spawn_record(run) is True
+    for field, value in (("role", "sales"), ("depth", 2), ("parent_id", other), ("run_id", other), ("forced", True), ("spawn_id", other),
+                         ("sig", rec["sig"][:-1]), ("sig", None), ("key_id", "ffffffffffff"), ("key_id", None)):
+        serve(dict(rec, **{field: value}))
+        assert autonomy.verify_spawn_record(run) is False, (field, value)
+    serve(rec)
+    for field, value in (("role", "sales"), ("depth", 2), ("parent_id", other), ("id", other)):          # the LIVE row was edited
+        assert autonomy.verify_spawn_record(dict(run, **{field: value})) is False, (field, value)
+    serve(None)
+    assert autonomy.verify_spawn_record(run) is False
+    serve(rec)
     monkeypatch.setenv("ADDON_ENCRYPTION_KEY", "another-key")
-    assert autonomy.verify_spawn_record(good) is False
+    assert autonomy.verify_spawn_record(run) is False
     monkeypatch.delenv("ADDON_ENCRYPTION_KEY")
-    assert autonomy.verify_spawn_record(good) is False and autonomy.spawn_record("s", "p", "r", 1, False) is None
+    assert autonomy.verify_spawn_record(run) is False and autonomy.spawn_record(sid, rid, pid, "r", 1, False) is None
 
 
 def test_a_child_row_without_a_valid_record_is_refused_and_does_nothing(world):
@@ -528,16 +544,25 @@ def test_every_authorization_gets_its_own_spawn_id_and_a_refusal_gets_none(world
 def test_the_recorded_force_flag_cannot_be_lowered_by_the_live_chain(world, monkeypatch):
     from core import autonomy
     monkeypatch.setattr(agent_loop, "get_run", lambda i: {"id": i, "role": "support", "parent_id": None})
-    assert autonomy.inherited_force_semi({"parent_id": "p", "spawn_forced": True}) is True       # recorded at the start
-    assert autonomy.inherited_force_semi({"parent_id": "p", "spawn_forced": False}) is False
-    assert autonomy.inherited_force_semi({"parent_id": None, "spawn_forced": True}) is True        # even if the chain was pruned
+    monkeypatch.setattr(agent_loop, "get_start_record", lambda i: {"forced": True})
+    assert autonomy.inherited_force_semi({"id": "c", "parent_id": "p"}) is True                 # recorded when the child started
+    monkeypatch.setattr(agent_loop, "get_start_record", lambda i: {"forced": False})
+    assert autonomy.inherited_force_semi({"id": "c", "parent_id": "p"}) is False
+    monkeypatch.setattr(agent_loop, "get_start_record", lambda i: None)
+    assert autonomy.inherited_force_semi({"id": "c", "parent_id": "p"}) is True                 # no record at all counts as forced
+
+    def down(i):
+        raise RuntimeError("database down")
+    monkeypatch.setattr(agent_loop, "get_start_record", down)
+    assert autonomy.inherited_force_semi({"id": "c", "parent_id": "p"}) is True
 
 
-def test_a_missing_parent_is_refused_by_its_own_check_not_by_the_error_handler(world, caplog):
+def test_a_missing_parent_is_refused_by_its_own_check_not_by_the_error_handler(world, monkeypatch, caplog):
     import logging
     from core import autonomy
+    monkeypatch.setattr(agent_loop, "get_start_record", lambda i: {"forced": False})
     with caplog.at_level(logging.WARNING):
-        assert autonomy.inherited_force_semi({"parent_id": "00000000-0000-0000-0000-000000000000", "role": "support"}) is True
+        assert autonomy.inherited_force_semi({"id": "c", "parent_id": "00000000-0000-0000-0000-000000000000", "role": "support"}) is True
     assert "forcing approval" not in caplog.text          # the explicit check answered; the exception path did not run
 
 
@@ -603,13 +628,159 @@ def test_a_plain_run_never_reads_the_database_for_the_step_limit_and_the_tree_ch
 
 def test_the_docs_page_describes_the_start_record_and_the_shared_budgets():
     text = (ROOT / "docs" / "sub-agents.md").read_text(encoding="utf-8")
-    for word in ("spawn_id", "start record", "ADDON_ENCRYPTION_KEY", "smaller of", "step limit", "fails closed", "fail open"):
-        assert word in text
+    for word in ("spawn_id", "start record", "agent_run_starts", "append-only", "SPAWN_SIGNING_KEY", "SPAWN_SIGNING_KEY_PREVIOUS",
+                 "key id", "python -m core.spawn_keys", "safe_to_retire", "database administrator", "smaller of", "step limit",
+                 "fails closed", "fail open"):
+        assert word in text, word
     assert "{{" not in text and "{%" not in text
 
 
-def test_the_schema_adds_the_three_start_record_columns_once_and_additively():
+def test_the_schema_has_the_append_only_start_table_and_still_only_adds():
     sql_text = (ROOT / "db" / "schema.sql").read_text(encoding="utf-8")
-    for col, kind in (("spawn_id", "UUID"), ("spawn_forced", "BOOLEAN"), ("spawn_sig", "TEXT")):
+    for col, kind in (("spawn_id", "UUID"), ("spawn_forced", "BOOLEAN"), ("spawn_sig", "TEXT")):      # v0.13.7 columns stay, unused
         assert sql_text.count(f"ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS {col} {kind};") == 1
-    assert "DROP COLUMN" not in sql_text.split("spawn_id UUID")[1].split("\n\n")[0]
+    assert sql_text.count("CREATE TABLE IF NOT EXISTS agent_run_starts (") == 1
+    for needle in ("CREATE OR REPLACE FUNCTION agent_run_starts_append_only()", "BEFORE UPDATE OR DELETE ON agent_run_starts",
+                   "BEFORE TRUNCATE ON agent_run_starts", "RAISE EXCEPTION"):
+        assert sql_text.count(needle) == 1, needle
+    assert "DROP COLUMN" not in sql_text and "DROP TABLE agent_run" not in sql_text
+
+
+def test_the_start_record_is_in_its_own_table_and_the_run_row_carries_none(world):
+    agent_loop.run(Q, "d", FakeService(basic_replies()), None)
+    _, children = parent_and_children()
+    assert not any(k.startswith("spawn_") for k in children[0])                  # the mutable row holds no start record
+    assert agent_loop.get_start_record(children[0]["id"]) is not None
+    assert agent_loop.get_start_record("not-a-uuid") is None and agent_loop.get_start_record(None) is None
+
+
+def test_an_edited_live_row_makes_the_child_refused(world):
+    from core import autonomy
+    agent_loop.run(Q, "d", FakeService(basic_replies()), None)
+    _, children = parent_and_children()
+    cid = children[0]["id"]
+    assert autonomy.verify_spawn_record(agent_loop.get_run(cid)) is True
+    for column, value in (("role", "sales"), ("depth", 0), ("parent_id", "00000000-0000-0000-0000-000000000001")):
+        conn = get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute(f"UPDATE agent_runs SET {column} = %s WHERE id = %s", (value, cid))
+            conn.commit()
+            cur.close()
+        finally:
+            conn.close()
+        assert autonomy.verify_spawn_record(agent_loop.get_run(cid)) is False, column
+        conn = get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute("UPDATE agent_runs SET role = 'support', depth = 1, parent_id = %s WHERE id = %s", (children[0]["parent_id"], cid))
+            conn.commit()
+            cur.close()
+        finally:
+            conn.close()
+        assert autonomy.verify_spawn_record(agent_loop.get_run(cid)) is True
+
+
+def test_the_signing_key_can_be_set_apart_from_the_addon_key(monkeypatch):
+    from core import autonomy
+    monkeypatch.setenv("ADDON_ENCRYPTION_KEY", "addon-key")
+    monkeypatch.delenv("SPAWN_SIGNING_KEY", raising=False)
+    monkeypatch.delenv("SPAWN_SIGNING_KEY_PREVIOUS", raising=False)
+    addon_id = autonomy._signing_keys()[0]
+    monkeypatch.setenv("SPAWN_SIGNING_KEY", "signing-key")
+    spawn_id = autonomy._signing_keys()[0]
+    assert addon_id and spawn_id and addon_id != spawn_id
+    monkeypatch.delenv("ADDON_ENCRYPTION_KEY")
+    assert autonomy._signing_keys()[0] == spawn_id                               # the signing key alone is enough
+    monkeypatch.delenv("SPAWN_SIGNING_KEY")
+    assert autonomy._signing_keys() == (None, {})
+
+
+def test_a_key_id_is_short_and_does_not_reveal_the_key(monkeypatch):
+    from core import autonomy
+    monkeypatch.setenv("SPAWN_SIGNING_KEY", "super-secret-key-value")
+    kid = autonomy._signing_keys()[0]
+    assert len(kid) == 12 and all(c in "0123456789abcdef" for c in kid) and "secret" not in kid
+    assert kid != autonomy._key_id("another-key")
+
+
+def test_a_record_signed_with_the_previous_key_verifies_until_that_key_is_retired(world, monkeypatch):
+    from core import autonomy
+    sid, rid, pid = "11111111-1111-1111-1111-111111111111", "33333333-3333-3333-3333-333333333333", "44444444-4444-4444-4444-444444444444"
+    run = {"id": rid, "parent_id": pid, "role": "support", "depth": 1}
+    monkeypatch.setenv("SPAWN_SIGNING_KEY", "key-A")
+    monkeypatch.delenv("SPAWN_SIGNING_KEY_PREVIOUS", raising=False)
+    rec_a = autonomy.spawn_record(sid, rid, pid, "support", 1, False)
+    monkeypatch.setattr(agent_loop, "get_start_record", lambda i: dict(rec_a))
+    assert autonomy.verify_spawn_record(run) is True
+    monkeypatch.setenv("SPAWN_SIGNING_KEY", "key-B")                           # rotation: B is current, A is still known
+    monkeypatch.setenv("SPAWN_SIGNING_KEY_PREVIOUS", "key-A")
+    assert autonomy.verify_spawn_record(run) is True
+    rec_b = autonomy.spawn_record(sid, rid, pid, "support", 1, False)
+    assert rec_b["key_id"] != rec_a["key_id"] and rec_b["key_id"] == autonomy._signing_keys()[0]     # new records use the new key
+    monkeypatch.setenv("SPAWN_SIGNING_KEY_PREVIOUS", "other-old-key, key-A ,")
+    assert autonomy.verify_spawn_record(run) is True                           # several previous keys, blanks ignored
+    monkeypatch.delenv("SPAWN_SIGNING_KEY_PREVIOUS")                            # retired: the record is refused
+    assert autonomy.verify_spawn_record(run) is False
+    monkeypatch.setattr(agent_loop, "get_start_record", lambda i: dict(rec_b))
+    assert autonomy.verify_spawn_record(run) is True
+
+
+def test_the_key_report_says_when_the_old_key_is_safe_to_retire(world, monkeypatch):
+    from core import autonomy, spawn_keys
+    monkeypatch.setenv("SPAWN_SIGNING_KEY", "report-key-A")
+    sensitive(monkeypatch, "legal_intake")
+    agent_loop.run(Q, "d", FakeService([plan("delegate", "support", TASK), plan("send_webhook", "ops", "hello"), "Parent summary."]), "legal_intake", False)
+    _, children = parent_and_children()
+    assert children[0]["status"] == "waiting_approval"                          # an unfinished child that depends on key A
+    key_a = autonomy._signing_keys()[0]
+    monkeypatch.setenv("SPAWN_SIGNING_KEY", "report-key-B")
+    monkeypatch.setenv("SPAWN_SIGNING_KEY_PREVIOUS", "report-key-A")
+    rep = {k["key_id"]: k for k in spawn_keys.report()["keys"]}
+    assert rep[key_a]["unfinished_runs"] >= 1 and rep[key_a]["safe_to_retire"] is False and rep[key_a]["configured"] is True
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("UPDATE agent_runs SET status = 'cancelled' WHERE query LIKE 'TEST-SUB%'")
+        conn.commit()
+        cur.close()
+    finally:
+        conn.close()
+    rep = {k["key_id"]: k for k in spawn_keys.report()["keys"]}
+    assert rep[key_a]["unfinished_runs"] == 0 and rep[key_a]["safe_to_retire"] is True
+    assert spawn_keys.report()["current_key_id"] == autonomy._signing_keys()[0] and rep[autonomy._signing_keys()[0]]["safe_to_retire"] is False
+    assert "report-key" not in json.dumps(spawn_keys.report())                # a key is never printed
+
+
+def test_a_run_that_still_needs_a_key_that_is_no_longer_configured_is_counted(world, monkeypatch):
+    from core import spawn_keys
+    monkeypatch.setenv("SPAWN_SIGNING_KEY", "orphan-key-A")
+    sensitive(monkeypatch, "legal_intake")
+    agent_loop.run(Q, "d", FakeService([plan("delegate", "support", TASK), plan("send_webhook", "ops", "hello"), "Parent summary."]), "legal_intake", False)
+    monkeypatch.setenv("SPAWN_SIGNING_KEY", "orphan-key-B")                       # rotated WITHOUT keeping A as the previous key
+    assert spawn_keys.report()["unfinished_runs_whose_key_is_not_configured"] >= 1
+
+
+def test_the_signature_itself_covers_every_field_even_when_the_live_row_is_edited_to_agree(world, monkeypatch):
+    from core import autonomy
+    sid, rid, pid = "11111111-1111-1111-1111-111111111111", "33333333-3333-3333-3333-333333333333", "44444444-4444-4444-4444-444444444444"
+    other = "55555555-5555-5555-5555-555555555555"
+    rec = autonomy.spawn_record(sid, rid, pid, "support", 1, False)
+    for field, value in (("role", "sales"), ("run_id", other), ("parent_id", other), ("depth", 2), ("forced", True), ("spawn_id", other)):
+        edited = dict(rec, **{field: value})
+        live = {"id": edited["run_id"], "parent_id": edited["parent_id"], "role": edited["role"], "depth": edited["depth"]}   # the row agrees
+        monkeypatch.setattr(agent_loop, "get_start_record", lambda i, e=edited: dict(e))
+        assert autonomy.verify_spawn_record(live) is False, field                 # only the signature can refuse this
+
+
+def test_the_key_id_is_part_of_what_is_signed_so_a_record_cannot_be_relabelled(world, monkeypatch):
+    from core import autonomy
+    same_key = autonomy._derive("one-key")
+    monkeypatch.setattr(autonomy, "_signing_keys", lambda: ("k1", {"k1": same_key, "k2": same_key}))   # two ids, one key
+    sid, rid, pid = "11111111-1111-1111-1111-111111111111", "33333333-3333-3333-3333-333333333333", "44444444-4444-4444-4444-444444444444"
+    rec = autonomy.spawn_record(sid, rid, pid, "support", 1, False)
+    run = {"id": rid, "parent_id": pid, "role": "support", "depth": 1}
+    monkeypatch.setattr(agent_loop, "get_start_record", lambda i: dict(rec))
+    assert autonomy.verify_spawn_record(run) is True
+    monkeypatch.setattr(agent_loop, "get_start_record", lambda i: dict(rec, key_id="k2"))
+    assert autonomy.verify_spawn_record(run) is False

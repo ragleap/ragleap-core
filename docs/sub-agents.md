@@ -27,8 +27,16 @@ The gate decides every start (`authorize_spawn` in `core/autonomy.py`) and write
 - A child's tools are the tools its parent has, never more.
 - A child starts with its parent's taint, and its own taint comes back to the parent.
 - A child cannot start a child.
-- Every child row carries a signed **start record**: `spawn_id`, `spawn_forced` and a signature made with a key derived from `ADDON_ENCRYPTION_KEY`. The gate issues it when it allows the start, it is written once and never updated, and a child without a valid record is refused every time it runs or resumes. Without that key no sub-agent starts. A child that was forced to ask stays forced even if the rows above it are pruned. The same `spawn_id` is in the audit events.
+- Every child has a signed **start record** in its own table, `agent_run_starts`: `spawn_id`, the run, its parent, role and depth, whether the child is forced to ask, the **key id** and a signature. The gate issues it when it allows the start. The table is **append-only**: database triggers refuse UPDATE, DELETE and TRUNCATE, there is no foreign key, and retention never touches it. The record is read from the table every time a child runs or resumes and must match the live row's parent, role and depth; a child without a valid record is refused. A child that was forced to ask stays forced even if the rows above it are pruned. The same `spawn_id` is in the audit events. Without a signing key no sub-agent starts.
+- The signing key is `SPAWN_SIGNING_KEY`, or `ADDON_ENCRYPTION_KEY` when that is not set. A **key id** (a short hash, never the key) is stored in every record.
+- The limit of this: the application's database user owns the table, so a database administrator could drop the triggers. They stop runtime code, bugs and injected SQL from changing a record; the signature stops anyone without the key from forging one.
 - A child may draw at most the **smaller of** its own role's remaining token budget and its parent's (what the other children already spent is subtracted). The whole run tree shares one **step limit**, so delegating does not multiply the steps. Token budgets fail open when the ledger cannot be read, because they are cost control; the step limit fails closed.
+
+## Rotating the start-record key
+
+1. Set `SPAWN_SIGNING_KEY_PREVIOUS` to the old key and `SPAWN_SIGNING_KEY` to the new one (several old keys may be listed, separated by commas), then restart. New records use the new key; old records still verify.
+2. Run `docker exec ragleap-core-app-1 python -m core.spawn_keys`. It never prints a key. It lists each key id, how many records use it and how many of those runs are not finished yet.
+3. When the old key id shows `"safe_to_retire": true`, remove it from `SPAWN_SIGNING_KEY_PREVIOUS`. A record whose key is no longer configured is refused, so a run that still needs it would stop; the report also counts those runs.
 
 ## Watching and stopping
 

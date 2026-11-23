@@ -454,15 +454,9 @@ def _role_is_sensitive(role) -> bool:
     return bool(role) and bool(is_sensitive_role(role))
 
 
-def inherited_force_semi(run: Dict) -> bool:
-    """True when a run that another run started must have EVERY action approved because a run above it is a sensitive role.
-
-    A child's own role does not matter here: the model picks it, and picking a different role must not lift a rule the
-    parent is under. Runs without a parent never touch the database. A parent that cannot be read counts as sensitive."""
-    if (run or {}).get("spawn_forced") is True:
-        return True                    # recorded when the child started: pruning the chain later cannot lower it
-    if not (run or {}).get("parent_id"):
-        return False
+def _live_chain_sensitive(run: Dict) -> bool:
+    """True when a run above this one is a sensitive role, read from the run table each time. A missing, unreadable, looping
+    or very long chain counts as sensitive."""
     try:
         from core import agent_loop
         seen, current = set(), run
@@ -487,37 +481,88 @@ def inherited_force_semi(run: Dict) -> bool:
         return True
 
 
-def _spawn_key() -> Optional[bytes]:
-    """The key of the start records, derived from ADDON_ENCRYPTION_KEY. None when that key is not set."""
+def inherited_force_semi(run: Dict) -> bool:
+    """True when a run that another run started must have EVERY action approved because a run above it is a sensitive role.
+
+    A child's own role does not matter here: the model picks it, and picking a different role must not lift a rule the
+    parent is under. The answer is the recorded flag (written once, in the append-only start record, when the child started)
+    OR the live parent chain, so pruning or editing the chain can only raise the restriction. A child with no start record at
+    all counts as forced. Runs without a parent never touch the database."""
+    if not (run or {}).get("parent_id"):
+        return False
+    try:
+        from core import agent_loop
+        rec = agent_loop.get_start_record(run.get("id")) if run.get("id") else None
+        recorded = rec is None or rec.get("forced") is True
+    except Exception as e:
+        logger.warning("Sub-agent start record unreadable, forcing approval: %s", e)
+        recorded = True
+    return recorded or _live_chain_sensitive(run)
+
+
+def _key_id(raw: str) -> str:
     import hashlib
-    raw = os.environ.get("ADDON_ENCRYPTION_KEY", "").strip()
-    return hashlib.sha256(b"ragleap-spawn-record-v1|" + raw.encode("utf-8")).digest() if raw else None
+    return hashlib.sha256(b"ragleap-spawn-key-id|" + raw.encode("utf-8")).hexdigest()[:12]
 
 
-def _spawn_mac(key: bytes, spawn_id, parent_id, role, depth, forced) -> str:
+def _derive(raw: str) -> bytes:
+    import hashlib
+    return hashlib.sha256(b"ragleap-spawn-record-v1|" + raw.encode("utf-8")).digest()
+
+
+def _signing_keys():
+    """(id of the current key or None, {key id: key} for the current and the previous keys).
+
+    The current key is SPAWN_SIGNING_KEY, else ADDON_ENCRYPTION_KEY. SPAWN_SIGNING_KEY_PREVIOUS may list older keys (comma
+    separated) whose records still verify during a rotation. A key id is a short hash and never reveals the key."""
+    cur = (os.environ.get("SPAWN_SIGNING_KEY") or os.environ.get("ADDON_ENCRYPTION_KEY") or "").strip()
+    prev = [p.strip() for p in (os.environ.get("SPAWN_SIGNING_KEY_PREVIOUS") or "").split(",") if p.strip()]
+    keys = {_key_id(r): _derive(r) for r in prev}
+    if cur:
+        keys[_key_id(cur)] = _derive(cur)
+    return (_key_id(cur) if cur else None), keys
+
+
+def _spawn_mac(key: bytes, key_id, spawn_id, run_id, parent_id, role, depth, forced) -> str:
+    # key_id is in the message on purpose even though a wrong key id already fails today (the key lookup and the key itself
+    # differ). It binds a record to the key it names, so a later change that lets two ids share a key cannot let a record be
+    # re-labelled. tests/test_subagents.py proves it directly; do not drop it as redundant.
     import hashlib
     import hmac
-    msg = "|".join(("spawn1", str(spawn_id), str(parent_id), str(role), str(int(depth)), "1" if forced else "0"))
+    msg = "|".join(("spawn2", str(key_id), str(spawn_id), str(run_id), str(parent_id), str(role), str(int(depth)), "1" if forced else "0"))
     return hmac.new(key, msg.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
-def spawn_record(spawn_id, parent_id, role, depth, forced) -> Optional[Dict]:
-    """The signed start record of a child (written once, with the child's row). None when it cannot be made."""
-    key = _spawn_key()
-    if key is None or not spawn_id or not parent_id:
+def spawn_record(spawn_id, run_id, parent_id, role, depth, forced) -> Optional[Dict]:
+    """The signed start record of a child, written once with its run (the table is append-only). None when it cannot be made."""
+    key_id, keys = _signing_keys()
+    if key_id is None or not spawn_id or not run_id or not parent_id:
         return None
-    return {"spawn_id": spawn_id, "spawn_forced": bool(forced), "spawn_sig": _spawn_mac(key, spawn_id, parent_id, role, depth, forced)}
+    return {"spawn_id": spawn_id, "run_id": run_id, "parent_id": parent_id, "role": role, "depth": int(depth), "forced": bool(forced),
+            "key_id": key_id, "sig": _spawn_mac(keys[key_id], key_id, spawn_id, run_id, parent_id, role, depth, forced)}
 
 
 def verify_spawn_record(run: Dict) -> bool:
-    """True only when the run's start record is complete and its signature matches the row's parent, role, depth and flag."""
+    """True only when the run has a start record in the append-only table, the record's parent, role and depth are the live
+    row's, its key is still configured (current or previous) and its signature matches. Anything else is refused."""
     try:
         import hmac
-        key, rec = _spawn_key(), (run or {})
-        if key is None or not rec.get("spawn_id") or not rec.get("spawn_sig") or rec.get("spawn_forced") is None or not rec.get("parent_id"):
+        from core import agent_loop
+        run = run or {}
+        rid = run.get("id")
+        if not rid or not run.get("parent_id"):
             return False
-        want = _spawn_mac(key, rec["spawn_id"], rec["parent_id"], rec.get("role"), int(rec.get("depth") or 0), bool(rec["spawn_forced"]))
-        return hmac.compare_digest(want, str(rec["spawn_sig"]))
+        rec = agent_loop.get_start_record(rid)
+        if rec is None:
+            return False
+        if (str(rec["run_id"]), str(rec["parent_id"]), rec.get("role"), int(rec["depth"])) != \
+                (str(rid), str(run["parent_id"]), run.get("role"), int(run.get("depth") or 0)):
+            return False
+        key = _signing_keys()[1].get(rec["key_id"])
+        if key is None:
+            return False
+        want = _spawn_mac(key, rec["key_id"], rec["spawn_id"], rec["run_id"], rec["parent_id"], rec.get("role"), rec["depth"], rec["forced"])
+        return hmac.compare_digest(want, str(rec["sig"]))
     except Exception:
         return False
 
@@ -538,7 +583,7 @@ def authorize_spawn(parent: Dict, target_role: str) -> Dict:
             reason = "depth_limit"
         elif parent.get("id") and subagents._count_children(parent["id"]) >= subagents.max_children():
             reason = "child_limit"
-        elif _spawn_key() is None:
+        elif _signing_keys()[0] is None:
             reason = "no_signing_key"                 # a start record cannot be signed, so no child starts
         else:
             allowed, reason, spawn_id = True, "ok", str(uuid.uuid4())
