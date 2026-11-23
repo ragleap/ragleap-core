@@ -80,7 +80,7 @@ def test_every_set_carries_its_source_licence_and_says_it_is_derived():
         for key in ("C", "n", "v_min", "v_max", "vb_limit_mm", "derived", "licence", "source", "pair"):
             assert key in p, (name, key)
         assert all(isinstance(p[k], str) and p[k].strip() for k in ("licence", "source", "pair")), name
-        assert p["licence"] == "CC BY 4.0" and DOI in p["source"], name
+        assert p["licence"] == "CC BY" and DOI in p["source"], name
         assert p["derived"] is True, name  # the source prints no n and C: they are derived here
         assert all(math.isfinite(p[k]) and p[k] > 0 for k in ("C", "n", "v_min", "v_max", "vb_limit_mm")), name
         assert p["v_min"] < p["v_max"] and 0.0 < p["n"] < 2.0
@@ -143,7 +143,7 @@ def test_the_text_says_it_is_still_a_toy_in_each_place_it_must():
 
 def test_the_text_names_the_source_the_licence_and_what_was_derived():
     md = re.sub(r"\s+", " ", explanation())
-    for phrase in ("Prediction of Cutting Material Durability by T = f(vc) Dependence for Turning Processes", DOI, "licence CC BY 4.0",
+    for phrase in ("Prediction of Cutting Material Durability by T = f(vc) Dependence for Turning Processes", DOI, "licence CC BY.", "ln V on ln T",
                    "The source does not print n and C", "derived here", "not taken from the source", "refuses a speed outside them",
                    "does not hold over its whole speed range", "The source gives no scatter"):
         assert phrase in md, phrase

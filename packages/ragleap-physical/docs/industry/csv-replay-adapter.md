@@ -58,7 +58,7 @@ The dataset is distributed as HDF5 files, which this adapter does not read. To u
 
 ### Attribution
 
-Dataset: "Multivariate time series data of milling processes with varying tool wear and machine tools", Mendeley Data, DOI [10.17632/zpxs87bjt8](https://doi.org/10.17632/zpxs87bjt8). The creators are named at that DOI. The licence stated on the record is [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) (read on 2026-11-17). Describing the data in the paper: Data in Brief 50 (2023) 109574, DOI [10.1016/j.dib.2023.109574](https://doi.org/10.1016/j.dib.2023.109574).
+Dataset: "Multivariate time series data of milling processes with varying tool wear and machine tools", Mendeley Data, DOI [10.17632/zpxs87bjt8](https://doi.org/10.17632/zpxs87bjt8). The creators are named at that DOI. The licence stated on the record is [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) (as stated when this guide was written; check the record before relying on it). Describing the data in the paper: Data in Brief 50 (2023) 109574, DOI [10.1016/j.dib.2023.109574](https://doi.org/10.1016/j.dib.2023.109574).
 
 Nothing from the dataset is copied here. The profile uses only the names and units of the signals as the paper lists them.
 
