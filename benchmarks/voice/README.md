@@ -665,3 +665,98 @@ Limits (read before quoting any number):
 - The four sentences are unreviewed translations. Duration, level and a rough pitch are all that was measured: nothing about intelligibility, naturalness or whether a clip sounds like the emotion asked for. That needs listeners (issue 756).
 - Generation time per clip was not recorded; counting finished clips over one 90 s window gave about 30 s per clip, including the script's own analysis.
 - The WAV files and measurements.json are kept by the maintainer and are not in the repository.
+
+## Whisper large-v3 sweep over 65 more FLEURS languages (one run per language)
+
+Scripts: `colab_whisper_sweep.py` (measurement, batches A to E and R) and `colab_whisper_sweep_analysis.py` (intervals and the recomputed character error rate). The rows are in `packages/ragleap-voice/coverage/stt.csv`. This is where Whisper large-v3 is strong or weak on read speech, not a claim that any language is supported: the engine's declared languages are unchanged.
+
+Setup: first 60 clips of the FLEURS `test` split per language (CC-BY-4.0; Icelandic gave 46, all the script got), Colab Tesla T4, 2026-11-24, `Systran/faster-whisper-large-v3` at revision `edaa852ec7e145841d8ffdb056a99866b5f0a478` (MIT per its card) pulled with `ragleap-voice models pull`, faster-whisper 1.2.1 (the pilot used 1.1.1), float16, beam 5, temperature 0, language given, no voice-activity gate. The harness commits printed by the batches were `aae4f29c27` (A), `a3f93af30a` (B), `e2b791d77f` (C and R) and `6d4afd252b` (D and E); no commit between the first and the last touched the bench package, the Whisper engine, the lock or the manifest [checked with git log]. Intervals are 95% bootstrap intervals over clips (2000 resamples, seed 1234, as in the pilot). The English row (60 clips) and the Japanese row (recomputed) replace the pilot rows.
+
+Word error rate, spaced languages (sorted by value):
+
+| Language (code) | WER (95% interval) | clips |
+|---|---|---|
+| Italian (it) | 2.3% (1.4 to 3.3) | 60 |
+| German (de) | 3.7% (2.3 to 5.3) | 60 |
+| English (en) | 4.6% (3.3 to 6.0) | 60 |
+| Catalan (ca) | 5.1% (3.7 to 6.5) | 60 |
+| Polish (pl) | 5.8% (4.1 to 7.8) | 60 |
+| Ukrainian (uk) | 6.2% (4.2 to 8.4) | 60 |
+| Dutch (nl) | 6.5% (4.8 to 8.5) | 60 |
+| Finnish (fi) | 6.6% (5.0 to 8.3) | 60 |
+| Malay (ms) | 6.8% (5.0 to 8.7) | 60 |
+| Swedish (sv) | 8.5% (6.4 to 11.1) | 60 |
+| Romanian (ro) | 9.2% (6.9 to 11.7) | 60 |
+| Bulgarian (bg) | 9.9% (8.2 to 11.9) | 60 |
+| Norwegian (no) | 10.0% (7.8 to 12.3) | 60 |
+| Czech (cs) | 10.2% (7.9 to 12.5) | 60 |
+| Greek (el) | 10.2% (8.4 to 12.2) | 60 |
+| Slovak (sk) | 10.4% (8.2 to 12.7) | 60 |
+| Bosnian (bs) | 11.3% (9.2 to 13.5) | 60 |
+| Croatian (hr) | 11.3% (9.5 to 13.3) | 60 |
+| Tagalog (tl) | 12.1% (10.0 to 14.4) | 60 |
+| Galician (gl) | 12.4% (10.3 to 14.8) | 60 |
+| Danish (da) | 12.6% (9.8 to 16.0) | 60 |
+| Hungarian (hu) | 14.2% (11.8 to 16.7) | 60 |
+| Korean (ko) | 17.2% (13.3 to 21.4) | 60 |
+| Macedonian (mk) | 17.3% (12.0 to 24.7) | 60 |
+| Estonian (et) | 17.4% (14.2 to 21.1) | 60 |
+| Azerbaijani (az) | 18.8% (16.1 to 21.5) | 60 |
+| Latvian (lv) | 19.2% (16.0 to 22.4) | 60 |
+| Urdu (ur) | 20.8% (18.0 to 23.4) | 60 |
+| Slovenian (sl) | 22.1% (17.1 to 27.8) | 60 |
+| Serbian (sr) | 23.1% (15.1 to 32.5) | 60 |
+| Lithuanian (lt) | 25.4% (22.3 to 28.5) | 60 |
+| Hebrew (he) | 26.2% (21.0 to 31.8) | 60 |
+| Welsh (cy) | 28.2% (24.5 to 32.5) | 60 |
+| Persian (fa) | 29.5% (26.1 to 32.8) | 60 |
+| Afrikaans (af) | 30.3% (26.9 to 33.8) | 60 |
+| Icelandic (is) | 31.1% (26.9 to 35.3) | 46 |
+| Kazakh (kk) | 33.0% (28.2 to 38.9) | 60 |
+| Armenian (hy) | 40.8% (36.0 to 45.4) | 60 |
+| Belarusian (be) | 42.1% (37.9 to 46.3) | 60 |
+| Gujarati (gu) | 64.1% (58.7 to 69.5) | 60 |
+| Lingala (ln) | 68.2% (63.4 to 73.3) | 60 |
+| Maltese (mt) | 69.9% (65.1 to 74.0) | 60 |
+| Occitan (oc) | 70.7% (67.4 to 74.0) | 60 |
+| Bengali (bn) | 73.8% (70.2 to 77.2) | 60 |
+| Georgian (ka) | 77.2% (73.3 to 80.6) | 60 |
+| Marathi (mr) | 78.1% (72.5 to 83.6) | 60 |
+| Punjabi (pa) | 78.5% (75.5 to 81.8) | 60 |
+| Tajik (tg) | 81.5% (75.7 to 89.2) | 60 |
+| Mongolian (mn) | 85.2% (82.2 to 88.4) | 60 |
+| Hausa (ha) | 86.0% (82.2 to 90.5) | 60 |
+| Luxembourgish (lb) | 87.1% (83.9 to 90.1) | 60 |
+| Somali (so) | 89.0% (85.1 to 93.6) | 60 |
+| Nepali (ne) | 89.8% (84.7 to 94.9) | 60 |
+| Uzbek (uz) | 92.5% (82.4 to 108.4) | 60 |
+| Pashto (ps) | 95.3% (89.6 to 103.8) | 60 |
+| Sindhi (sd) | 104.8% (102.8 to 107.0) | 60 |
+| Shona (sn) | 114.4% (107.8 to 120.7) | 60 |
+| Assamese (as) | 131.8% (110.3 to 171.1) | 60 |
+
+Languages without word spaces: character error rate after Unicode NFKC, lower case, and removing spaces and punctuation from both sides (our own normalisation, not the harness's normalizer version 1):
+
+| Language (code) | CER (95% interval) | CER printed by the harness | clips whose reference has Latin words |
+|---|---|---|---|
+| Japanese (ja) | 4.6% (3.0 to 6.1) | 6.5% | 5 of 60 |
+| Mandarin (zh) | 7.5% (4.0 to 11.9) | 48.4% | 7 of 60 |
+| Cantonese (yue) | 8.1% (6.0 to 10.5) | 50.8% | 5 of 60 |
+| Thai (th) | 10.2% (7.4 to 13.6) | 11.1% | 9 of 60 |
+| Khmer (km) | 87.8% (85.1 to 90.9) | 87.3% | 20 of 60 |
+| Burmese (my) | 100.5% (99.7 to 101.5) | 100.8% | 6 of 60 |
+| Lao (lo) | 104.9% (99.2 to 117.9) | 107.0% | 25 of 60 |
+
+Findings:
+- The FLEURS Chinese references have a space between every character and the harness counts those spaces as characters: Mandarin printed 48.4% and Cantonese 50.8%, against 7.5% and 8.1% after removing spaces and punctuation. Japanese changes from 6.5% to 4.6% and Thai from 11.1% to 10.2%, so the pilot's Japanese figure overstated the error. The CER printed by the sweep script for these languages should not be quoted; use the analysis script.
+- Latin words in a reference that the model leaves out still count as errors, so the recomputed figures are somewhat too high for the languages in the second table (the last column counts the clips).
+- Khmer, Lao and Burmese are unusable here (CER about 88 to 105%). The two worst clips of each show text in another script (Thai letters for Lao audio, Khmer characters for Burmese audio) and long runs of one repeated character; this was read in those clips only and not counted over all clips.
+- One Thai clip (th_23) has an output twice as long as the reference and counts as 100% for that clip.
+- Serbian (WER 23.1%, harness CER 14.2%) and Persian (WER 29.5%, CER 7.5%) have a character error far below the word error; the reason was not investigated.
+- Speed on the T4: real-time factor 0.07 to 0.19 for the European languages and 0.19 to 0.45 for several Indic and Southeast Asian scripts (not investigated).
+
+Limits (read before quoting any number):
+- Read speech only: no telephone or noisy audio, no accents or code-switching. 60 consecutive clips per language, so speakers and sentences repeat and the intervals are probably too narrow.
+- One system and one run per language. Whether the model saw FLEURS test data in training was not assessed.
+- WER uses normalizer version 1, which does not unify numbers and digits. The recomputed CER uses the normalisation above. Language configurations are those of FLEURS (for example `cmn_hans_cn` for Mandarin, `nb_no` for Norwegian, `fil_ph` for Tagalog).
+- Not a comparison with any other model: only the Indian languages were also measured with another model (see above).
