@@ -4,7 +4,7 @@ All notable changes are listed here. Format: Keep a Changelog.
 
 ## [Unreleased]
 
-## [0.0.6] - 2026-11-23
+## [0.0.6] - 2026-11-24
 
 ### Added
 - The red-team harness checks on every run that a stop request is answered within 3 s while a client holds a half-sent request to the console (#1367, fixed). A failure is a finding and a non-zero exit code; #1367 is no longer a known gap, and `--include-slow` is accepted and does nothing.
