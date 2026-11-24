@@ -203,7 +203,7 @@ def test_run_before_load_and_after_close(fake_fw, tmp_path):
 def test_registered_with_measured_languages():
     info = [i for i in engines("stt") if i.name == "whisper"]
     assert len(info) == 1 and not info[0].third_party
-    assert info[0].capabilities.languages == LANGUAGES == {"es", "fr", "pt", "ru", "tr", "id", "vi", "en", "ja"}
+    assert info[0].capabilities.languages == LANGUAGES
     assert info[0].capabilities.detects_language is False
     assert info[0].manifest_entries == (MODEL,)
 

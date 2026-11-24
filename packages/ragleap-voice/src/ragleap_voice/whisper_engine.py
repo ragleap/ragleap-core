@@ -16,8 +16,13 @@ from .errors import (AudioDecodeError, EngineError, EngineNotInstalledError, Eng
 from .results import Segment
 
 MODEL = "whisper-large-v3"
-# Languages with a usable measured result in coverage/stt.csv (60 read-speech FLEURS clips each, en only 20).
-LANGUAGES = frozenset({"es", "fr", "pt", "ru", "tr", "id", "vi", "en", "ja"})
+# Languages with a tier 2 whisper-large-v3 row in coverage/stt.csv of at least 60 read-speech FLEURS clips whose 95% interval ends at
+# or below 15% (word error rate, or the recomputed character error rate for languages without word spaces). tests/test_whisper_languages.py
+# derives this set from the file and compares it with this one. The rule is proposed in docs/design/coverage-matrix.md section 7.
+LANGUAGES = frozenset({
+    "bg", "bs", "ca", "cs", "de", "el", "en", "es", "fi", "fr", "gl", "hr", "id", "it", "ja", "ms",
+    "nl", "no", "pl", "pt", "ro", "ru", "sk", "sv", "th", "tl", "tr", "uk", "vi", "yue", "zh",
+})
 RATE = 16000
 _OFFLINE = {"HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"}
 _INSTALL = 'pip install "ragleap-voice[whisper]"'

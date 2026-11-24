@@ -22,3 +22,5 @@ Status: a record of evidence against `docs/verification-criteria.md`. The entry 
 ## For the maintainer
 
 Read the licence files and decide which licence the entry names; decide whether to fill the empty fields before verification and whether to set `default`; sign off criteria 1 to 7 in the pull request that edits `models.toml`.
+
+Update 2026-11-24: the sweep over 65 more languages (benchmarks/voice/README.md) gave 81 measured rows, and the change in this pull request proposes a written rule that would declare 31 languages instead of the 9 listed above (still none of the Indian languages: Hindi 26.8% word error, upper interval end 29.4%). The record above stays as written on 2026-11-23.
