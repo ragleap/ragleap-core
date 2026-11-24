@@ -4,6 +4,8 @@ All notable changes to `ragleap-voice` are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
+### Changed
+- Proposed, pending the maintainer's decision: the Whisper engine declares 31 languages instead of 9 (a tier 2 row of at least 60 clips whose 95% interval ends at or below 15%), from the sweep results in `coverage/stt.csv`. `transcribe()` accepts them and `engine="auto"` can route them to Whisper. A test derives the set from the file. Read speech only; no noisy or telephone audio, no voice-activity gate. Not in any release yet.
 
 ## [0.3.6] - 2026-11-08
 ### Status
