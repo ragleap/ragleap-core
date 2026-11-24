@@ -6,7 +6,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 from ragleap_voice.whisper_engine import LANGUAGES  # noqa: E402
 
-MIN_CLIPS, MAX_UPPER = 60, 15.0  # the proposed rule in docs/design/coverage-matrix.md section 7
+MIN_CLIPS, MAX_UPPER = 60, 15.0  # the adopted rule in docs/design/coverage-matrix.md section 7
 
 
 def measured_rows():
