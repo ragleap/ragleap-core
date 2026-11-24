@@ -192,6 +192,33 @@ class TelegramPoller:
         self._set("off")
 
 
+def public_answers() -> bool:
+    """True only when TELEGRAM_POLLING_PUBLIC=true: the polled bot then answers ANY sender, as the webhook bot does."""
+    return os.environ.get("TELEGRAM_POLLING_PUBLIC", "").strip().lower() == "true"
+
+
+def owner_only(handle: Callable[[dict], object]) -> Callable[[dict], object]:
+    """Wrap a handler so that only the owner's private chat is answered (the approval target on Telegram, see
+    core.autonomy.is_owner_sender). Every other message is ignored without a reply, so a stranger who finds the bot learns
+    nothing and cannot use its documents or its model budget. A check that cannot be made ignores the message."""
+    def owner_only_handler(update: dict):
+        message = (update or {}).get("message") or {}
+        chat = message.get("chat") or {}
+        chat_id = chat.get("id")
+        from_id = (message.get("from") or {}).get("id")
+        private = chat.get("type") == "private" and (from_id is None or str(from_id) == str(chat_id))
+        try:
+            from core import autonomy
+            is_owner = bool(chat_id) and private and autonomy.is_owner_sender("telegram", chat_id)
+        except Exception:
+            is_owner = False
+        if not is_owner:
+            logger.info("Telegram polling: a message that is not from the owner's private chat was ignored.")
+            return False
+        return handle(update)
+    return owner_only_handler
+
+
 def start_default() -> Optional[TelegramPoller]:
     """Start the poller from the environment, or return None when polling is not switched on."""
     global _DEFAULT
@@ -199,7 +226,8 @@ def start_default() -> Optional[TelegramPoller]:
         return None
     from channels.telegram.router import handle_update
     from core import scheduler_leader
-    _DEFAULT = TelegramPoller(os.environ["TELEGRAM_BOT_TOKEN"].strip(), handle_update, scheduler_leader.is_leader,
+    handler = handle_update if public_answers() else owner_only(handle_update)       # polling answers only the owner unless asked
+    _DEFAULT = TelegramPoller(os.environ["TELEGRAM_BOT_TOKEN"].strip(), handler, scheduler_leader.is_leader,
                               poll_timeout=_int_env("TELEGRAM_POLL_TIMEOUT", 30, 1, 50),
                               workers=_int_env("TELEGRAM_POLL_WORKERS", 4, 1, 8)).start()
     logger.info("Telegram long polling started.")

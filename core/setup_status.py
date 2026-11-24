@@ -198,7 +198,7 @@ def _telegram() -> Dict:
     token = bool(os.environ.get("TELEGRAM_BOT_TOKEN", "").strip())
     secret = bool(os.environ.get("TELEGRAM_WEBHOOK_SECRET", "").strip())
     from channels.telegram import poller
-    receiving = ("long polling (" + poller.status()["mode"] + ")") if poller.enabled() else "webhook only"
+    receiving = ("long polling (" + poller.status()["mode"] + ", " + ("answers anyone" if poller.public_answers() else "owner only") + ")") if poller.enabled() else "webhook only"
     return _item("telegram", "Telegram", "info",
                  "Bot token: " + ("set" if token else "not set") + ". Inbound webhook secret: " + ("set" if secret else "not set") + ". Receiving: " + receiving + ".",
                  "The token sends approval pings. Receiving Telegram messages needs a public HTTPS address for a webhook, or TELEGRAM_POLLING=true to ask Telegram for them instead (docs/telegram-polling.md).")
