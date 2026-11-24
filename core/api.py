@@ -132,7 +132,15 @@ async def lifespan(app: FastAPI):
                           max_instances=1, coalesce=True)
     scheduler.start()
     logger.info("Background sync scheduler started.")
+    tg_poller = None
+    try:
+        from channels.telegram import poller as _tg_poller
+        tg_poller = await asyncio.to_thread(_tg_poller.start_default)      # None unless TELEGRAM_POLLING=true
+    except Exception as e:
+        logger.warning("Telegram polling not started: %s", type(e).__name__)
     yield
+    if tg_poller is not None:
+        await asyncio.to_thread(tg_poller.stop)
     scheduler.shutdown()
     scheduler_leader.release()
     logger.info("Background sync scheduler stopped.")
@@ -700,7 +708,7 @@ async def telegram_webhook(request: Request):
     Telegram webhook. Telegram sends JSON payloads with an 'update' object
     containing 'message' -> 'chat' -> 'id' and 'message' -> 'text'.
     """
-    from channels.telegram.router import handle_incoming_message, _verify_webhook_secret
+    from channels.telegram.router import handle_update, _verify_webhook_secret
 
     secret = request.headers.get("x-telegram-bot-api-secret-token", "")
     if not _verify_webhook_secret(secret):
@@ -708,23 +716,9 @@ async def telegram_webhook(request: Request):
         raise HTTPException(status_code=403, detail="Invalid secret token.")
 
     update = await request.json()
-    message = update.get("message", {})
-    chat_id = message.get("chat", {}).get("id")
-    text = message.get("text", "")
-
-    if not chat_id:
-        # Not a text message we handle (could be a different update type) — acknowledge anyway.
-        return {"ok": True}
-
-    logger.info(f"Telegram webhook: message from chat {chat_id}: {text[:50]}")
-    # Approvals are accepted only in a one-to-one chat with the same person on both sides.
-    from_id = (message.get("from") or {}).get("id")
-    private = message.get("chat", {}).get("type") == "private" and (from_id is None or str(from_id) == str(chat_id))
-    if private:
-        handle_incoming_message(chat_id, text)
-    else:
-        handle_incoming_message(chat_id, text, private=False)
-
+    # The model call can take many seconds: run it off the event loop so the rest of the app keeps answering.
+    from starlette.concurrency import run_in_threadpool
+    await run_in_threadpool(handle_update, update)
     return {"ok": True}
 
 

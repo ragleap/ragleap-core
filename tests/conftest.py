@@ -45,6 +45,7 @@ def pytest_sessionstart(session):
 # Opt-in feature flags that a developer may have in .env or the shell. Tests must see the
 # documented defaults (everything off); a test that needs a flag sets it with monkeypatch.
 _FEATURE_FLAGS = (
+    "TELEGRAM_POLLING", "TELEGRAM_POLL_TIMEOUT", "TELEGRAM_POLL_WORKERS",
     "AGENT_LOOP_ENABLED", "AGENT_LOOP_MAX_STEPS", "CODE_EXEC_ENABLED", "SHELL_EXEC_ENABLED",
     "SANDBOX_TOKEN", "SANDBOX_URL", "BROWSER_FETCH_ENABLED", "BROWSER_ALLOWED_DOMAINS",
     "MCP_SERVERS", "MCP_ALLOWED_TOOLS", "ACTION_TASKS_ENABLED", "APPROVAL_REPLIES",

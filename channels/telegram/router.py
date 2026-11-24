@@ -75,6 +75,27 @@ def send_typing_action(chat_id) -> None:
         pass  # typing indicator is optional, never fail the request over it
 
 
+def handle_update(update: dict) -> bool:
+    """One Telegram update, from the webhook or from the poller: the same rules for both. True when it had a chat to answer."""
+    message = (update or {}).get("message", {}) or {}
+    chat_id = message.get("chat", {}).get("id")
+    text = message.get("text", "")
+
+    if not chat_id:
+        # Not a text message we handle (could be a different update type) -- acknowledge anyway.
+        return False
+
+    logger.info(f"Telegram: message from chat {chat_id}: {(text or '')[:50]}")
+    # Approvals are accepted only in a one-to-one chat with the same person on both sides.
+    from_id = (message.get("from") or {}).get("id")
+    private = message.get("chat", {}).get("type") == "private" and (from_id is None or str(from_id) == str(chat_id))
+    if private:
+        handle_incoming_message(chat_id, text)
+    else:
+        handle_incoming_message(chat_id, text, private=False)
+    return True
+
+
 def handle_incoming_message(chat_id, message_text: str, private: bool = True) -> str:
     """
     Process an incoming Telegram message: ask the core RAG pipeline,
