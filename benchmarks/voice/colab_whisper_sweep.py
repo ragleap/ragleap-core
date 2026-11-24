@@ -2,7 +2,7 @@
 
 Run in Google Colab (T4 GPU runtime), pasted into one cell, after setting the environment in an earlier cell, for example:
     import os; os.environ["S_BATCH"] = "A"
-S_BATCH  A, B, C, D or E (default A); S_ONLY="de,it" runs only those codes from the batch table instead.
+S_BATCH  A, B, C, D or E (default A), or R (re-measure ja and en with this script); S_ONLY="de,it" runs only those codes from the batch table instead.
 S_OUT    results folder (default /content/drive/MyDrive/whisper_sweep; Drive is mounted if needed). A language whose result files
          are already there is skipped, so a recycled session can be resumed.
 S_N      clips per language (default 60).  S_FW  faster-whisper version (default 1.2.1, the one the whisper extra pins; the pilot,
@@ -11,7 +11,9 @@ No token needed: FLEURS and the model are not gated. Same method as colab_pilot1
 pull' (pinned revision, hash-checked), float16, beam 5, temperature 0, language given, FLEURS test split, first N clips. Licence gates
 stop the run if FLEURS is not CC-BY-4.0 or the model is not MIT.
 Limits: read speech only; consecutive clips, so intervals are probably too narrow; one system; one run; WER is not meaningful for
-languages without word spaces (ja zh yue th my km lo): read CER. A FLEURS config name that does not exist is skipped, not guessed.
+languages without word spaces (ja zh yue th my km lo), and the CER this script prints for them counts the spaces that FLEURS puts
+between Chinese characters (Mandarin, batch A: 48.4% printed, 7.5% after removing spaces and punctuation): run
+colab_whisper_sweep_analysis.py for the figures to quote. A FLEURS config name that does not exist is skipped, not guessed.
 This script was written without a run; the first run is its test.
 """
 import csv, ctypes, glob, importlib.metadata as md, os, pathlib, site, subprocess, sys, time, wave
@@ -39,6 +41,7 @@ BATCHES = {
     "E": {"az": "az_az", "ka": "ka_ge", "hy": "hy_am", "kk": "kk_kz", "uz": "uz_uz", "tg": "tg_tj", "be": "be_by",
           "mk": "mk_mk", "mn": "mn_mn", "ps": "ps_af", "sd": "sd_in", "bs": "bs_ba", "lb": "lb_lu", "oc": "oc_fr",
           "yue": "yue_hant_hk"},
+    "R": {"ja": "ja_jp", "en": "en_us"},  # re-measure with this script (the pilot had 20 clips for en)
 }
 if ONLY:
     allcodes = {c: cfg for b in BATCHES.values() for c, cfg in b.items()}
@@ -141,7 +144,7 @@ for code, cfg in SEL.items():
             dataset="google/fleurs test, first %d, config %s" % (N, cfg), harness_commit_main=main_sha,
             datasets_version=md.version("datasets"), languages=code)
         csvp, jsonp = write_results(str(OUT), tag, res, meta)
-        print("%s (%s)%s, %d clips, %.0f s:" % (code, cfg, " [read CER, not WER]" if code in CHAR else "", len(items), time.time() - t0))
+        print("%s (%s)%s, %d clips, %.0f s:" % (code, cfg, " [no word spaces: the CER printed here counts the reference spaces; use the analysis script]" if code in CHAR else "", len(items), time.time() - t0))
         for k, v in summarize(res).items():
             print("  ", k, {a: (round(b, 4) if isinstance(b, float) else b) for a, b in v.items()})
         finished.append(code)
