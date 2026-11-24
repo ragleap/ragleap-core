@@ -75,7 +75,7 @@ Each routing decision cites its row. No row means `NoEngineError`, not a guess.
 ## 7. Open questions
 
 1. Tier thresholds: what error rate makes a language "usable" for speech to text and for text to speech?
-   Proposed 2026-11-24, not adopted: a language is declared for the Whisper engine when its tier 2 row has at least 60 clips and the
+   Adopted 2026-11-24 by the package lead, open to revision: a language is declared for the Whisper engine when its tier 2 row has at least 60 clips and the
    upper end of its 95% interval is at or below 15% (word error rate, or the recomputed character error rate for languages without
    word spaces). Applied to the 81 Whisper rows this gives 31 languages, and a test derives the declared set from stt.csv. One
    threshold for both metrics is a simplification, and what is acceptable depends on the use.

@@ -5,7 +5,7 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 ### Changed
-- Proposed, pending the maintainer's decision: the Whisper engine declares 31 languages instead of 9 (a tier 2 row of at least 60 clips whose 95% interval ends at or below 15%), from the sweep results in `coverage/stt.csv`. `transcribe()` accepts them and `engine="auto"` can route them to Whisper. A test derives the set from the file. Read speech only; no noisy or telephone audio, no voice-activity gate. Not in any release yet.
+- The Whisper engine declares 31 languages instead of 9 (rule adopted 2026-11-24, open to revision: a tier 2 row of at least 60 clips whose 95% interval ends at or below 15%), from the sweep results in `coverage/stt.csv`. `transcribe()` accepts them and `engine="auto"` can route them to Whisper. A test derives the set from the file. Read speech only; no noisy or telephone audio, no voice-activity gate. Not in any release yet.
 
 ## [0.3.6] - 2026-11-08
 ### Status
