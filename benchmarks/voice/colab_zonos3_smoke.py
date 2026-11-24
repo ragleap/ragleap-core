@@ -4,6 +4,8 @@ build works, the server answers, the five language codes (hi, ta, te, ml, kn) ar
 environment problem is printed as such and is never a result about the model.
 Needs a Colab GPU runtime and no Hugging Face token (the weights are public). Takes over an hour on a T4 (the build alone took 3635 s in the first run). Mount Google Drive first or set Z_OUT, because results kept in /content are lost when Colab recycles the runtime. Set Z_CACHE to a folder on Drive to keep the built server between runs (opt-in; the key is the code pin, the GPU architecture and the nvcc version; not tested yet).
 Prompts are FLEURS test sentence TEXT (CC-BY-4.0, no audio), the same filter as colab_tts_roundtrip.py.
+Z_WORLD=1 switches to eight world languages (en_us fr_fr de es it pt_br cmn ko), one stock voice each speaking its own language, a
+language-aware prompt filter and the default folder zonos3_world; read the clips back with colab_zonos3_world_judge.py. Written without a run.
 Stock voices: Ananya (Hindi, female) and Sravya (Telugu, female). Tamil, Malayalam and Kannada have no stock voice, so those sentences are
 spoken by a Hindi or Telugu voice: that can test intelligibility only, never accent. No real person's voice is cloned.
 Pins: code Zyphra/ZONOS3-Mini on GitHub at PIN_CODE (MIT), weights Zyphra/ZONOS3-Mini on Hugging Face at PIN_MODEL (Apache-2.0 per the model card)."""
@@ -14,13 +16,36 @@ PIN_MODEL = "d2d142a86b1e6aeb4252679673c86ecd86177bf8"  # Hugging Face main on 2
 REPO_URL = "https://github.com/Zyphra/ZONOS3-Mini.git"
 MODEL_REPO = "Zyphra/ZONOS3-Mini"
 FILES = ["gguf/backbone-ptq.gguf", "gguf/zac-keep2.gguf", "gguf/spk-encoder.gguf"]
-VOICES = {"Ananya": ("default_f76cf78a50cf8496", "hi"), "Sravya": ("default_c3bb44b62cf13a5c", "te")}  # ids from gguf/voices/README.md
-LANGS = {"hi": "hi_in", "ta": "ta_in", "te": "te_in", "ml": "ml_in", "kn": "kn_in"}
+WORLD = os.environ.get("Z_WORLD") == "1"   # eight world languages, one stock voice each, each speaking its own language
+if WORLD:
+    # language codes as in the server's registries/languages.json (en_us, fr_fr, de, es, it, pt_br, cmn, ko); voice ids from gguf/voices/README.md
+    VOICES = {"Savannah": ("default_de4d191ca7574982", "en_us"), "Gaspard": ("default_517319c805b927e9", "fr_fr"),
+              "Liesel": ("default_09d206a5b067ae71", "de"), "Ximena": ("default_43e790fc116fd62a", "es"),
+              "Ginevra": ("default_792987ff6236e50d", "it"), "Leonor": ("default_e11f53895cad62fa", "pt_br"),
+              "Meilin": ("default_eaee7325255d4783", "cmn"), "Seoyeon": ("default_b7a257a5b1478493", "ko")}
+    LANGS = {"en_us": "en_us", "fr_fr": "fr_fr", "de": "de_de", "es": "es_419", "it": "it_it", "pt_br": "pt_br",
+             "cmn": "cmn_hans_cn", "ko": "ko_kr"}
+else:
+    VOICES = {"Ananya": ("default_f76cf78a50cf8496", "hi"), "Sravya": ("default_c3bb44b62cf13a5c", "te")}  # ids from gguf/voices/README.md
+    LANGS = {"hi": "hi_in", "ta": "ta_in", "te": "te_in", "ml": "ml_in", "kn": "kn_in"}
+
+
+def prompt_ok(t, lang):
+    """FLEURS sentence filter. Default (Indic) run: no digits, no Latin letters, 6 to 30 words. World run: no digits; Latin letters are
+    allowed except for Mandarin and Korean; Mandarin has no word spaces, so its length is counted in characters."""
+    if re.search(r"\d", t):
+        return False
+    if not WORLD:
+        return not re.search(r"[A-Za-z]", t) and 6 <= len(t.split()) <= 30
+    if lang in ("cmn", "ko") and re.search(r"[A-Za-z]", t):
+        return False
+    return 10 <= len(t) <= 80 if lang == "cmn" else 6 <= len(t.split()) <= 30
 PORT = 1919
 BASE = "http://127.0.0.1:%d" % PORT
 WORK = pathlib.Path(os.environ.get("Z_WORK", "/content/zonos3_work"))
 N = int(os.environ.get("Z_N", "2"))
-_default_out = "/content/drive/MyDrive/zonos3_smoke" if os.path.isdir("/content/drive/MyDrive") else "/content/zonos3_smoke"
+_name = "zonos3_world" if WORLD else "zonos3_smoke"
+_default_out = "/content/drive/MyDrive/" + _name if os.path.isdir("/content/drive/MyDrive") else "/content/" + _name
 OUT = pathlib.Path(os.environ.get("Z_OUT", _default_out))
 
 
@@ -226,7 +251,7 @@ def main():
         seen = []
         for ex in ds:
             t = ex["raw_transcription"].strip()
-            if t in seen or re.search(r"\d", t) or re.search(r"[A-Za-z]", t) or not 6 <= len(t.split()) <= 30:
+            if t in seen or not prompt_ok(t, lang):
                 continue
             seen.append(t)
             if len(seen) >= N: break
@@ -278,6 +303,8 @@ def main():
     rows = []
     for lang, texts in prompts.items():
         for vname, (vid, vlang) in VOICES.items():
+            if WORLD and vlang != lang:
+                continue
             for k, text in enumerate(texts):
                 info, data = generate_one(text, lang, vid)
                 tag = "%s_%s_%02d" % (lang, vname, k)
