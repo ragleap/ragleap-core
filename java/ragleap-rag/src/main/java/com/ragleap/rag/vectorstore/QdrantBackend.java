@@ -186,14 +186,15 @@ public class QdrantBackend implements VectorBackend, AutoCloseable {
         }
 
         ObjectNode payload = MAPPER.createObjectNode();
-        payload.put("document_id", documentId);
-        payload.put("document_name", documentName);
-        payload.put("chunk_index", chunkIndex);
+        // Stored fields are written after the caller metadata, so caller metadata can never overwrite them.
         if (metadata != null) {
             for (Map.Entry<String, Object> e : metadata.entrySet()) {
                 payload.putPOJO(e.getKey(), e.getValue());
             }
         }
+        payload.put("document_id", documentId);
+        payload.put("document_name", documentName);
+        payload.put("chunk_index", chunkIndex);
 
         ArrayNode vector = MAPPER.createArrayNode();
         for (Double d : embedding) vector.add(d);

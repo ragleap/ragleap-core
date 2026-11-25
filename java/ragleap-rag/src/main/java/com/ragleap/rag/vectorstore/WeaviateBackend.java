@@ -214,14 +214,15 @@ public class WeaviateBackend implements VectorBackend, AutoCloseable {
         }
 
         ObjectNode properties = MAPPER.createObjectNode();
-        properties.put("document_id", documentId);
-        properties.put("document_name", documentName);
-        properties.put("chunk_index", chunkIndex);
+        // Stored fields are written after the caller metadata, so caller metadata can never overwrite them.
         if (metadata != null) {
             for (Map.Entry<String, Object> e : metadata.entrySet()) {
                 properties.putPOJO(e.getKey(), e.getValue());
             }
         }
+        properties.put("document_id", documentId);
+        properties.put("document_name", documentName);
+        properties.put("chunk_index", chunkIndex);
 
         ArrayNode vector = MAPPER.createArrayNode();
         for (Double d : embedding) vector.add(d);
