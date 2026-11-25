@@ -4,6 +4,9 @@ All notable changes are listed here. Format: Keep a Changelog.
 
 ## [Unreleased]
 
+### Added
+- The red-team harness has three more classes, for the memory caps (S11), the dry run and the workspace box (S6) and the simulated-adapter flag (S13). The flag class reports two behaviours of main as it stands as known, not as findings: a truthy value that is not True is accepted, and a flag changed after the Bridge is built is not noticed. S12 has no class (no honest probe) and S3 is covered only indirectly.
+
 ## [0.0.6] - 2026-11-24
 
 ### Added

@@ -69,6 +69,17 @@ BREAKS = [  # (name, file, old, new, classes that must get worse)
     ("console digest check off", CO, "if not hmac.compare_digest(digest.encode(), p.digest().encode()):", "if False:", ["console_approval"]),
     # #1367 is fixed: the harness now checks that it stays fixed. "regression" is the always-on check, not a class.
     ("console serves one connection at a time (#1367)", CO, "class _ConsoleServer(socketserver.ThreadingMixIn, HTTPServer):", "class _ConsoleServer(HTTPServer):", ["regression"]),
+    # S11, S6 and S13: the three classes added for the invariants the harness did not cover
+    ("pending proposals are not capped", BR, "if self._expire_and_count(now) >= self._max_pending:", "if False:", ["memory_caps"]),
+    ("the audit list is not trimmed", BR, "del self.audit[:extra]  # memory cap; the sink (if any) has every entry", "pass  # trimming removed", ["memory_caps"]),
+    ("old records are never evicted", BR, "del self._ledger[pid]  # replay stays refused: an unknown proposal has no approval", "pass  # eviction removed", ["memory_caps"]),
+    ("raw items are read without a hard stop", OB, "got = list(itertools.islice(iter(items), READ_LIMIT + 1))  # iterate with a hard stop: never trust len() or slicing", "got = list(items)", ["memory_caps"]),
+    ("the entity cap is not applied", OB, "if len(entities) >= MAX_ENTITIES:", "if False:", ["memory_caps"]),
+    ("the sensor cap is not applied", OB, "if len(sensors) >= MAX_SENSORS:", "if False:", ["memory_caps"]),
+    ("the runtime workspace monitor is removed", BR, "self._env.check_workspace(now)  # runtime monitor: the real motion must stay inside, not only the prediction", "pass  # monitor removed", ["dry_run_workspace"]),
+    ("the dry run limits are not checked", BR, "self._env.check_dry_run(proposal.target, pred)", "pass", ["dry_run_workspace"]),
+    ("the simulated flag is not checked", BR, "if not adapter.simulated:", "if False:", ["adapter_flag"]),
+    ("only None counts as not simulated", BR, "if not adapter.simulated:", "if adapter.simulated is None:", ["adapter_flag"]),
 ]
 
 
