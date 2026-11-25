@@ -269,14 +269,15 @@ public class PineconeBackend implements VectorBackend, AutoCloseable {
         }
 
         ObjectNode pineconeMetadata = MAPPER.createObjectNode();
-        pineconeMetadata.put("document_id", documentId);
-        pineconeMetadata.put("document_name", documentName);
-        pineconeMetadata.put("chunk_index", chunkIndex);
+        // Stored fields are written after the caller metadata, so caller metadata can never overwrite them.
         if (metadata != null) {
             for (Map.Entry<String, Object> e : metadata.entrySet()) {
                 pineconeMetadata.putPOJO(e.getKey(), e.getValue());
             }
         }
+        pineconeMetadata.put("document_id", documentId);
+        pineconeMetadata.put("document_name", documentName);
+        pineconeMetadata.put("chunk_index", chunkIndex);
 
         ArrayNode values = MAPPER.createArrayNode();
         for (Double d : embedding) values.add(d);

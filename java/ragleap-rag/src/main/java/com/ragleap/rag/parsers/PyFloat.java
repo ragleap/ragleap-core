@@ -3,12 +3,12 @@ package com.ragleap.rag.parsers;
 import java.math.BigDecimal;
 
 /** Formats a double exactly like Python's repr(float) / str(float). Needs JDK 19+ shortest-digit Double.toString. */
-final class PyFloat {
+public final class PyFloat {
 
     private PyFloat() {
     }
 
-    static String repr(double d) {
+    public static String repr(double d) {
         if (Double.isNaN(d)) {
             return "nan";
         }

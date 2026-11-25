@@ -165,15 +165,67 @@ public class MilvusBackend implements VectorBackend, AutoCloseable {
         if (metadataFilter == null || metadataFilter.isEmpty()) return "";
         List<String> parts = new ArrayList<>();
         for (Map.Entry<String, Object> e : metadataFilter.entrySet()) {
+            String key = e.getKey();
             Object v = e.getValue();
-            String valueRepr = v instanceof String ? "\"" + escapeForFilter((String) v) + "\"" : String.valueOf(v);
-            parts.add(e.getKey() + " == " + valueRepr);
+            if (key == null || !key.matches("[A-Za-z_][A-Za-z0-9_]*")) {
+                throw new IllegalArgumentException("Invalid metadata filter key: " + pyQuote(key));
+            }
+            String valueRepr;
+            if (v instanceof Boolean b) {
+                valueRepr = b ? "true" : "false";
+            } else if (v instanceof String s) {
+                valueRepr = "\"" + escapeForFilter(s) + "\"";
+            } else if (v instanceof Integer || v instanceof Long || v instanceof Short || v instanceof Byte || v instanceof java.math.BigInteger) {
+                valueRepr = String.valueOf(v);
+            } else if ((v instanceof Double || v instanceof Float) && Double.isFinite(((Number) v).doubleValue())) {
+                valueRepr = com.ragleap.rag.parsers.PyFloat.repr(v instanceof Float f ? Double.parseDouble(f.toString()) : (Double) v);
+            } else {
+                throw new IllegalArgumentException("Unsupported metadata filter value for " + pyQuote(key) + ": " + pyRepr(v));
+            }
+            parts.add(key + " == " + valueRepr);
         }
         return String.join(" and ", parts);
     }
 
     private String escapeForFilter(String s) {
-        return s.replace("\\", "\\\\").replace("\"", "\\\"");
+        return s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r");
+    }
+
+    /** Python repr of a string (None for null), so error texts equal the Python ones. */
+    private static String pyQuote(String s) {
+        if (s == null) return "None";
+        char q = (s.indexOf('\'') >= 0 && s.indexOf('"') < 0) ? '"' : '\'';
+        StringBuilder sb = new StringBuilder().append(q);
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == q || c == '\\') sb.append('\\').append(c);
+            else if (c == '\n') sb.append("\\n");
+            else if (c == '\r') sb.append("\\r");
+            else if (c == '\t') sb.append("\\t");
+            else if (c < 0x20 || c == 0x7f) sb.append(String.format("\\x%02x", (int) c));
+            else sb.append(c);
+        }
+        return sb.append(q).toString();
+    }
+
+    /** Python repr of the few value types a caller can pass, for identical error texts. */
+    private static String pyRepr(Object v) {
+        if (v == null) return "None";
+        if (v instanceof String s) return pyQuote(s);
+        if (v instanceof Double || v instanceof Float) {
+            return com.ragleap.rag.parsers.PyFloat.repr(v instanceof Float f ? Double.parseDouble(f.toString()) : (Double) v);
+        }
+        if (v instanceof List<?> l) {
+            List<String> items = new ArrayList<>();
+            for (Object o : l) items.add(pyRepr(o));
+            return "[" + String.join(", ", items) + "]";
+        }
+        if (v instanceof Map<?, ?> m) {
+            List<String> items = new ArrayList<>();
+            for (Map.Entry<?, ?> e : m.entrySet()) items.add(pyRepr(e.getKey()) + ": " + pyRepr(e.getValue()));
+            return "{" + String.join(", ", items) + "}";
+        }
+        return String.valueOf(v);
     }
 
     @Override
@@ -217,6 +269,12 @@ public class MilvusBackend implements VectorBackend, AutoCloseable {
         }
 
         ObjectNode row = MAPPER.createObjectNode();
+        // Stored fields are written after the caller metadata, so caller metadata can never overwrite them.
+        if (metadata != null) {
+            for (Map.Entry<String, Object> e : metadata.entrySet()) {
+                row.putPOJO(e.getKey(), e.getValue());
+            }
+        }
         row.put("id", vectorKey);
         ArrayNode vector = MAPPER.createArrayNode();
         for (Double d : embedding) vector.add(d);
@@ -224,11 +282,6 @@ public class MilvusBackend implements VectorBackend, AutoCloseable {
         row.put("document_id", documentId);
         row.put("document_name", documentName);
         row.put("chunk_index", chunkIndex);
-        if (metadata != null) {
-            for (Map.Entry<String, Object> e : metadata.entrySet()) {
-                row.putPOJO(e.getKey(), e.getValue());
-            }
-        }
 
         ArrayNode data = MAPPER.createArrayNode();
         data.add(row);
