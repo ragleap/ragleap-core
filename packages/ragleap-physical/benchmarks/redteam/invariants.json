@@ -1,5 +1,5 @@
 {
- "source": "docs/safety-invariants.md (S1 to S13) of ragleap-physical 0.0.5, main commit e1b118ef6015; the class-to-invariant mapping is a hand-made reading of that page, not a proof of coverage",
+ "source": "docs/safety-invariants.md (S1 to S13) of ragleap-physical 0.0.6, main commit 6d4afd2; the class-to-invariant mapping is a hand-made reading of that page, not a proof of coverage",
  "invariants": [
   "S1",
   "S2",
@@ -63,6 +63,15 @@
    "S2",
    "S4",
    "S5"
+  ],
+  "memory_caps": [
+   "S11"
+  ],
+  "dry_run_workspace": [
+   "S6"
+  ],
+  "adapter_flag": [
+   "S13"
   ]
  }
 }

@@ -104,7 +104,7 @@ The bridge refuses an adapter that does not say it is simulated. Enforced in `br
 
 ## Red-team harness (a check, not an invariant)
 
-A seeded red-team harness (`benchmarks/redteam/`) sends generated hostile cases through the bridge, the four tools, the MCP server and the console, in simulation only, and reports any case that gets through. Its 13 classes exercise S1, S2, S4, S5, S7, S8, S9 and S10. The red-team harness does not cover S6, S11, S12 and S13, and it watches S3 only indirectly.
+A seeded red-team harness (`benchmarks/redteam/`) sends generated hostile cases through the bridge, the four tools, the MCP server and the console, in simulation only, and reports any case that gets through. Its 16 classes exercise S1, S2, S4, S5, S6, S7, S8, S9, S10, S11 and S13. The red-team harness does not cover S12, and it watches S3 only indirectly. Two behaviours of the simulated-adapter flag (S13) are reported as known, not as findings: a truthy value that is not True is accepted, and the flag is read once when the Bridge is built.
 
 "No finding" means the generated cases did not get through; it is not a proof that nothing can. The class-to-invariant mapping (`benchmarks/redteam/invariants.json`) is a hand-made reading of this page. Known gaps are named and never counted as findings. The harness tests live in `benchmarks/redteam/test_redteam.py`, outside the `tests/` folder, so the guard test of this page does not follow them; the claims ledger does.
 

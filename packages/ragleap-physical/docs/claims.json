@@ -420,7 +420,7 @@
   },
   {
    "id": "C30",
-   "claim": "The red-team harness does not cover S6, S11, S12 and S13, and it watches S3 only indirectly.",
+   "claim": "The red-team harness does not cover S12, and it watches S3 only indirectly.",
    "where": "docs/safety-invariants.md",
    "status": "limitation",
    "evidence": [],
@@ -644,6 +644,35 @@
     }
    ],
    "note": "A regression check, not an invariant class. A console that serves one connection at a time is caught (a deliberate-break row of the harness). REAL. Simulated adapters only; a client that holds every connection slot is not covered."
+  },
+  {
+   "id": "C45",
+   "claim": "Its 16 classes exercise S1, S2, S4, S5, S6, S7, S8, S9, S10, S11 and S13.",
+   "where": "docs/safety-invariants.md",
+   "status": "verified",
+   "evidence": [
+    {
+     "type": "test",
+     "ref": "benchmarks/redteam/test_redteam.py::test_s6_s11_s13_new_classes_are_registered_and_mapped_to_their_invariants"
+    },
+    {
+     "type": "test",
+     "ref": "benchmarks/redteam/test_redteam.py::test_s6_s11_s13_each_new_class_runs_clean_on_the_current_bridge"
+    },
+    {
+     "type": "test",
+     "ref": "benchmarks/redteam/test_redteam.py::test_s6_s11_s13_the_invariants_not_covered_are_s3_and_s12"
+    }
+   ],
+   "note": "Ten deliberate one-line breaks of the library, one or more per new class, are each reported by the harness (benchmarks/redteam/breakcheck_redteam.py). REAL, simulation only. No finding is not a proof that nothing can get through. Says nothing about real devices."
+  },
+  {
+   "id": "C46",
+   "claim": "Two behaviours of the simulated-adapter flag (S13) are reported as known, not as findings: a truthy value that is not True is accepted, and the flag is read once when the Bridge is built.",
+   "where": "docs/safety-invariants.md",
+   "status": "limitation",
+   "evidence": [],
+   "note": "Observed on main by the harness in simulation (seed 1, 100 cases per class: 37 cases of the truthy value and 12 of the late change). Both are fail-open readings of a declared flag. A stricter check is planned (a flag that must be exactly True, read again at apply), after which the harness will report a regression instead of a known behaviour. Not a statement about real devices."
   }
  ]
 }

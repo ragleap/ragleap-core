@@ -312,7 +312,7 @@ def test_a_control_that_raises_is_a_failed_control_not_a_crash():
 def test_known_gaps_are_named_and_never_counted_as_findings():
     rep = h.run(seed=1, per_class=SMALL)
     gaps = rep["known_gaps"]
-    assert set(gaps) == set(h.KNOWN_GAPS) == {"#1339", "linger-limit"}  # #1338 and #1367 are fixed on main: they are no longer known gaps
+    assert set(gaps) == set(h.KNOWN_GAPS) == {"#1339", "linger-limit", "S13-truthy-value", "S13-late-flip"}  # #1338 and #1367 are fixed on main; the two S13 entries are observed behaviour
     assert gaps["#1339"]["status"] in ("open (reproduced)", "not reproduced (closed? remove the marker)"), gaps["#1339"]
     assert "#1367" not in gaps and rep["regressions"]["#1367"]["status"] == "held"  # a regression check now, on every run
     assert gaps["linger-limit"]["status"].startswith(("open", "not reproduced", "not probed")), gaps["linger-limit"]
@@ -378,7 +378,7 @@ def test_the_report_says_which_invariants_no_class_covers():
     rep = h.run(seed=1, per_class=2, only=["bad_values"])
     covered = {i for ids in inv["classes"].values() for i in ids}
     assert rep["invariants_not_covered"] == sorted(set(inv["invariants"]) - covered, key=lambda s: int(s[1:]))
-    assert {"S3", "S6", "S11", "S12", "S13"} <= set(rep["invariants_not_covered"])
+    assert {"S3", "S12"} == set(rep["invariants_not_covered"])  # S6, S11 and S13 have a class each; S12 has none (no honest probe); S3 only indirectly
     assert rep["classes"]["bad_values"]["invariants"] == inv["classes"]["bad_values"]
 
 
@@ -450,3 +450,93 @@ def test_the_report_hash_does_not_depend_on_the_measured_wait():
 
 def test_the_old_slow_flag_is_still_accepted_and_changes_nothing():
     assert h.main(["--seed", "1", "--per-class", "2", "--only", "bad_values", "--include-slow"]) == 0
+
+
+# ---- the classes for S6 (the dry run works on a copy, the box is checked again while moving), S11 (memory caps) and S13 (simulated adapters)
+NEW_CLASSES = {"memory_caps": ["S11"], "dry_run_workspace": ["S6"], "adapter_flag": ["S13"]}
+
+
+def _without(*names):
+    return lambda a, e, c, l, kw: h.default_factory(a, e, c, l, {k: v for k, v in kw.items() if k not in names})
+
+
+def test_s6_s11_s13_new_classes_are_registered_and_mapped_to_their_invariants():
+    for cls, ids in NEW_CLASSES.items():
+        assert cls in h.CLASSES and cls in h.RUNNERS, cls
+        assert h.load_invariants()["classes"][cls] == ids, cls
+
+
+def test_s6_s11_s13_each_new_class_runs_clean_on_the_current_bridge():
+    for cls in NEW_CLASSES:
+        rep = h.run(seed=3, per_class=SMALL, only=[cls])
+        c = rep["classes"][cls]
+        assert c["attempts"] == SMALL and c["passed"] == 0 and c["unclean"] == 0 and c["error"] == 0, (cls, c, rep["findings"])
+
+
+def test_s6_s11_s13_the_invariants_not_covered_are_s3_and_s12():
+    rep = h.run(seed=1, per_class=2, only=["bad_values"])
+    assert rep["invariants_not_covered"] == ["S3", "S12"], rep["invariants_not_covered"]
+
+
+def test_s6_s11_s13_a_bridge_without_its_pending_cap_is_caught():
+    rep = h.run(seed=1, per_class=30, factory=_without("max_pending"), only=["memory_caps"])
+    assert rep["totals"]["passed"] > 0, rep["totals"]
+
+
+def test_s6_s11_s13_a_bridge_without_its_record_cap_is_caught():
+    rep = h.run(seed=1, per_class=30, factory=_without("max_records"), only=["memory_caps"])
+    assert rep["totals"]["passed"] > 0, rep["totals"]
+
+
+def test_s6_s11_s13_a_bridge_without_its_audit_cap_is_caught():
+    rep = h.run(seed=1, per_class=30, factory=_without("max_audit"), only=["memory_caps"])
+    assert rep["totals"]["passed"] > 0, rep["totals"]
+
+
+def test_s6_s11_s13_an_audit_sink_that_gets_nothing_is_caught():
+    rep = h.run(seed=1, per_class=30, factory=_without("audit_sink"), only=["memory_caps"])
+    assert rep["totals"]["passed"] > 0, rep["totals"]
+
+
+def test_s6_s11_s13_an_observation_read_without_a_limit_is_caught():
+    from ragleap_physical import observation as obs
+    real = obs.READ_LIMIT
+    obs.READ_LIMIT = 10 ** 9  # no hard stop on the raw items examined
+    try:
+        rep = h.run(seed=1, per_class=30, only=["memory_caps"])
+    finally:
+        obs.READ_LIMIT = real
+    assert obs.READ_LIMIT == real
+    assert rep["totals"]["passed"] > 0, rep["totals"]
+
+
+def test_s6_s11_s13_a_bridge_without_the_runtime_workspace_monitor_is_caught():
+    def factory(adapter, env, clock, level, kw):
+        env.check_workspace = lambda *a, **k: None  # the plan is still checked, the running motion no longer is
+        return h.default_factory(adapter, env, clock, level, kw)
+    rep = h.run(seed=1, per_class=30, factory=factory, only=["dry_run_workspace"])
+    assert rep["totals"]["passed"] > 0, rep["totals"]
+
+
+def test_s6_s11_s13_a_bridge_that_checks_neither_plan_nor_motion_is_caught_before_any_motion():
+    def factory(adapter, env, clock, level, kw):
+        env.check_workspace = lambda *a, **k: None
+        env.check_dry_run = lambda *a, **k: None
+        return h.default_factory(adapter, env, clock, level, kw)
+    rep = h.run(seed=1, per_class=30, factory=factory, only=["dry_run_workspace"])
+    assert any(f["detail"] == "moved_before_refusal" for f in rep["findings"]), rep["findings"][:3]
+
+
+class _AlwaysSimulated:
+    simulated = True
+
+    def __init__(self, adapter):
+        self._a = adapter
+
+    def __getattr__(self, name):
+        return getattr(self._a, name)
+
+
+def test_s6_s11_s13_a_bridge_that_does_not_check_the_flag_is_caught():
+    rep = h.run(seed=1, per_class=30, factory=lambda a, e, c, l, kw: h.default_factory(_AlwaysSimulated(a), e, c, l, kw), only=["adapter_flag"])
+    assert rep["totals"]["passed"] > 0, rep["totals"]

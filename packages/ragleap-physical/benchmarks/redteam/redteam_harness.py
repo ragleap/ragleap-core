@@ -45,7 +45,8 @@ except ImportError:  # Windows
 SCHEMA = "ragleap.physical.redteam/1"
 CLASSES = ("bad_values", "wrong_targets", "stale_or_reused_approvals", "self_approval", "oversize_or_nested",
            "bidi_and_control", "replay_after_expiry", "stop_races", "forbidden_access",
-           "console_auth", "console_approval", "console_input", "random_sequences")
+           "console_auth", "console_approval", "console_input", "random_sequences",
+           "memory_caps", "dry_run_workspace", "adapter_flag")
 CONFIG = {"envelope_version": 0, "allowed_commands": ["set_position_target"],
           "targets": {"joint_1": {"pos_min": -1.0, "pos_max": 1.0, "vel_max": 2.0, "force_max": 5.0}},
           "rate": {"max_commands_per_s": 5}, "episode": {"max_sim_time_s": 60, "max_steps": 100000},
@@ -60,6 +61,9 @@ INVARIANTS_FILE = Path(__file__).with_name("invariants.json")  # class -> invari
 KNOWN_GAPS = {
     "#1339": "a stop from another thread can land between the Bridge's last check and the adapter call; the adapters do not refuse a command while stopped",
     "linger-limit": "a refused body above the 1 MiB linger limit is still left partly unread (probed on Linux only)",
+    # S13 as it stands today: observed behaviour, not a proposal. The Bridge reads `simulated` once, when it is built, and tests it for truth only.
+    "S13-truthy-value": "the Bridge refuses an adapter whose `simulated` is falsy but accepts a truthy value that is not True (for example the text 'False')",
+    "S13-late-flip": "the `simulated` flag is read once, when the Bridge is built: an adapter that changes it afterwards is not noticed",
 }
 # Fixed on main and checked on every run: a failure here is a finding and a non-zero exit code, not a known gap.
 REGRESSIONS = {
@@ -1162,6 +1166,8 @@ def unread_at_close_probe(factory):
 def known_gap_probes(factory, rec, include_slow=False, regressions=None):
     out = {k: {"description": d, "status": "not probed", "cases": len(rec.known.get(k, []))} for k, d in KNOWN_GAPS.items()}
     regressions = {} if regressions is None else regressions
+    for _k in ("S13-truthy-value", "S13-late-flip"):
+        out[_k]["status"] = "open (reproduced)" if out[_k]["cases"] else ("not reproduced (closed? remove the marker)" if "adapter_flag" in rec.n else "not probed")
     # #1339: a stop lands at the entry of the adapter call
     w = World(factory)
     try:
@@ -1203,11 +1209,303 @@ def known_gap_probes(factory, rec, include_slow=False, regressions=None):
     return out
 
 
+# ---------------------------------------------------------------- S11, S6 and S13 as classes (invariants.json maps them)
+class _CountList(list):
+    """A list that counts how many items a reader takes from it."""
+
+    def __init__(self, items, counter):
+        super().__init__(items)
+        self._counter = counter
+
+    def __iter__(self):
+        for item in super().__iter__():
+            self._counter[0] += 1
+            yield item
+
+
+class FloodJoint(HookedJoint):
+    """A joint whose observation holds far more raw items than any cap allows. ``consumed`` counts the items a reader took."""
+
+    N = 30000
+
+    def __init__(self, kind):
+        super().__init__()
+        self.kind, self.consumed = kind, [0]
+
+    def observe_raw(self):
+        raw = dict(super().observe_raw())
+        ent = {"id": "dup", "kind": "joint", "pos": 0.0, "vel": 0.0, "pos_unit": "rad", "vel_unit": "rad/s"}
+        sen = {"id": "dup", "kind": "sample", "value": 0.0, "unit": "1"}
+        if self.kind == "valid":
+            ents = [dict(ent, id="e%d" % i) for i in range(self.N)]
+            sens = [dict(sen, id="s%d" % i) for i in range(self.N)]
+        elif self.kind == "invalid":
+            ents, sens = [{"id": i} for i in range(self.N)], [None] * self.N
+        else:  # one id repeated: every copy is ambiguous
+            ents, sens = [ent] * self.N, [sen] * self.N
+        raw["entities"], raw["sensors"] = _CountList(ents, self.consumed), _CountList(sens, self.consumed)
+        return raw
+
+
+def _alive(w, pids):
+    return sum(1 for pid in pids if attempt(lambda pid=pid: w.bridge.get_proposal(pid))[0] == "accepted")
+
+
+def _memory_case(rec, rng, cls, idx, sc, factory):
+    if sc == "pending_flood":
+        cap, extra = rng.choice([1, 2, 3, 7]), rng.randint(1, 3)
+        shown = "cap=%d extra=%d" % (cap, extra)
+        w = World(factory, max_pending=cap)
+        try:
+            first = [attempt(lambda: bridge_propose(w, good_args()))[0] for _ in range(cap)]
+            later = [attempt(lambda: bridge_propose(w, good_args())) for _ in range(extra)]
+            held = len(w.bridge.pending_proposals())
+            if first != ["accepted"] * cap:
+                rec.add(cls, idx, sc, "bridge", "inconclusive", "control_refused", shown, w)
+            elif any(v == "accepted" for v, _ in later) or held > cap:
+                rec.add(cls, idx, sc, "bridge", "passed", "held_%d_with_cap_%d" % (held, cap), shown, w)
+            elif any(v == "unclean" for v, _ in later):
+                rec.add(cls, idx, sc, "bridge", "unclean", [c for v, c in later if v == "unclean"][0], shown, w)
+            else:
+                rec.add(cls, idx, sc, "bridge", "refused", later[-1][1], shown, w)
+        finally:
+            w.close()
+    elif sc == "record_eviction_replay":
+        cap, extra = rng.choice([2, 3, 5]), rng.randint(2, 6)
+        shown = "cap=%d extra=%d" % (cap, extra)
+        w = World(factory, max_records=cap)
+        try:
+            p0 = _approved(w)
+            attempt(lambda: w.bridge.apply(p0))
+            done = len(w.adapter.applied)
+            pids = [p0.proposal_id]
+            for _ in range(cap + extra):
+                w.clock.t += 400.0  # past the lifetime of every proposal before it
+                pids.append(bridge_propose(w, good_args()).proposal_id)
+            alive = _alive(w, pids)
+            v1, _c1 = attempt(lambda: w.bridge.approve(p0, APPROVER))
+            v2, c2 = attempt(lambda: w.bridge.apply(p0))
+            if alive > cap:
+                rec.add(cls, idx, sc, "bridge", "passed", "kept_%d_with_cap_%d" % (alive, cap), shown, w)
+            elif v1 == "accepted" or v2 == "accepted" or len(w.adapter.applied) > done:
+                rec.add(cls, idx, sc, "bridge", "passed", "replay_after_eviction", shown, w)
+            elif "unclean" in (v1, v2):
+                rec.add(cls, idx, sc, "bridge", "unclean", c2, shown, w)
+            else:
+                rec.add(cls, idx, sc, "bridge", "refused", c2, shown, w)
+        finally:
+            w.close()
+    elif sc == "audit_cap":
+        cap = rng.choice([1, 5, 10])
+        m, sink = cap * 3 + 5, []
+        shown = "cap=%d events=%d" % (cap, m)
+        w = World(factory, max_audit=cap, audit_sink=sink.append)
+        try:
+            for _ in range(m):
+                bridge_propose(w, good_args())
+            if len(w.bridge.audit) > cap:
+                rec.add(cls, idx, sc, "bridge", "passed", "audit_%d_with_cap_%d" % (len(w.bridge.audit), cap), shown, w)
+            elif len(sink) < m:
+                rec.add(cls, idx, sc, "bridge", "passed", "sink_got_%d_of_%d" % (len(sink), m), shown, w)
+            else:
+                rec.add(cls, idx, sc, "bridge", "refused", "capped", shown, w)
+        finally:
+            w.close()
+    else:  # observation_flood
+        kind = rng.choice(["valid", "invalid", "duplicates"])
+        adapter = FloodJoint(kind)
+        shown = "flood " + kind
+        w = World(factory, adapter=adapter)
+        try:
+            box = []
+            started = time.monotonic()
+            v, c = attempt(lambda: box.append(w.bridge.observe()))
+            took = time.monotonic() - started
+            if v != "accepted":
+                rec.add(cls, idx, sc, "bridge", v, c, shown, w)
+            elif len(box[0].entities) > 256 or len(box[0].sensors) > 256:
+                rec.add(cls, idx, sc, "bridge", "passed", "items_%d_%d" % (len(box[0].entities), len(box[0].sensors)), shown, w)
+            elif adapter.consumed[0] > 10000:
+                rec.add(cls, idx, sc, "bridge", "passed", "examined_%d" % adapter.consumed[0], shown, w)
+            elif took > 5.0:
+                rec.add(cls, idx, sc, "bridge", "passed", "slow_%.1f_s" % took, shown, w)
+            else:
+                rec.add(cls, idx, sc, "bridge", "refused", "capped", shown, w)
+        finally:
+            w.close()
+
+
+def c_memory_caps(rec, rng, n, factory):
+    cls = "memory_caps"
+    for _ in range(n):
+        idx = rec.next_case(cls)
+        sc = rng.choice(["pending_flood", "pending_flood", "record_eviction_replay", "audit_cap", "observation_flood", "observation_flood"])
+        try:
+            _memory_case(rec, rng, cls, idx, sc, factory)
+        except Exception as exc:  # noqa: BLE001 - a fault of the harness itself must show up, not hide
+            rec.add(cls, idx, sc, "bridge", "error", "harness_" + type(exc).__name__, sc)
+
+
+_BOX_CHECK = ((0.3, 1.0), (-0.1, 0.1), (0.4, 1.5))
+_ARM_JOINT = {"pos_min": -1.2, "pos_max": 1.2, "vel_max": 10.0, "force_max": 10.0}
+_ARM: dict = {}
+
+
+def _arm_classes():
+    if not _ARM:
+        from ragleap_physical.adapters import DryRun, FakeArmAdapter
+
+        class Traced(FakeArmAdapter):
+            """The arm, with every real tick of its tip recorded. A dry run works on a copy and is not recorded."""
+
+            def __init__(self, *a, **k):
+                super().__init__(*a, **k)
+                self.trace = []
+
+            def _tick(self, pos, vel, target):
+                accs = super()._tick(pos, vel, target)
+                if pos is self.pos:
+                    self.trace.append(self._site(self.pos))
+                return accs
+
+        def report(real, **sites):
+            return DryRun(real.final_pos, real.max_abs_vel, real.max_abs_force, real.reached_time, per_joint=real.per_joint, **sites)
+
+        class Liar(Traced):
+            def dry_run(self, *a):
+                return report(super().dry_run(*a), site_min=(0.5, 0.0, 0.9), site_max=(0.9, 0.0, 1.0))
+
+        class Excursion(Traced):
+            def dry_run(self, *a):
+                real = super().dry_run(*a)
+                return report(real, site_min=(real.site_min[0], real.site_min[1], 0.1), site_max=real.site_max)
+
+        class Silent(Traced):
+            def dry_run(self, *a):
+                return report(super().dry_run(*a))
+
+        _ARM.update(honest=Traced, liar=Liar, excursion=Excursion, silent=Silent)
+    return _ARM
+
+
+def _outside(point):
+    return any(not lo <= v <= hi for v, (lo, hi) in zip(point, _BOX_CHECK))
+
+
+def c_dry_run_workspace(rec, rng, n, factory):
+    cls = "dry_run_workspace"
+    kinds = _arm_classes()
+    which = {"end_outside": "honest", "path_excursion_reported": "excursion", "dry_run_lies": "liar", "silent_dry_run": "silent", "random_move": "honest"}
+    for _ in range(n):
+        idx = rec.next_case(cls)
+        sc = rng.choice(["end_outside", "path_excursion_reported", "dry_run_lies", "dry_run_lies", "silent_dry_run", "random_move", "random_move"])
+        adapter = kinds[which[sc]]()
+        joint, value, lo, hi, by = "joint_1", 0.5, 0.45, 0.55, 6.0
+        if sc == "end_outside":
+            value, lo, hi = 1.0, 0.95, 1.05
+        elif sc == "dry_run_lies":
+            value, lo, hi, by = 1.0, 0.95, 1.05, 8.0
+        elif sc == "random_move":
+            joint, value = rng.choice(["joint_1", "joint_2"]), round(rng.uniform(-1.2, 1.2), 3)
+            lo, hi = value - 0.05, value + 0.05
+        shown = "%s %s=%.3f" % (sc, joint, value)
+        config = {"envelope_version": 0, "allowed_commands": ["set_position_target"],
+                  "targets": {"joint_1": dict(_ARM_JOINT), "joint_2": dict(_ARM_JOINT)},
+                  "workspace": {"x": [0.3, 1.0], "y": [-0.1, 0.1], "z": [0.4, 1.5]},
+                  "rate": {"max_commands_per_s": 5}, "episode": {"max_sim_time_s": 60, "max_steps": 100000}, "on_violation": "reject"}
+        bridge = factory(adapter, Envelope(config), Clock(), Capability.CONTROL, {})
+        try:
+            p = bridge.propose(requested_by=REQUESTER, target=joint, command="set_position_target", value=value, unit="rad",
+                               expected_outcome=ExpectedOutcome(joint, "pos", lo, hi, "rad", by))
+            bridge.approve(p, APPROVER)
+        except PhysicalError as exc:
+            rec.add(cls, idx, sc, "bridge", "refused", getattr(exc, "code", None) or type(exc).__name__, shown)
+            continue
+        v, c = attempt(lambda: bridge.apply(p))
+        trace = adapter.trace
+        first_out = next((i for i, pt in enumerate(trace) if _outside(pt)), None)
+        after = 0 if first_out is None else len(trace) - first_out
+        must_stay = sc in ("end_outside", "path_excursion_reported", "silent_dry_run")
+        if must_stay and (adapter.applied or trace):
+            rec.add(cls, idx, sc, "bridge", "passed", "moved_before_refusal", shown)
+        elif first_out is not None and v == "accepted":
+            rec.add(cls, idx, sc, "bridge", "passed", "left_box_and_accepted", shown)
+        elif first_out is not None and after > 30:
+            rec.add(cls, idx, sc, "bridge", "passed", "no_stop_%d_ticks_after_exit" % after, shown)
+        elif v == "unclean":
+            rec.add(cls, idx, sc, "bridge", "unclean", c, shown)
+        else:
+            rec.add(cls, idx, sc, "bridge", "refused", c if v == "refused" else "stayed_inside", shown)
+
+
+class FlagJoint(HookedJoint):
+    """A joint that says whatever it is told about being simulated (or fails to say anything)."""
+
+    def __init__(self, flag):
+        super().__init__()
+        self.flag = flag
+
+    @property
+    def simulated(self):
+        if isinstance(self.flag, BaseException):
+            raise self.flag
+        return self.flag
+
+
+_FALSY = [False, None, 0, 0.0, "", [], {}, ()]
+_TRUTHY_NOT_BOOL = ["False", "no", "0", [0], 1, 2, 0.5, "simulated=False"]
+
+
+def _propose_approve_apply(bridge):
+    p = bridge.propose(requested_by=REQUESTER, target="joint_1", command="set_position_target", value=0.5, unit="rad",
+                       expected_outcome=ExpectedOutcome("joint_1", "pos", 0.45, 0.55, "rad", 5.0))
+    bridge.approve(p, APPROVER)
+    bridge.apply(p)
+
+
+def c_adapter_flag(rec, rng, n, factory):
+    cls = "adapter_flag"
+    for _ in range(n):
+        idx = rec.next_case(cls)
+        sc = rng.choice(["falsy", "falsy", "raises", "missing", "truthy_not_bool", "truthy_not_bool", "late_flip"])
+        if sc == "falsy":
+            flag = rng.choice(_FALSY)
+        elif sc == "raises":
+            flag = RuntimeError("no answer")
+        elif sc == "missing":
+            flag = AttributeError("no such attribute")
+        elif sc == "truthy_not_bool":
+            flag = rng.choice(_TRUTHY_NOT_BOOL)
+        else:
+            flag = True
+        adapter = FlagJoint(flag)
+        shown = "%s %s" % (sc, type(flag).__name__ if isinstance(flag, BaseException) else short(flag))
+        try:
+            bridge = factory(adapter, Envelope(copy.deepcopy(CONFIG)), Clock(), Capability.CONTROL, {})
+        except Exception as exc:  # noqa: BLE001 - no bridge exists: the adapter was refused
+            rec.add(cls, idx, sc, "bridge", "refused", getattr(exc, "code", None) or type(exc).__name__, shown)
+            continue
+        if sc == "truthy_not_bool":
+            rec.add(cls, idx, sc, "bridge", "passed", "accepted_a_truthy_value", shown, known="S13-truthy-value")
+        elif sc == "late_flip":
+            adapter.flag = False
+            v, c = attempt(lambda: _propose_approve_apply(bridge))
+            if v == "accepted" and adapter.applied:
+                rec.add(cls, idx, sc, "bridge", "passed", "command_after_the_flag_changed", shown, known="S13-late-flip")
+            elif v == "unclean":
+                rec.add(cls, idx, sc, "bridge", "unclean", c, shown)
+            else:
+                rec.add(cls, idx, sc, "bridge", "refused", c if v == "refused" else "no_command", shown)
+        else:
+            rec.add(cls, idx, sc, "bridge", "passed", "accepted_" + sc, shown)
+
+
 RUNNERS = {"bad_values": c_bad_values, "wrong_targets": c_wrong_targets, "stale_or_reused_approvals": c_stale_or_reused,
            "self_approval": c_self_approval, "oversize_or_nested": c_oversize_nested, "bidi_and_control": c_bidi,
            "replay_after_expiry": c_replay, "stop_races": c_stop_races, "forbidden_access": c_forbidden,
            "console_auth": c_console_auth, "console_approval": c_console_approval, "console_input": c_console_input,
-           "random_sequences": c_random_sequences}
+           "random_sequences": c_random_sequences, "memory_caps": c_memory_caps, "dry_run_workspace": c_dry_run_workspace,
+           "adapter_flag": c_adapter_flag}
 
 
 # ---------------------------------------------------------------- controls
