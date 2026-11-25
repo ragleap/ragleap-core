@@ -73,6 +73,40 @@ logger = logging.getLogger(__name__)
 _TAG_SPECIAL_CHARS = r',.<>{}[]"\':;!@#$%^&*()-+=~| '
 
 
+def _strings(x):
+    """Every string inside a nested FT.INFO value (bytes decoded), so its shape (RESP2 lists, RESP3 maps) does not matter."""
+    if isinstance(x, bytes):
+        yield x.decode("utf-8", "replace")
+    elif isinstance(x, str):
+        yield x
+    elif isinstance(x, dict):
+        for k, v in x.items():
+            yield from _strings(k)
+            yield from _strings(v)
+    elif isinstance(x, (list, tuple)):
+        for v in x:
+            yield from _strings(v)
+
+
+def _tag_case_sensitive(info, name):
+    """True or False when FT.INFO shows the TAG field `name`; None when it cannot be told.
+
+    RediSearch TAG fields are case-insensitive unless created with CASESENSITIVE (0.7.0 did not set it, so
+    the tenants "acme" and "ACME" matched each other). Only a clear CASESENSITIVE flag counts as True."""
+    attrs = None
+    if isinstance(info, dict):
+        attrs = info.get("attributes", info.get(b"attributes"))
+    for attr in attrs or []:
+        words = list(_strings(attr))
+        if name in words and "TAG" in (w.upper() for w in words):
+            return "CASESENSITIVE" in (w.upper() for w in words)
+    return None
+
+
+def _s(value):
+    return value.decode("utf-8", "replace") if isinstance(value, bytes) else value
+
+
 def _escape_tag(value: str) -> str:
     """Escape RediSearch TAG special characters. Live-verified: an
     un-escaped UUID document_id (which contains hyphens) inside a TAG
@@ -187,14 +221,21 @@ class RedisBackend(VectorBackend):
         try:
             info = self._client.ft(self.index_name).info()
             self._tenant_field = "tenant_id" in repr(info)
+            if self._tenant_field and _tag_case_sensitive(info, "tenant_id") is not True:
+                logger.warning(
+                    f"RedisBackend: index '{self.index_name}' matches tenant_id without regard to case (it was "
+                    "created by ragleap-vectorstores 0.7.0 or older, or its flags could not be read). Results are "
+                    "checked for an exact tenant_id match, but a search can then return fewer than top_k hits. "
+                    "Create a new index_name (and re-ingest) to get a case-sensitive tenant_id field."
+                )
             logger.info(f"RedisBackend: index '{self.index_name}' already exists, reusing it")
             return
         except Exception:
             pass  # index doesn't exist yet - fall through and create it
 
         schema = (
-            TagField("document_id"),
-            TagField("tenant_id"),
+            TagField("document_id", case_sensitive=True),
+            TagField("tenant_id", case_sensitive=True),
             TextField("document_name"),
             NumericField("chunk_index"),
             NumericField("token_count"),
@@ -271,14 +312,19 @@ class RedisBackend(VectorBackend):
         q = (
             Query(f"{filter_clause}=>[KNN {top_k} @vector $vec AS score]")
             .sort_by("score")
-            .return_fields("text", "score", "document_id", "document_name", "chunk_index")
+            .return_fields("text", "score", "document_id", "document_name", "chunk_index", "tenant_id")
             .paging(0, top_k)
             .dialect(2)
         )
         res = self._client.ft(self.index_name).search(q, query_params={"vec": query_vec})
 
+        # Exact match on the filtered fields, whatever the index does with case: an index made by 0.7.0 or older
+        # treats "ACME" and "acme" as the same tag, and a chunk of another tenant must never be returned.
+        exact = {k: str(v) for k, v in (metadata_filter or {}).items() if k in ("document_id", "tenant_id")}
         results = []
         for doc in res.docs:
+            if any(_s(getattr(doc, k, None)) != want for k, want in exact.items()):
+                continue
             key = doc.id if isinstance(doc.id, str) else doc.id.decode()
             results.append({
                 "chunk_id": key,
@@ -320,9 +366,11 @@ class RedisBackend(VectorBackend):
         with self._lock:
             if self._client is not None:
                 from redis.commands.search.query import Query
-                q = Query(f"(@document_id:{{{_escape_tag(document_id)}}})").paging(0, 10000).dialect(2)
+                q = Query(f"(@document_id:{{{_escape_tag(document_id)}}})").return_fields("document_id").paging(0, 10000).dialect(2)
                 res = self._client.ft(self.index_name).search(q)
-                keys = [doc.id if isinstance(doc.id, str) else doc.id.decode() for doc in res.docs]
+                # exact match only: an index made by 0.7.0 or older matches document ids without regard to case
+                keys = [doc.id if isinstance(doc.id, str) else doc.id.decode()
+                        for doc in res.docs if _s(getattr(doc, "document_id", None)) == str(document_id)]
                 if keys:
                     self._client.delete(*keys)
             cur = self._conn.execute("DELETE FROM documents WHERE id = ?", (document_id,))

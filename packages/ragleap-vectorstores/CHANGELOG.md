@@ -5,6 +5,23 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-11-25
+
+### Behaviour changes (read first)
+- `RedisBackend` creates the `tenant_id` and `document_id` TAG fields case-sensitive (`CASESENSITIVE`). A search for tenant `ACME` no longer returns chunks of tenant `acme`.
+- `search_dense()` now also checks, in Python, that every returned chunk has exactly the requested `tenant_id` (and `document_id`). `delete_document()` deletes only chunks whose `document_id` is exactly the one given.
+- An index created by 0.7.0 or older keeps its case-insensitive field (RediSearch cannot change it). The backend logs a warning for it. Results are now checked exactly, so no other tenant's chunk is returned, but a search can return fewer than `top_k` hits when another tenant's id differs only in case. Use a new `index_name` and re-ingest to get the case-sensitive field.
+
+### Fixed
+- REAL BUG in 0.7.0, reproduced with the published 0.7.0 wheel on Redis Stack: two tenants whose ids differ only in case (`acme` and `ACME`; both are valid tenant ids in ragleap-rag) saw each other's chunks in `search_dense()`, because RediSearch TAG fields ignore case unless told otherwise.
+
+### Not verified
+- Only Redis Stack was run (the image `redis/redis-stack-server:latest`, 2026-11-25). The other four backends were read, not attacked with case-different tenant ids.
+
+### What this does not defend
+- The tenant tag is whatever the caller (for example `rag.for_tenant`) passes; this package does not authenticate anyone.
+- On an index made by 0.7.0 or older, chunk counts in `list_documents()` still match document ids without regard to case.
+
 ## [0.7.0] - 2026-11-12
 
 ### Added

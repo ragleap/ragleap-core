@@ -318,3 +318,44 @@ def test_redis_index_created_before_tenant_id_raises_on_a_tenant_filter(tmp_path
             b._client.ft(name).dropindex(delete_documents=True)
         except Exception:
             pass
+
+
+def test_tenants_whose_ids_differ_only_in_case_do_not_see_each_other(backend):
+    """Live (Redis Stack). Reproduced with the published 0.7.0: searching as ACME also returned acme's chunks."""
+    for tenant in ("acme", "ACME"):
+        doc = "doc-" + tenant
+        backend.insert_document(doc, tenant + ".txt", {"tenant_id": tenant})
+        backend.insert_chunk(doc, tenant + ".txt", 0, "secret of " + tenant, 3, [1.0, 0.1, 0.0], {"tenant_id": tenant})
+    for tenant in ("acme", "ACME"):
+        got = backend.search_dense([1.0, 0.1, 0.0], 5, {"tenant_id": tenant})
+        assert [r["document_name"] for r in got] == [tenant + ".txt"]
+
+
+def test_index_made_without_case_sensitive_tags_still_returns_only_the_exact_tenant(tmp_path):
+    """Live (Redis Stack). Builds an index the way 0.7.0 did (no CASESENSITIVE), then reuses it."""
+    import redis
+    from redis.commands.search.field import NumericField, TagField, TextField, VectorField
+    from redis.commands.search.index_definition import IndexDefinition, IndexType
+
+    suffix = uuid.uuid4().hex[:8]
+    name, prefix = f"legacy_idx_{suffix}", f"legacy:chunk:{suffix}:"
+    raw = redis.from_url(REDIS_TEST_URL, decode_responses=False)
+    raw.ft(name).create_index(
+        (TagField("document_id"), TagField("tenant_id"), TextField("document_name"), NumericField("chunk_index"),
+         NumericField("token_count"), TextField("text"),
+         VectorField("vector", "HNSW", {"TYPE": "FLOAT32", "DIM": 3, "DISTANCE_METRIC": "COSINE"})),
+        definition=IndexDefinition(prefix=[prefix], index_type=IndexType.HASH),
+    )
+    b = RedisBackend(redis_url=REDIS_TEST_URL, index_name=name, key_prefix=prefix, registry_path=str(tmp_path / "r.sqlite3"))
+    try:
+        b.init_schema(dimensions=3)
+        for tenant in ("acme", "ACME"):
+            b.insert_document("doc-" + tenant, tenant + ".txt", {"tenant_id": tenant})
+            b.insert_chunk("doc-" + tenant, tenant + ".txt", 0, "t", 1, [1.0, 0.1, 0.0], {"tenant_id": tenant})
+        got = b.search_dense([1.0, 0.1, 0.0], 5, {"tenant_id": "ACME"})
+        assert [r["document_name"] for r in got] == ["ACME.txt"]
+    finally:
+        try:
+            raw.ft(name).dropindex(delete_documents=True)
+        except Exception:
+            pass
