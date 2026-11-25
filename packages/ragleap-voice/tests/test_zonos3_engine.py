@@ -151,9 +151,10 @@ def test_roundtrip_and_server_command(box, start):
 @pytest.mark.parametrize("bad", [{"seed": "1"}, {"seed": True}, {"seed": -1}, {"seed": 2 ** 31}, {"color": 1}])
 def test_bad_options_are_refused_and_the_worker_survives(start, bad):
     eng = start()
-    with pytest.raises(EngineError):
+    p1 = pid_of(eng)
+    with pytest.raises(UnsupportedFeatureError):
         eng.run(tts(**bad))
-    assert eng.run(tts()).wav[:4] == b"RIFF"
+    assert eng.run(tts()).wav[:4] == b"RIFF" and pid_of(eng) == p1
 
 
 def test_server_error_is_reported_without_the_text(start):
@@ -206,3 +207,28 @@ def test_close_stops_the_server(box, start):
             return
         time.sleep(0.1)
     pytest.fail("the server is still running after close()")
+
+
+def pid_of(eng):
+    return eng._worker._proc.pid
+
+
+def test_options_and_text_length_are_checked_before_the_worker_is_asked():
+    eng = make_zonos3_engine()  # never loaded: a check that reached the worker would say so
+    for opts in ({"color": 1}, {"seed": "1"}, {"seed": True}, {"seed": -1}, {"seed": 2 ** 31}):
+        with pytest.raises(UnsupportedFeatureError):
+            eng.run(Request(kind="tts", language="hi", text="namaste", options=opts))
+    with pytest.raises(UnsupportedFeatureError):
+        eng.run(Request(kind="tts", language="hi", text="x" * 2001))
+    with pytest.raises(EngineError) as e:
+        eng.run(Request(kind="tts", language="hi", text="namaste"))
+    assert "not loaded" in str(e.value)
+
+
+def test_the_engine_checks_agree_with_the_worker_script():
+    import importlib.util
+    from ragleap_voice import zonos3_engine as ze
+    spec = importlib.util.spec_from_file_location("zonos3_worker_under_test", str(ze.SCRIPT))
+    w = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(w)
+    assert w.MAX_CHARS == ze.MAX_CHARS and tuple(w._OPTIONS) == tuple(ze._OPTIONS)

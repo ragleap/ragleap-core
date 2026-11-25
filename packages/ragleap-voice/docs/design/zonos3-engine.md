@@ -108,3 +108,14 @@ First run through the engine [measured: laptop CPU, WSL2, one run, seed 1, a clo
 - After close() no server process was left. After kill -9 of the worker the server was gone within 1 s (the Linux parent-death signal).
 
 Not done: no run through synthesize() with the engine registered and the model pulled into the cache (the folder was built by hand and checked against the lock); no GPU run through the engine; nobody has listened to the clips; Windows and macOS are untested (the parent-death hook is Linux only and the tests skip on Windows); the file-name quoting question of section 8, point 3, is still open.
+
+## 10. The resident Synthesizer on the real server (2026-11-25)
+
+Pull request 1534 added `Synthesizer` (synthesizer.py, not exported): it keeps the ZONOS3-Mini server running between calls, while `synthesize()` starts and stops it on every call [tested with the fake server; the real-server figures below are measured].
+
+Run against the real server [measured: laptop CPU, WSL2, one run, seed 1, clone of main at bed3997, short sentences, warm file cache, model pulled with `models pull` into an empty cache]:
+- first call (Hindi) 17.1 s for 2.20 s of audio, which includes about 11 s of server start-up; later calls 5.9 to 7.3 s for 2.0 to 2.3 s of audio (2.6 to 3.2 times real time, consistent with the earlier pooled 3.35 on this CPU). Plain `synthesize()` took about 15 s per clip.
+- one server process throughout, clips byte-identical to the clips of the raw server (SHA-256 prefix), no server left after `close()` or the context manager, and a call after `close()` raises `RagleapVoiceError`.
+- Flaw found: a bad option (for example `{"color": 1}`) failed inside the worker, the `Synthesizer` treated that as an unknown state and stopped the server, and the next call took 16.2 s to start it again. The engine now checks the option names, the seed range and the text length (2000 characters, a starting value) before the server is asked; these raise `UnsupportedFeatureError`, which the `Synthesizer` keeps the server for. The worker script still checks the same things, and a test compares the two sets of constants.
+
+So the object removes the restart cost and not the generation cost: on a CPU this is still not live speech, and a GPU is the lever (the Colab T4 runs of 2026-11-17 and 2026-11-24 gave a real-time factor of 0.13 to 0.17 with the raw server). Not done: any `Synthesizer` run on a GPU, any run under several threads, Windows and macOS.
