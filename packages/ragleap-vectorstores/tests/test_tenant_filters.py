@@ -141,6 +141,174 @@ def test_redis_unsupported_filter_key_raises_instead_of_being_ignored(redis_back
         redis_backend.search_dense(VEC, 5, {"foo": "bar"})
 
 
+def _hit(doc_id, tenant, key=None, name="a.txt", idx=0):
+    return types.SimpleNamespace(
+        id=key or f"k:{doc_id}:{idx}", text="t", score="0.1", document_id=doc_id, document_name=name,
+        chunk_index=str(idx), tenant_id=tenant,
+    )
+
+
+class _HitsFT:
+    def __init__(self, docs, log):
+        self.docs, self.log = docs, log
+
+    def search(self, q, query_params=None):
+        self.log.append(q.query_string())
+        return types.SimpleNamespace(docs=list(self.docs), total=len(self.docs))
+
+
+class _HitsRedis:
+    def __init__(self, docs):
+        self.docs, self.queries, self.deleted = docs, [], []
+
+    def ft(self, name):
+        return _HitsFT(self.docs, self.queries)
+
+    def delete(self, *keys):
+        self.deleted.extend(keys)
+
+
+def _backend_with_hits(tmp_path, docs):
+    b = RedisBackend(redis_url="redis://127.0.0.1:1/0", index_name="t_idx", registry_path=str(tmp_path / "r.sqlite3"))
+    b._client = _HitsRedis(docs)
+    return b
+
+
+def test_redis_search_drops_a_chunk_of_a_tenant_whose_id_differs_only_in_case(tmp_path):
+    # an index made by 0.7.0 or older returns both of these for the filter tenant_id=ACME
+    b = _backend_with_hits(tmp_path, [_hit("d1", "acme"), _hit("d2", "ACME"), _hit("d3", None)])
+    got = b.search_dense(VEC, 5, {"tenant_id": "ACME"})
+    assert [r["document_id"] for r in got] == ["d2"]
+
+
+def test_redis_search_exact_check_also_handles_bytes_values(tmp_path):
+    doc = _hit("d1", b"ACME")
+    b = _backend_with_hits(tmp_path, [doc, _hit("d2", b"acme")])
+    assert [r["document_id"] for r in b.search_dense(VEC, 5, {"tenant_id": "ACME"})] == ["d1"]
+
+
+def test_redis_search_exact_check_applies_to_document_id(tmp_path):
+    b = _backend_with_hits(tmp_path, [_hit("Doc1", "acme"), _hit("doc1", "acme")])
+    got = b.search_dense(VEC, 5, {"document_id": "doc1", "tenant_id": "acme"})
+    assert [r["document_id"] for r in got] == ["doc1"]
+
+
+def test_redis_search_without_filter_returns_everything_and_no_extra_keys(tmp_path):
+    b = _backend_with_hits(tmp_path, [_hit("d1", "acme"), _hit("d2", None)])
+    got = b.search_dense(VEC, 5)
+    assert len(got) == 2
+    assert set(got[0]) == {"chunk_id", "text", "similarity_score", "document_id", "document_name", "chunk_index"}
+
+
+def test_redis_search_asks_for_the_tenant_id_field(tmp_path):
+    b = _backend_with_hits(tmp_path, [])
+    seen = {}
+    real = _HitsFT.search
+
+    def spy(self, q, query_params=None):
+        seen["fields"] = list(q._return_fields)
+        return real(self, q, query_params)
+
+    _HitsFT.search = spy
+    try:
+        b.search_dense(VEC, 5, {"tenant_id": "acme"})
+    finally:
+        _HitsFT.search = real
+    assert "tenant_id" in seen["fields"]
+
+
+def test_redis_delete_removes_only_chunks_with_exactly_that_document_id(tmp_path):
+    b = _backend_with_hits(tmp_path, [_hit("Doc1", "x", key="k:upper"), _hit("doc1", "x", key="k:lower")])
+    b.delete_document("doc1")
+    assert b._client.deleted == ["k:lower"]
+
+
+def test_redis_new_index_has_case_sensitive_tenant_and_document_id_fields(tmp_path, monkeypatch):
+    import redis
+
+    created = {}
+
+    class _FT:
+        def info(self):
+            raise RuntimeError("no such index")
+
+        def create_index(self, schema, definition=None):
+            created["schema"] = schema
+
+    class _Client:
+        def execute_command(self, *a):
+            return [[b"name", b"search"]]
+
+        def ft(self, name):
+            return _FT()
+
+    monkeypatch.setattr(redis, "from_url", lambda *a, **k: _Client())
+    b = RedisBackend(redis_url="redis://127.0.0.1:1/0", index_name="t_idx", registry_path=str(tmp_path / "r.sqlite3"))
+    b.init_schema(3)
+    tags = {f.name: [str(x) for x in f.redis_args()] for f in created["schema"] if "TAG" in [str(x) for x in f.redis_args()]}
+    assert set(tags) == {"document_id", "tenant_id"}
+    assert all("CASESENSITIVE" in args for args in tags.values())
+
+
+@pytest.mark.parametrize("info,expected", [
+    ({"attributes": [[b"identifier", b"tenant_id", b"attribute", b"tenant_id", b"type", b"TAG", b"SEPARATOR", b",", b"CASESENSITIVE"]]}, True),
+    ({"attributes": [[b"identifier", b"tenant_id", b"attribute", b"tenant_id", b"type", b"TAG", b"SEPARATOR", b","]]}, False),
+    ({b"attributes": [{b"identifier": b"tenant_id", b"type": b"TAG", b"flags": [b"CASESENSITIVE"]}]}, True),
+    ({"attributes": [{"identifier": "tenant_id", "type": "TAG", "flags": []}]}, False),
+    ({"attributes": [[b"identifier", b"document_id", b"type", b"TAG", b"CASESENSITIVE"]]}, None),
+    ({"attributes": [[b"identifier", b"tenant_id", b"type", b"TEXT", b"CASESENSITIVE"]]}, None),
+    ({}, None),
+    ("not a dict", None),
+])
+def test_tag_case_sensitive_reads_ft_info_in_either_shape(info, expected):
+    from ragleap_vectorstores.redis_backend import _tag_case_sensitive
+    assert _tag_case_sensitive(info, "tenant_id") is expected
+
+
+@pytest.mark.parametrize("info,warns", [
+    ({"attributes": [[b"identifier", b"tenant_id", b"type", b"TAG", b"SEPARATOR", b","]]}, True),
+    ({"attributes": [[b"identifier", b"tenant_id", b"type", b"TAG", b"CASESENSITIVE"]]}, False),
+    ({"attributes": [[b"identifier", b"tenant_id", b"mystery", b"shape"]]}, True),  # flags cannot be read
+])
+def test_redis_existing_index_warns_unless_tenant_id_is_known_case_sensitive(tmp_path, monkeypatch, caplog, info, warns):
+    import logging
+    import redis
+
+    class _FT:
+        def info(self):
+            return info
+
+    class _Client:
+        def execute_command(self, *a):
+            return [[b"name", b"search"]]
+
+        def ft(self, name):
+            return _FT()
+
+    monkeypatch.setattr(redis, "from_url", lambda *a, **k: _Client())
+    b = RedisBackend(redis_url="redis://127.0.0.1:1/0", index_name="t_idx", registry_path=str(tmp_path / "r.sqlite3"))
+    with caplog.at_level(logging.WARNING):
+        b.init_schema(3)
+    assert ("without regard to case" in caplog.text) is warns
+
+
+def test_redis_delete_asks_for_the_document_id_field(tmp_path):
+    b = _backend_with_hits(tmp_path, [])
+    seen = {}
+    real = _HitsFT.search
+
+    def spy(self, q, query_params=None):
+        seen["fields"] = list(q._return_fields)
+        return real(self, q, query_params)
+
+    _HitsFT.search = spy
+    try:
+        b.delete_document("doc1")
+    finally:
+        _HitsFT.search = real
+    assert "document_id" in seen["fields"]
+
+
 # ---------------- OpenSearch (fake client, no server) ----------------
 
 class _Indices:
