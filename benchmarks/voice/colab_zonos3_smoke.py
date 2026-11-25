@@ -326,8 +326,8 @@ def main():
     summary = {"env": env_info, "rows": rows, "clips_ok": len(ok_rows), "clips_total": len(rows), "silent_clips": silent}
     (OUT / "zonos3_smoke.json").write_text(json.dumps(summary, ensure_ascii=False, indent=1))
     say("\nclips ok: %d of %d; silent (peak < 100): %s; results and WAVs in %s" % (len(ok_rows), len(rows), silent or "none", OUT))
-    say("Limits: one run, %d sentences per language, two stock voices, seed 1; nothing here says whether the speech is intelligible, natural,"
-        " in the right accent or expressive. That needs the round-trip script and human listeners. Do not commit the WAV files." % N)
+    say("Limits: one run, %d sentences per language, %d stock voice(s), seed 1; nothing here says whether the speech is intelligible, natural,"
+        " in the right accent or expressive. That needs the round-trip script and human listeners. Do not commit the WAV files." % (N, len(VOICES)))
 
 
 if __name__ == "__main__":
