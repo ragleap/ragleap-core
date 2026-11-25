@@ -4,9 +4,22 @@ All notable changes to `ragleap-voice` are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
+
+## [0.4.0] - 2026-11-25
+### Status
+- Still pre-alpha. First verified model: `whisper-large-v3` (not a default). Verified says the files are the pinned ones and the rules of `docs/verification-criteria.md` were followed; it does not say the model is accurate for any use. The Whisper engine declares 31 languages and no Indian one. Read speech only: no noisy or telephone audio has been measured. The ZONOS3-Mini engine and the `Synthesizer` are not exported, not registered by default, CPU only, and their model is unverified.
 ### Changed
-- The Whisper engine declares 31 languages instead of 9 (rule adopted 2026-11-24, open to revision: a tier 2 row of at least 60 clips whose 95% interval ends at or below 15%), from the sweep results in `coverage/stt.csv`. `transcribe()` accepts them and `engine="auto"` can route them to Whisper. A test derives the set from the file. Read speech only; no noisy or telephone audio, no voice-activity gate. Not in any release yet.
-- `whisper-large-v3` is marked `verified` in `models.toml` (not a default), on the maintainer's sign-off, with the evidence in `docs/verification-record-whisper-large-v3.md`: after the next release `transcribe()` runs it without `allow_unverified=True`. It says the files are the pinned ones and the rules were followed, not that the model is accurate for any use; the engine declares 31 languages, none Indian. The README sentence that every model is unverified must be updated in the release pull request.
+- `whisper-large-v3` is `verified` in `models.toml` on the maintainer's sign-off, with the evidence in `docs/verification-record-whisper-large-v3.md`. After `models pull whisper-large-v3`, `transcribe()` with the Whisper engine runs without `allow_unverified=True`. `default` stays false.
+- The Whisper engine declares 31 languages instead of 9 (a rule adopted on 2026-11-24 and open to revision: a tier 2 row of at least 60 clips whose 95% interval ends at or below 15%, from `coverage/stt.csv`; a test derives the set from the file). `transcribe()` accepts them and `engine="auto"` can route them to Whisper. Not declared: Hindi, Tamil, Telugu, Malayalam and Kannada (word error 26.8% to 111.4%), nor Danish, Hungarian, Arabic or Korean (just above the threshold).
+### Added
+- Manifest entry `zonos3-mini` (unverified, not a default) with a lock of 15 files: the weights, the speaker encoder and, for four stock voices (Hindi and Telugu), the audio clip with its reference codes and speaker embedding. The origin and consent of those recordings are not stated in the files read. The lock does not cover the native server binary.
+- `ragleap_voice.zonos3_engine.make_zonos3_engine()`: a worker engine for ZONOS3-Mini (Hindi and Telugu, stock voices only, no cloning). Not exported and not registered. It starts the operator-built `zonos3-server` on 127.0.0.1 from the verified folder; options and text length are checked before the server is asked.
+- `ragleap_voice.synthesizer.Synthesizer`: keeps that server running between calls (not exported). On one laptop CPU the first call took about 17 s including start-up and later calls about 6 s for 2 s of audio.
+- `down3`, `up3`, `Down3Stream` and `Up3Stream` (3:1 resampling building blocks, not exported).
+- Coverage data: `coverage/stt.csv` now has 107 rows (81 for Whisper, tier 2, with intervals) and `coverage/tts.csv` 33 rows (tier 1, including ZONOS3-Mini in 13 languages). Both ship in the wheel.
+### Documentation and benchmarks
+- Results under `benchmarks/voice/`, each one run on Google Colab (or one laptop) with its limits stated in the README: a Whisper large-v3 sweep over 65 more FLEURS languages (with the finding that the harness character error is wrong for Mandarin and Cantonese because the references have spaces between characters), ZONOS3-Mini round trips in five Indian and eight world languages (the last with a control: the same recogniser on real recordings), and the ZONOS3-Mini server on a laptop CPU.
+- `docs/verification-record-whisper-large-v3.md`, `docs/design/zonos3-engine.md` (sections 1 to 10), `docs/zonos3-mini-licence-notes.md` and the language rule in `docs/design/coverage-matrix.md`.
 
 ## [0.3.6] - 2026-11-08
 ### Status
