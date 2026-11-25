@@ -760,3 +760,35 @@ Limits (read before quoting any number):
 - One system and one run per language. Whether the model saw FLEURS test data in training was not assessed.
 - WER uses normalizer version 1, which does not unify numbers and digits. The recomputed CER uses the normalisation above. Language configurations are those of FLEURS (for example `cmn_hans_cn` for Mandarin, `nb_no` for Norwegian, `fil_ph` for Tagalog).
 - Not a comparison with any other model: only the Indian languages were also measured with another model (see above).
+
+## TTS round trip: ZONOS3-Mini in eight world languages (first measurement, with a control)
+
+The same idea as the sections above (the text of a FLEURS sentence is synthesized and read back by a recogniser), now for the languages in the ZONOS3-Mini stock voices that the earlier runs did not cover, and with a control: the real FLEURS recording of each sentence is read back by the same recogniser, so its own error on human speech sits next to its error on synthetic speech. Scripts: `colab_zonos3_smoke.py` with `Z_WORLD=1` (eight languages, one stock voice each speaking its own language) and `colab_zonos3_world_judge.py`. The rows are in `packages/ragleap-voice/coverage/tts.csv` at tier 1.
+
+| Language (server code) | Voice | Round-trip error, synthetic | Same recogniser on real speech (same sentences) |
+|---|---|---|---|
+| English (en_us) | Savannah | 2.2% WER | 5.5% |
+| French (fr_fr) | Gaspard (male; the only French voice) | 5.0% WER | 11.7% |
+| German (de) | Liesel | 3.0% WER | 2.0% |
+| Spanish (es) | Ximena | 1.0% WER | 2.4% |
+| Italian (it) | Ginevra | 1.5% WER | 2.5% |
+| Portuguese (pt_br) | Leonor | 1.0% WER | 4.1% |
+| Mandarin (cmn) | Meilin | 0.7% CER* | 1.8% |
+| Korean (ko) | Seoyeon | 13.8% WER | 10.1% |
+
+Note on CER*: character error rate after Unicode NFKC, lower case, and removing spaces and punctuation from both sides (the harness CER counts the spaces FLEURS puts between Chinese characters; see the sweep section).
+
+Method: Colab Tesla T4, seed 1, 10 sentences per language (the first 10 of the FLEURS `test` split that pass a language-aware filter: no digits; 6 to 30 words, for Mandarin 10 to 80 characters; no Latin letters for Mandarin and Korean). Code revision 96d9e0ec1e (MIT) built as a CUDA server (restored from the saved build of the earlier run: the first use of that restore, which worked), weights revision d2d142a86b (Apache-2.0 per the model card). Language codes are those of the server's `registries/languages.json`. The recogniser is Whisper large-v3 (`Systran/faster-whisper-large-v3` at `edaa852ec7`, pulled with `models pull`, float16, beam 5, temperature 0, language given; harness commit on main `bed399721c`).
+
+What it shows:
+- All 80 clips came out and none was silent. Generation ran at a real-time factor of 0.13 to 0.17 per clip (median 0.13 to 0.14 per language) on the T4 with the GPU build.
+- Read back, six languages are between 1% and 5% word error and Mandarin is 0.7% character error; Korean is 13.8%. Only German (3.0 against 2.0) and Korean (13.8 against 10.1) are above their control, by a few points on 10 sentences, which cannot be told from noise.
+- A synthetic figure below the control does not mean the synthetic speech is better than human speech: clean, evenly paced speech is easier for a recogniser than varied real recordings. It says the clips were intelligible to this recogniser.
+- Some counted errors are scoring artifacts: a number written as a word and read back as digits (English), a proper name (Spanish). In the worst Korean clip the recogniser wrote a different word (a weekday) where the reference has a verb form; whether the voice or the recogniser is at fault was not established.
+- Loudness differs by voice (RMS per clip: English -29 to -34 dBFS, French -26 to -31, Mandarin -20 to -27, the other five -16 to -24); the cause was not investigated. A phone use would need level normalisation.
+
+Limits specific to this measurement:
+- 10 sentences per language, one run, one seed, one stock voice per language: no interval, and differences between languages are partly noise.
+- A strong recogniser can read a mispronounced word back correctly, so a low error is not proof of correct pronunciation. Naturalness, accent, emotion and voice similarity were not measured and nobody listened. The WAV files are not committed.
+- The origin, licence and consent of the stock voice recordings are not stated in the files read (see docs/zonos3-mini-licence-notes.md). The model is not verified and not in the default path.
+- Not comparable with the Indic sections: different recogniser, different sentence filter, a control that those runs lacked.
