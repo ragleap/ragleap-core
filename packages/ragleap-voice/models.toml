@@ -2,9 +2,18 @@
 # Rules (enforced by tests/test_licences.py):
 #  - default = true requires status = "verified", a pinned revision, a 64-hex sha256,
 #    and code_license / weights_license both on the allowlist.
-#  - Everything below is a LEAD from the 2026-10-10 research, NOT verified.
-#    Do not set status = "verified" until licence, languages and hash are checked at the source.
+#  - Entries are leads from the 2026-10-10 research and stay unverified, unless the entry's own comment says otherwise
+#    (whisper-large-v3: docs/verification-record-whisper-large-v3.md).
+#    Do not set status = "verified" until licence, languages and hash are checked at the source and the maintainer has signed off
+#    (docs/verification-criteria.md).
 
+# Verified 2026-11-25 on the maintainer's sign-off; evidence for criteria 1 to 7: docs/verification-record-whisper-large-v3.md.
+# Licence: this repository's card says mit (the repository has no licence file); the upstream model's own project has a LICENSE file with
+# the standard MIT text and says its code and weights are released under it; the upstream Hugging Face card says apache-2.0. Both are on
+# the allowlist; MIT is what the pinned repository and the upstream project state. Training-data rights are not stated on the pages read.
+# languages is left empty on purpose: the matrix holds what was measured (coverage/stt.csv, 81 rows; the engine declares the 31 that pass
+# the rule in docs/design/coverage-matrix.md section 7). "Verified" says the files are the pinned ones and the rules were followed; it
+# does not say the model is accurate for any use.
 [[model]]
 name = "whisper-large-v3"
 kind = "stt"
@@ -16,7 +25,7 @@ weights_license = "MIT"
 languages = []
 capabilities = ["streaming:unknown"]
 min_hardware = "unknown"
-status = "unverified"
+status = "verified"
 default = false
 
 [[model]]

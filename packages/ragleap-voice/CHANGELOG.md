@@ -6,6 +6,7 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 ### Changed
 - The Whisper engine declares 31 languages instead of 9 (rule adopted 2026-11-24, open to revision: a tier 2 row of at least 60 clips whose 95% interval ends at or below 15%), from the sweep results in `coverage/stt.csv`. `transcribe()` accepts them and `engine="auto"` can route them to Whisper. A test derives the set from the file. Read speech only; no noisy or telephone audio, no voice-activity gate. Not in any release yet.
+- `whisper-large-v3` is marked `verified` in `models.toml` (not a default), on the maintainer's sign-off, with the evidence in `docs/verification-record-whisper-large-v3.md`: after the next release `transcribe()` runs it without `allow_unverified=True`. It says the files are the pinned ones and the rules were followed, not that the model is accurate for any use; the engine declares 31 languages, none Indian. The README sentence that every model is unverified must be updated in the release pull request.
 
 ## [0.3.6] - 2026-11-08
 ### Status
