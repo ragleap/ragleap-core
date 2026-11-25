@@ -11,7 +11,7 @@ import pytest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-from ragleap_voice import EngineError, RagleapVoiceError, UnsupportedLanguageError  # noqa: E402
+from ragleap_voice import EngineError, RagleapVoiceError, UnsupportedFeatureError, UnsupportedLanguageError  # noqa: E402
 from ragleap_voice.cache import model_dir  # noqa: E402
 from ragleap_voice.errors import ModelNotVerifiedError  # noqa: E402
 from ragleap_voice.locks import lock_digest  # noqa: E402
@@ -148,7 +148,7 @@ def test_a_worker_error_stops_the_server_and_the_next_call_starts_it_again(env, 
     say(s, env)
     p1 = pid(env)
     with pytest.raises(EngineError):
-        say(s, env, options={"color": 1})
+        say(s, env, text="boom")
     assert gone(p1)
     r = say(s, env)
     assert r.wav[:4] == b"RIFF" and pid(env) != p1
@@ -178,3 +178,14 @@ def test_a_closed_object_cannot_be_entered_again(env):
     s.close()
     with pytest.raises(RagleapVoiceError):
         s.__enter__()
+
+
+def test_a_bad_option_keeps_the_server(env, make):
+    s = make()
+    say(s, env)
+    p1 = pid(env)
+    with pytest.raises(UnsupportedFeatureError):
+        say(s, env, options={"color": 1})
+    assert alive(p1)
+    say(s, env)
+    assert pid(env) == p1
