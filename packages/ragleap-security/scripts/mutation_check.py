@@ -20,6 +20,7 @@ from pathlib import Path
 PKG = Path(__file__).resolve().parent.parent
 S, A, K, L = "src/ragleap_security/scope.py", "src/ragleap_security/audit.py", "src/ragleap_security/secrets.py", "src/ragleap_security/limits.py"
 NT = "src/ragleap_security/net.py"
+CY = "src/ragleap_security/canary.py"
 KY, CR, RL, IN = ("src/ragleap_security/keys.py", "src/ragleap_security/crypto.py",
                   "src/ragleap_security/ratelimit.py", "src/ragleap_security/integrity.py")
 
@@ -212,6 +213,77 @@ MUTATIONS = [
     ("net: the connection is not closed", [(NT, "            resp.close()\n            conn.close()\n", "            resp.close()\n")]),
     ("net: the deadline is not checked before a hop", [(NT, "        if deadline.expired():\n            raise NetError(\"timeout\", t.host)\n        try:\n            found", "        try:\n            found")]),
     ("net: the status of a redirect without Location is followed", [(NT, 'if status in _REDIRECTS and resp_headers.get("location"):', "if status in _REDIRECTS:")]),
+    # ---- canary (0.4.0, design #1569)
+    ("canary: token pattern is one character short", [(CY, '_TOKEN = re.compile(r"rlc1_[a-z2-7]{26}")', '_TOKEN = re.compile(r"rlc1_[a-z2-7]{25}")')]),
+    ("canary: non-canonical spelling accepted", [(CY, "if len(raw) != ID_BYTES + MAC_BYTES or _encode(raw) != token:", "if len(raw) != ID_BYTES + MAC_BYTES:")]),
+    ("canary: MAC does not cover the id", [(CY, 'b"rlc1" + canary_id, hashlib.sha256', 'b"rlc1", hashlib.sha256')]),
+    ("canary: MAC not checked", [(CY, "if raw is None or not self._mac_valid(raw[:ID_BYTES], raw[ID_BYTES:]):", "if raw is None:")]),
+    ("canary: any MAC is valid", [(CY, "        return ok\n", "        return True\n")]),
+    ("canary: only the last ring key counts", [(CY, "ok |= hmac.compare_digest(self._mac(key, canary_id), mac)", "ok = hmac.compare_digest(self._mac(key, canary_id), mac)")]),
+    ("canary: only the first ring key is tried", [(CY, "return [self._keys.get(k) for k in self._keys.key_ids]", "return [self._keys.get(self._keys.key_ids[0])]")]),
+    ("canary: issue uses the wrong ring key", [(CY, "return self._keys if type(self._keys) is Key else self._keys.active", "return self._keys if type(self._keys) is Key else self._keys.get(self._keys.key_ids[-1])")]),
+    ("canary: random id is constant", [(CY, "raw_id = os.urandom(ID_BYTES)", "raw_id = b'\\x00' * ID_BYTES")]),
+    ("canary: label not checked on issue", [(CY, "        _check_label(label)\n        key = self._active()", "        key = self._active()")]),
+    ("canary: label length limit off by one", [(CY, "[A-Za-z0-9_.:@-]{0,63}\\Z\")\n_ID_HEX", "[A-Za-z0-9_.:@-]{0,64}\\Z\")\n_ID_HEX")]),
+    ("canary: label type not checked", [(CY, "if not isinstance(value, str) or not _LABEL.match(value):", "if not isinstance(value, str):")]),
+    ("canary: source not checked on scan", [(CY, "        _check_label(source)\n", "")]),
+    ("canary: record keeps the wrong scope key", [(CY, "CanaryRecord(canary_id, scope.key, label, key.key_id, created)", "CanaryRecord(canary_id, scope.tenant, label, key.key_id, created)")]),
+    ("canary: per-scope cap not enforced", [(CY, "if not self._store.add(record, self.max_per_scope):", "if False:")]),
+    ("canary: cap error has another reason", [(CY, 'raise CanaryError("limit")', 'raise CanaryError("store_error")')]),
+    ("canary: canary kept when its audit write fails", [(CY, "self._store.remove(canary_id, scope.key)  # no canary without its audit record", "pass")]),
+    ("canary: issue store error not wrapped", [(CY, "        except Exception:\n            raise CanaryError(\"store_error\") from None\n        try:\n            self._record(\"canary.issued\"", "        except ZeroDivisionError:\n            raise CanaryError(\"store_error\") from None\n        try:\n            self._record(\"canary.issued\"")]),
+    ("canary: text type not checked", [(CY, "        if not isinstance(text, str):\n            raise CanaryError(\"invalid_argument\")\n        _check_label(source)", "        if False:\n            raise CanaryError(\"invalid_argument\")\n        _check_label(source)")]),
+    ("canary: size limit off by one", [(CY, 'surrogatepass")) > self.max_text_bytes:', 'surrogatepass")) >= self.max_text_bytes:')]),
+    ("canary: size counted in characters", [(CY, 'if len(text.encode("utf-8", "surrogatepass")) > self.max_text_bytes:', "if len(text) > self.max_text_bytes:")]),
+    ("canary: rate limit ignored", [(CY, 'if not getattr(decision, "allowed", False):', "if False:")]),
+    ("canary: text not normalised", [(CY, "normalised = _normalise(text)", "normalised = text")]),
+    ("canary: NFKC removed", [(CY, 'folded = unicodedata.normalize("NFKC", text)', "folded = text")]),
+    ("canary: format characters kept", [(CY, '!= "Cf"', '== "Cf"')]),
+    ("canary: case not folded", [(CY, ").casefold()", ")")]),
+    ("canary: expansion cap removed", [(CY, "if len(normalised) > _NORMALIZED_EXPANSION * self.max_text_bytes:", "if False:")]),
+    ("canary: repeated tokens counted once", [(CY, "counts[token] = counts.get(token, 0) + 1", "counts[token] = 1")]),
+    ("canary: valid tokens not counted against the cap", [(CY, "                valid += 1\n", "")]),
+    ("canary: cap off by one", [(CY, "if valid >= self.max_candidates:", "if valid > self.max_candidates:")]),
+    ("canary: truncation not flagged", [(CY, "                    truncated = True\n", "")]),
+    ("canary: unknown id not skipped", [(CY, "                if record is None:\n                    continue", "                if False:\n                    continue")]),
+    ("canary: broken scope key is fatal", [(CY, "                except ScopeError:\n                    continue", "                except ZeroDivisionError:\n                    continue")]),
+    ("canary: every valid token is own", [(CY, "if scope.covers(owner):", "if True:")]),
+    ("canary: ownership by equality", [(CY, "if scope.covers(owner):", "if scope == owner:")]),
+    ("canary: ownership reversed", [(CY, "if scope.covers(owner):", "if owner.covers(scope):")]),
+    ("canary: own count wrong", [(CY, "entry[1] += n", "entry[1] += 1")]),
+    ("canary: foreign count wrong", [(CY, "foreign_count += n", "foreign_count += 1")]),
+    ("canary: owners listed twice", [(CY, "if record.scope_key not in foreign_owners and len(foreign_owners) < MAX_OWNERS_IN_AUDIT:", "if len(foreign_owners) < MAX_OWNERS_IN_AUDIT:")]),
+    ("canary: owner list not capped", [(CY, "if record.scope_key not in foreign_owners and len(foreign_owners) < MAX_OWNERS_IN_AUDIT:", "if record.scope_key not in foreign_owners:")]),
+    ("canary: id list not capped", [(CY, "and len(foreign_ids) < MAX_OWNERS_IN_AUDIT:", ":")]),
+    ("canary: foreign hit always reported", [(CY, "        if foreign_count:\n            hits.append(", "        if True:\n            hits.append(")]),
+    ("canary: foreign hit shows the owner", [(CY, 'hits.append(CanaryHit("foreign", foreign_count, None, None, source))', 'hits.append(CanaryHit("foreign", foreign_count, foreign_ids[0], foreign_owners[0], source))')]),
+    ("canary: own hit loses its label", [(CY, 'CanaryHit("own", n, record.id, record.label, source)', 'CanaryHit("own", n, record.id, None, source)')]),
+    ("canary: truncation flag dropped", [(CY, "        hits.truncated = truncated\n", "")]),
+    ("canary: hit audit event not written", [(CY, '            self._record("canary.hit", scope, {"canary": record.id, "label": record.label, "source": source, "count": n})', "            pass")]),
+    ("canary: foreign audit event not written", [(CY, '            self._record("canary.foreign", scope, {"owners": foreign_owners, "canaries": foreign_ids,\n                                                   "source": source, "count": foreign_count})', "            pass")]),
+    ("canary: audit failure not turned into an error", [(CY, "        except Exception:  # AuditError, or anything the log raises: fail closed", "        except ZeroDivisionError:  # AuditError, or anything the log raises: fail closed")]),
+    ("canary: scan store error not wrapped", [(CY, "        except CanaryError:\n            raise\n        except Exception:\n            raise CanaryError(\"store_error\") from None\n\n        hits = Hits()", "        except CanaryError:\n            raise\n        except ZeroDivisionError:\n            raise CanaryError(\"store_error\") from None\n\n        hits = Hits()")]),
+    ("canary: revoke does not check the id shape", [(CY, "if not isinstance(canary_id, str) or not _ID_HEX.match(canary_id):", "if False:")]),
+    ("canary: revoke ignores a wrong scope", [(CY, "removed = self._store.remove(canary_id, scope.key)", "removed = self._store.remove(canary_id, self._store.get(canary_id).scope_key if self._store.get(canary_id) else scope.key)")]),
+    ("canary: revoke of an unknown id succeeds", [(CY, "        if not removed:\n            raise CanaryError(\"no_such_canary\")", "        if False:\n            raise CanaryError(\"no_such_canary\")")]),
+    ("canary: revoke not audited", [(CY, '        self._record("canary.revoked", scope, {"canary": canary_id})', "        pass")]),
+    ("canary: keys type not checked", [(CY, "if type(keys) not in (Key, KeyRing):", "if False:")]),
+    ("canary: store type not checked", [(CY, "if not isinstance(store, CanaryStore):", "if False:")]),
+    ("canary: audit type not checked", [(CY, "if audit is not None and not isinstance(audit, AuditLog):", "if False:")]),
+    ("canary: rate limiter type not checked", [(CY, 'if rate_limiter is not None and not callable(getattr(rate_limiter, "check", None)):', "if False:")]),
+    ("canary: ceiling not checked", [(CY, "or not 1 <= value <= ceiling:", "or not 1 <= value:")]),
+    ("canary: bool accepted as a limit", [(CY, "if isinstance(value, bool) or not isinstance(value, int) or not 1 <=", "if not isinstance(value, int) or not 1 <=")]),
+    ("canary: default text limit changed", [(CY, "DEFAULT_MAX_TEXT_BYTES = 1 << 20", "DEFAULT_MAX_TEXT_BYTES = 1 << 21")]),
+    ("canary: memory store cap off by one", [(CY, "if self._per_scope.get(record.scope_key, 0) >= limit or record.id in self._rows:", "if self._per_scope.get(record.scope_key, 0) > limit or record.id in self._rows:")]),
+    ("canary: memory store accepts a duplicate id", [(CY, "or record.id in self._rows:", ":")]),
+    ("canary: memory store removes another scope's record", [(CY, "if rec is None or rec.scope_key != scope_key:", "if rec is None:")]),
+    ("canary: memory store does not free room on remove", [(CY, "            self._per_scope[scope_key] -= 1\n", "")]),
+    ("canary: sqlite store cap off by one", [(CY, "if n >= limit or conn.execute(", "if n > limit or conn.execute(")]),
+    ("canary: sqlite store accepts a duplicate id", [(CY, 'or conn.execute("SELECT 1 FROM canaries WHERE id = ?", (record.id,)).fetchone():', ":")]),
+    ("canary: sqlite store removes another scope's record", [(CY, '"DELETE FROM canaries WHERE id = ? AND scope_key = ?", (canary_id, scope_key))', '"DELETE FROM canaries WHERE id = ? AND ? = ?", (canary_id, scope_key, scope_key))')]),
+    ("canary: sqlite remove always reports success", [(CY, "return cur.rowcount == 1", "return True")]),
+    ("canary: sqlite count ignores the scope", [(CY, 'conn.execute("SELECT COUNT(*) FROM canaries WHERE scope_key = ?", (scope_key,)).fetchone()[0]\n        finally:', 'conn.execute("SELECT COUNT(*) FROM canaries").fetchone()[0]\n        finally:')]),
+    ("canary: sqlite file readable by others", [(CY, "os.O_RDWR | os.O_CREAT, 0o600", "os.O_RDWR | os.O_CREAT, 0o644")]),
 ]
 
 
@@ -255,8 +327,8 @@ def main() -> int:
                     if text.count(old) != 1:
                         return name, None
                     p.write_text(text.replace(old, new))
-                # a mutation of net.py can only be caught by the net tests, which are also much faster to run
-                return name, not run_tests(work, "tests/test_net.py" if name.startswith("net:") else "tests")
+                # a mutation of net.py or canary.py can only be caught by their own tests, which are also much faster to run
+                return name, not run_tests(work, "tests/test_net.py" if name.startswith("net:") else "tests/test_canary.py" if name.startswith("canary:") else "tests")
             finally:
                 shutil.rmtree(work, ignore_errors=True)
 
