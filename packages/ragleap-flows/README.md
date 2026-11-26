@@ -49,6 +49,28 @@ number never equals a `True`, and a missing value satisfies no comparison (not e
 to route tool calls yourself, for example through a governed, per-tenant dispatcher: `dispatch(scope, name, arguments)`
 must return a `ToolResult`. Any `ragleap_agents` state store works (`InMemoryStateStore`, `SQLiteStateStore`).
 
+### Governed dispatch (ragleap-tools 0.6.0 or newer)
+
+`GovernedToolkit.call` has the shape `dispatch` expects, so the owner's rules apply to every tool step of a flow:
+a per-tenant allowlist (deny by default), an approval hook for chosen tools, and a rate limit per tenant. The
+flow's own `approval` step and the owner's approval hook are separate: the flow asks its checkpoint first, and a
+tool in `require_approval` is still refused when no hook says yes.
+
+    from ragleap_tools import GovernedToolkit
+    from ragleap_tools.governed import RateLimit
+
+    governed = GovernedToolkit(
+        toolkit,
+        allow_for=lambda scope: ["lookup", "send"] if scope.tenant == "acme" else ["lookup"],
+        require_approval=["send"],
+        approve=lambda scope, tool, arguments: arguments.get("to", "").endswith("@acme.test"),
+        rate_limit=RateLimit(calls=30, per_seconds=60),
+    )
+    runner = rf.FlowRunner(flow, dispatch=governed.call)
+
+A refused step ends the run as `failed` with the stop reason `tool_failed:<step id>`, and the tool does not run.
+Not covered: the owner's hook decides who may approve; the flow does not check who the approver is.
+
 ## Multi-tenant rules
 
 1. Every call takes exactly a `Scope`. There is no unscoped run; single-tenant use is one fixed scope.

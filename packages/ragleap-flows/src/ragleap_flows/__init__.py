@@ -10,7 +10,7 @@ from ragleap_flows.flow import (DEADLINE_SECONDS, MAX_FLOW_BYTES, MAX_INPUT_BYTE
                                 MAX_STEPS, Flow, FlowError, from_dict, from_json)
 from ragleap_flows.runner import FlowResult, FlowRunner
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 __all__ = [
     "DEADLINE_SECONDS", "Flow", "FlowError", "FlowResult", "FlowRunner", "MAX_FLOW_BYTES", "MAX_INPUT_BYTES",

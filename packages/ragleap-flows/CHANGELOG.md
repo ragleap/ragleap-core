@@ -3,9 +3,28 @@
 All notable changes to `ragleap-flows` are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.1.1] - 2026-11-26
+
+### Behaviour changes (read first)
+- None. No code in `src/` changed; this release adds tests and documentation.
+
+### Added
+- `tests/test_governed_dispatch.py`: 7 tests that run flows with a real `GovernedToolkit` (ragleap-tools 0.6.0) as the dispatcher: the run's exact scope reaches the dispatcher, a per-tenant allowlist decides which steps run (and the tool does not run for another tenant), a failing allowlist denies every step, the owner's approval hook is separate from the flow's own approval, a rate limit is per tenant across runs, and governed events carry the scope and no flow data.
+- README: a "Governed dispatch" section with an example.
+- `scripts/mutation_check.py`: 4 more mutations on the dispatch path (72 in total).
+
+### Fixed
+- Documentation: the design note said `GovernedToolkit` was unreleased; it is released in ragleap-tools 0.6.0. A stray process sentence was removed from the 0.1.0 entry below.
+
+### Not verified
+- A real model or tool provider, Windows and macOS.
+
+### What this does not defend
+- Same as 0.1.0. The owner's approval hook decides who may approve; flows does not check who the approver is.
+
 ## [0.1.0] - 2026-11-23
 
-First release. The PR block replaces 2026-11-20 with the UTC date of that day.
+First release.
 
 ### Added
 
