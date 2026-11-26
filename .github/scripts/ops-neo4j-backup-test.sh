@@ -105,10 +105,10 @@ kind create cluster --name "$CL" --image "$KIND_NODE_IMAGE" --wait 180s
 K8S_VER=$(kubectl get nodes -o jsonpath='{.items[0].status.nodeInfo.kubeletVersion}')
 echo "kubernetes $K8S_VER"
 
-cypher() { kubectl -n "$NS" exec deploy/ragleap-neo4j -- cypher-shell -u "$NEO_USER" -p "$NEO_PW" "$1"; }
+cypher() { kubectl -n "$NS" exec --pod-running-timeout=10s deploy/ragleap-neo4j -- cypher-shell -u "$NEO_USER" -p "$NEO_PW" "$1"; }
 cypher_retry() {
   local i out=""
-  for i in $(seq 1 30); do
+  for i in $(seq 1 12); do
     if out=$(cypher "$1" 2>&1); then printf '%s\n' "$out"; return 0; fi
     sleep 5
   done
@@ -131,8 +131,12 @@ poll_start() { # logfile: one line per second, "<epoch> <spec.replicas>"
 history() { awk '{ if ($2 != p) { print "  " $0; p = $2 } }' "$1"; }
 saw_zero() { awk '$2 == "0" { n++ } END { exit !n }' "$1"; }
 saw_cycle() { awk '$2 == "0" { z = 1 } z && $2 == "1" { ok = 1 } END { exit !ok }' "$1"; }
-neo4j_available() { kubectl -n "$NS" wait --for=jsonpath='{.status.availableReplicas}'=1 deploy/ragleap-neo4j --timeout=300s; }
-job_logs() { kubectl -n "$NS" logs "job/$1" --all-containers --prefix --tail=40 2>&1 || true; }
+neo4j_available() { kubectl -n "$NS" wait --for=jsonpath='{.status.availableReplicas}'=1 deploy/ragleap-neo4j --timeout=180s; }
+job_logs() { # job name: logs of every container of the job pods, found by label, never waiting long
+  kubectl -n "$NS" get pods -l "job-name=$1" -o jsonpath='{range .items[*].status.containerStatuses[*]}{.name}{" restarts="}{.restartCount}{" state="}{.state.waiting.reason}{.state.terminated.reason}{" last="}{.lastState.terminated.reason}{"/"}{.lastState.terminated.exitCode}{"\n"}{end}' 2>&1 || true
+  kubectl -n "$NS" logs -l "job-name=$1" --all-containers --prefix --tail=25 --ignore-errors --pod-running-timeout=10s 2>&1 | grep -v 'Files: ' || true
+  kubectl -n "$NS" logs -l "job-name=$1" -c dump --previous --prefix --tail=15 --ignore-errors --pod-running-timeout=10s 2>&1 | grep -v 'Files: ' || true
+}
 
 echo "== deploy neo4j from the real manifests"
 for f in namespace serviceaccounts neo4j-pvc backup-pvc neo4j-secret neo4j-deployment; do
@@ -152,7 +156,7 @@ if [ "$M" = "1" ]; then ok "marker row written and readable"; else bad "marker r
 echo "== leg 1: normal backup"
 poll_start "$WORK/replicas-ok.log"
 kubectl -n "$NS" create job bk-ok --from=cronjob/"$CJ"
-if kubectl -n "$NS" wait --for=condition=complete job/bk-ok --timeout=600s; then
+if kubectl -n "$NS" wait --for=condition=complete job/bk-ok --timeout=300s; then
   ok "leg 1: backup job completed"
 else
   bad "leg 1: backup job did not complete"; diag
@@ -197,7 +201,7 @@ kubectl apply -f "$FAILCRON"
 poll_start "$WORK/replicas-fail.log"
 kubectl -n "$NS" create job bk-fail --from=cronjob/"$CJ"
 CYCLE=0
-for i in $(seq 1 120); do
+for i in $(seq 1 60); do
   if saw_cycle "$WORK/replicas-fail.log"; then CYCLE=1; break; fi
   sleep 3
 done
@@ -209,12 +213,12 @@ if neo4j_available; then ok "leg 2: neo4j is 1 available replica after the faile
 dump_failed() {
   local s f c
   s=$(kubectl -n "$NS" get pods -l job-name=bk-fail -o jsonpath='{range .items[*].status.containerStatuses[?(@.name=="dump")]}{.restartCount}|{.state.terminated.exitCode}|{.lastState.terminated.exitCode}{"\n"}{end}' 2>/dev/null || true)
-  if [ -n "$s" ] && awk -F'|' '($1 + 0) > 0 || ($2 != "" && $2 != "0") || ($3 != "" && $3 != "0") { f = 1 } END { exit !f }' <<< "$s"; then return 0; fi
+  if [ -n "$s" ] && awk -F'|' '($1 + 0) > 0 || ($2 != "" && $2 != "0") || ($3 != "" && $3 != "0") { f = 1 } END { exit !f }' <<< "$s"; then echo "dump failure seen in the pod status (restarts|exit|last exit): $(tr '\n' ' ' <<< "$s")"; return 0; fi
   c=$(kubectl -n "$NS" get job bk-fail -o jsonpath='{.status.conditions[?(@.type=="Failed")].status}' 2>/dev/null || true)
-  [ "$c" = "True" ]
+  [ "$c" = "True" ] && echo "dump failure seen as the job condition Failed=True"
 }
 FAILED=0
-for i in $(seq 1 80); do
+for i in $(seq 1 40); do
   if dump_failed; then FAILED=1; break; fi
   sleep 3
 done
