@@ -53,7 +53,7 @@ spec:
                 - -c
                 - |
                   set -e
-                  kubectl scale deployment ragleap-neo4j --replicas=0
+                  kubectl scale deployment ragleap-neo4jx --replicas=0
                   kubectl wait --for=delete pod -l app=ragleap-neo4j --timeout=120s
             # Native sidecar (restartPolicy: Always, stable since k8s 1.29).
             # Starts alongside the dump container below and is only
