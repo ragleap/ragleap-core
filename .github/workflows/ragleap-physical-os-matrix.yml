@@ -2,6 +2,7 @@ name: ragleap-physical Windows and macOS
 
 # Informative for now (continue-on-error): it shows how the test suite behaves on Windows and macOS runners.
 # It becomes blocking only after its results are understood. Additive: this file does not change ci.yml, which the other teams share.
+# A normal run takes about a minute: the 12-minute limit and the 120 s stack dump make a hung test visible instead of costing 30 minutes.
 on:
   pull_request:
     paths:
@@ -25,7 +26,7 @@ jobs:
   tests:
     name: ragleap-physical ${{ matrix.os }} (${{ matrix.python-version }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: 12
     continue-on-error: true
     defaults:
       run:
@@ -62,4 +63,4 @@ jobs:
         env:
           CI: "true"
         run: |
-          python -m pytest -v -p no:cacheprovider -rxXs
+          python -m pytest -v -p no:cacheprovider -o faulthandler_timeout=120 -rxXs
