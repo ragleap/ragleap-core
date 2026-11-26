@@ -91,11 +91,11 @@ spec:
                 - -c
                 - |
                   set -e
-                  trap 'touch /signal/backup-done' EXIT
                   TIMESTAMP=$(date +%Y%m%d-%H%M%S)
                   mkdir -p /backups/neo4j-${TIMESTAMP}
                   neo4j-admin database dump neo4j --to-path=/backups/neo4j-${TIMESTAMP}
                   echo "Backup written: neo4j-${TIMESTAMP}"
+                  touch /signal/backup-done
               volumeMounts:
                 - name: neo4j-data
                   mountPath: /data
