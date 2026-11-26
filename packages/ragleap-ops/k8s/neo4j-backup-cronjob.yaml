@@ -13,7 +13,7 @@ rules:
   - apiGroups: ["apps"]
     resources: ["deployments", "deployments/scale"]
     resourceNames: ["ragleap-neo4j"]
-    verbs: ["get", "patch"]
+    verbs: ["get"]
   - apiGroups: [""]
     resources: ["pods"]
     verbs: ["get", "list", "watch"]
