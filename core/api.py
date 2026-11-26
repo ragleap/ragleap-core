@@ -1115,9 +1115,10 @@ def get_pending_actions(limit: int = 50):
 
 
 @app.post("/autonomy/pending/{action_id}/approve")
-def approve_pending_action(action_id: str, request: Request = None):
-    """Approve and run one pending action (same path as replying YES <id>). The log records who approved it."""
-    reply = autonomy.resolve_pending(action_id, approve=True, decided_by=_actor_of(request))
+def approve_pending_action(action_id: str, request: Request = None, action_hash: str = None):
+    """Approve and run one pending action (same path as replying YES <id>). The log records who approved it.
+    Optional query parameter action_hash: the Ref shown with the action (12 or more hex characters); a different one runs nothing."""
+    reply = autonomy.resolve_pending(action_id, approve=True, decided_by=_actor_of(request), action_hash=action_hash)
     if reply is None:
         raise HTTPException(status_code=404, detail="No such pending action.")
     return {"result": reply}

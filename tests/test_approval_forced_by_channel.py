@@ -17,6 +17,9 @@ class _Cur:
     def execute(self, *a, **k):
         pass
 
+    def fetchone(self):
+        return ("stored",)          # INSERT ... RETURNING action_id: a row came back, so the action was stored
+
     def close(self):
         pass
 

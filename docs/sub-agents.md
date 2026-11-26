@@ -48,3 +48,7 @@ The Runs tab of the dashboard shows sub-agent runs under their parent and has a 
 - Each child costs extra model calls. The caps above are the control; start with the defaults.
 - A child that was running when the server restarted stays "running" until you cancel it (or the cancel call finds it idle for 15 minutes).
 - Not included yet: a research skill built on this.
+
+## The start record also binds the tool list
+
+A child's signed start record includes a hash of the sorted names of the tools it may use (`spawn3` records). The same function (`resolved_tools`) builds that list when the child is started and when it is driven, so a child whose tool list changed in between (a tool removed, added or the list emptied) is refused, and so is an older record that has no hash. A setting change while a child waits for an approval can therefore make that child stop; that is the safe direction.
