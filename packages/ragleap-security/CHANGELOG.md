@@ -3,6 +3,42 @@
 All notable changes to `ragleap-security` are documented here. Format
 loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.4.0] - 2026-11-26
+
+Design: #1569. One new module, `ragleap_security.canary`; nothing from 0.3.0 changed, so there are no behaviour changes and every 0.3.0 name still works. It is standard library only and is imported on its own (`from ragleap_security.canary import ...`). Canaries **detect and trace a leak; they never prevent copying**.
+
+### Added
+
+- `ragleap_security.canary`: `CanaryIssuer`, `Canary`, `CanaryHit`, `Hits`, `CanaryRecord`, `CanaryStore`, `MemoryCanaryStore`, `SQLiteCanaryStore`, `CanaryError`. Tripwire tokens `rlc1_` plus 26 base32 characters (a random 80-bit id and a 48-bit MAC of that id, derived from a `Key` or `KeyRing`). `issue(scope, label)`, `scan(text, scope, source=...)` and `revoke(scope, id)`.
+- A canary belongs to exactly one `Scope`; the store record holds it, the token does not, and the token itself is never stored. `scan` returns `own` hits (the canary's scope is inside the scan scope) and `foreign` hits (a valid canary of another scope was found in this scope's data). A foreign hit carries only a count: no id, label or owner. Unknown, revoked and forged tokens are ignored without a trace. Revoking deletes the record; a wrong scope and an unknown id give the same error.
+- Lookalikes are rejected by the MAC before any store lookup, so junk that looks like a token cannot push a real one out of the candidate limit. Matching ignores case, fullwidth forms and format characters (zero-width, bidi, soft hyphen).
+- Audit events `canary.issued`, `canary.hit`, `canary.foreign`, `canary.revoked` hold scope keys, canary ids, labels and source names; never the scanned text and never a token. If an audit record cannot be written, `issue` leaves no canary behind and `scan` returns nothing (reason `audit_failed`).
+- Limits: scanned text 1 MiB by default (ceiling 16 MiB; refused, never truncated), normalised text at most 4 times that many characters, 64 valid tokens looked up per scan (ceiling 256; the list reports `truncated`), 1,000 canaries per scope (ceiling 100,000), labels and source names of 1 to 64 characters. An optional `RateLimiter` keyed by scope limits scans. Every refusal is a fixed reason code on `CanaryError`.
+- `tests/test_canary.py` (91 tests; the store-dependent ones run against both the memory and the SQLite store, and the cap is tested under a forced race).
+- 70 more mutations in `scripts/mutation_check.py` for the canary module (251 in total, all killed on Python 3.10 and 3.12). `python scripts/mutation_check.py canary:` runs just them against `tests/test_canary.py`. The first run found 1 survivor (the MAC was not shown to belong to its id), which is now tested.
+
+### Differences from the design in #1569
+
+- The MAC covers the id only (the design had the scope in it too). With the scope in the MAC a scan could not reject a lookalike before a store lookup, and 64 junk lookalikes could hide a real token. The scope still binds the canary: it is in the store record, and a token found in another scope's data is a `foreign` hit.
+- Revoking deletes the record (the design had a revoked flag). A revoked token is ignored, as designed, and the table stays bounded.
+
+### Does not defend
+
+- Prevention of any kind: the data is already copied when a canary fires. A hit proves the string reached the place you scanned, not who put it there or why. No hit proves nothing: a model may drop or paraphrase a token.
+- An attacker who knows the format and filters tokens out (the prefix `rlc1_` is visible).
+- Transformed copies: base64 or hex, translation, paraphrase, splitting with a visible character or across messages, typos, screenshots, homoglyphs outside NFKC.
+- Compromise of the key (lets an attacker forge tokens: false alarms). Compromise of the store (shows which ids exist, not the tokens).
+- No network beacon. Leaks through places you do not scan are missed. The caller passes the scope; nothing here authenticates anyone.
+- Windows and macOS are not tested; no independent security review.
+
+### Not verified
+
+A real model provider; Windows and macOS; network file systems for the SQLite store.
+
+### Not in 0.4.0 (deliberately)
+
+Watermarks (invisible marks are removed by normalisation and many copy paths, and a statistical text watermark needs the model), network beacons, and agent integration (a later release of ragleap-agents).
+
 ## [0.3.0] - 2026-11-23
 
 Design: #1506. One new module, `ragleap_security.net`; nothing from 0.2.0 changed, so there are no behaviour changes and every 0.2.0 name still works. It is standard library only and is imported on its own (`from ragleap_security.net import ...`).
