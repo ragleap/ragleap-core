@@ -136,6 +136,65 @@ What it does not do:
 is installed, and an equivalent built-in class otherwise. The design, with the
 rejected alternatives and the limits, is in `docs/design/governed-toolkit.md`.
 
+## Provider formats and strict mode
+
+Every tool can describe itself in the shape a provider's tool parameter takes,
+and a `Toolkit` returns the list for all of its tools:
+
+```python
+lookup_order.to_openai_schema()            # Chat Completions: {"type": "function", "function": {...}}
+lookup_order.to_openai_responses_schema()  # Responses API: flat, "strict" always present
+lookup_order.to_gemini_tool_schema()       # flat: type, name, description, parameters
+lookup_order.to_gemini_schema()            # the bare declaration, as before
+lookup_order.to_anthropic_schema()         # name, description, input_schema
+
+kit.to_openai_responses_schema(strict=True)   # strict mode for every tool of a Toolkit
+```
+
+The default output of `to_openai_schema()`, `to_gemini_schema()` and
+`to_anthropic_schema()` is unchanged. The new shapes follow the providers'
+documents as read on 2026-11-23 and 2026-11-24; no provider has been sent them
+in a live request yet.
+
+`strict=True` (on `to_openai_schema`, `to_openai_responses_schema` and
+`to_anthropic_schema`) rewrites the parameters with
+`strict_schema(parameters, provider="openai")` or `provider="anthropic"` and
+sets `"strict": true`. The two providers' accepted subsets differ, so the
+rewrite differs:
+
+- OpenAI: every property is listed in `required`, an optional property becomes
+  "its schema or null", `default` is dropped, and `pattern` and `format` are
+  refused.
+- Anthropic: optional properties stay optional, and `default`, `pattern` and
+  `format` are kept.
+- Both: every object gets `additionalProperties: false`, and `title`,
+  `examples` and `$comment` are dropped. Anything outside the supported subset
+  (`minimum`, `maximum`, `minLength`, `maxLength`, `minItems`, `maxItems`,
+  `oneOf`, `allOf`, `$ref` and others) raises `ToolDefinitionError` naming the
+  keyword and its path, and nothing is changed silently. A tool that needs
+  those keywords can keep using the non-strict methods.
+
+Strict mode does not replace our checks. The `Toolkit` still validates every
+call against the tool's ORIGINAL parameters, and a `null` the model sends for
+an optional parameter is dropped before the handler runs, as if it had been
+omitted.
+
+`to_anthropic_schema(input_examples=[{...}])` adds Anthropic's optional
+`input_examples`. Every example is validated against the tool's parameters
+first, and an invalid one raises `ToolDefinitionError`. Examples belong to one
+tool, so `Toolkit.to_anthropic_schema` takes only `strict`.
+
+Things to know:
+
+- A provider compiles and caches a strict schema. Keep secrets and personal
+  data out of property names, enum values, patterns and `input_examples`.
+- Anthropic's documentation (read 2026-11-24, not tested here) says that forcing
+  a tool with `tool_choice` `any` or `tool` returns an error on its newest
+  models; use `auto`.
+- A provider's own limits (for example the number of properties or the nesting
+  depth) are not checked here and may change. See `CHANGELOG.md` for what is
+  not verified.
+
 ## The 12 stateless tools
 
 No configuration needed - import and use directly.

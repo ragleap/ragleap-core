@@ -193,3 +193,69 @@ Each has a recommendation; "recommend and go" takes them all.
   default (seen only in a search excerpt); that all twelve built-in schemas can be
   transformed; whether any caller depends on the current Gemini shape. No
   prototype exists and no test was run for this proposal.
+
+## Amendments (2026-11-26, written with the implementation)
+
+The text above is kept as it was merged. Where it differs from what follows,
+these amendments apply.
+
+### A1. The strict transform is provider-specific
+
+Section 2 describes one transform that lists every property in `required` and
+removes `default`. That is right for OpenAI and wrong for Anthropic, whose
+strict-tool-use page (read 2026-11-24) keeps optional properties optional and
+supports `default`. `strict_schema(parameters, *, provider)` therefore takes
+`provider` (`"openai"` or `"anthropic"`):
+
+- openai: every object gets `additionalProperties: false`; `required` lists all
+  properties in their original order; an optional property becomes `anyOf` with
+  its own schema and `{"type": "null"}` (the description moves to the outer
+  level; a value that already allows null is left alone); `default` is dropped;
+  `pattern` and `format` are refused.
+- anthropic: every object gets `additionalProperties: false`; `required` is
+  unchanged (optional properties stay optional); `default`, `pattern` and
+  `format` are kept.
+- both: `title`, `examples` and `$comment` are dropped; `minimum`, `maximum`,
+  `exclusiveMinimum`, `exclusiveMaximum`, `multipleOf`, `minLength`,
+  `maxLength`, `minItems`, `maxItems`, `uniqueItems`, `oneOf`, `allOf`, `not`,
+  `$ref`, `$defs`, `definitions`, `patternProperties` and any unknown keyword
+  raise `ToolDefinitionError` naming the keyword and its path (decision 2, raise).
+
+### A2. Where the supported subset comes from
+
+Read on 2026-11-23 and 2026-11-24, not tested against the providers:
+
+- OpenAI function-calling guide (developers.openai.com/api/docs/guides/function-calling),
+  and, for the strict-mode rules (all fields required, optional values as a union
+  with null, `additionalProperties: false`, `anyOf` allowed, no `anyOf` at the
+  root), secondary mirrors and forum quotes. The older limits on property count
+  and depth may have changed and are not enforced.
+- Anthropic define-tools and strict-tool-use pages (platform.claude.com, primary):
+  `strict`, `input_examples`, optional properties staying optional, and the note
+  on forced `tool_choice`.
+- Anthropic structured-output limits as shown on its page and on the Bedrock and
+  Vertex mirrors: supported types, enum of scalars, `const`, `anyOf`, `allOf`
+  without `$ref`, internal `$ref`, `default`, `required`, `additionalProperties:
+  false`; not supported: `minimum`, `maximum`, `multipleOf`, `minLength`,
+  `maxLength`; a reported cap of 16 union-typed properties on Bedrock (not
+  enforced). The implementation is stricter than these pages where it refuses
+  `allOf`, `$ref` and the array bounds, so that it never sends something it has
+  not seen documented.
+
+### A3. Providers compile and cache strict schemas
+
+Anthropic's pages say strict schemas are compiled and cached by the provider.
+Property names, enum and `const` values, patterns and `input_examples` must not
+contain secrets or personal data. The docstrings and the README say so.
+
+### Verification status of the implementation
+
+- Observed (tests, 2026-11-26): all twelve built-in schemas can be made strict
+  for both providers; a `null` for an optional parameter reaches the handler as
+  omitted through `Toolkit.call`; the three existing adapter methods give
+  byte-identical output (318 cases, separate processes); 60 deliberate breaks
+  were caught.
+- Not verified, unchanged: that any provider accepts the output; the exact
+  strict subsets (documents only); Gemini's subset; the Responses default.
+  The sentence above that no prototype exists is superseded by the
+  implementation.
