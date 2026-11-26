@@ -67,15 +67,27 @@ public final class RagLeap implements AutoCloseable {
     }
 
     private final Parts p;
-    private final Object costLock = new Object();
-    private final Object cacheLock = new Object();
+    private final boolean requireTenant;
+    private final Object costLock;
+    private final Object cacheLock;
 
     public RagLeap(RagLeapConfig config) {
-        this(wire(config));
+        this(wire(config), config.requireTenant(), new Object(), new Object());
     }
 
     RagLeap(Parts parts) {
+        this(parts, false, new Object(), new Object());
+    }
+
+    RagLeap(Parts parts, boolean requireTenant) {
+        this(parts, requireTenant, new Object(), new Object());
+    }
+
+    private RagLeap(Parts parts, boolean requireTenant, Object costLock, Object cacheLock) {
         this.p = parts;
+        this.requireTenant = requireTenant;
+        this.costLock = costLock;
+        this.cacheLock = cacheLock;
     }
 
     private static Parts wire(RagLeapConfig c) {
@@ -98,6 +110,24 @@ public final class RagLeap implements AutoCloseable {
                 c.cacheEnabled() ? new QueryEmbeddingCache(c.cacheMaxSize()) : null,
                 new CostTracker(c.pricingTable(), c.budgetUsdPerMonth()), c.budgetFallback(),
                 c.outputGuardrails(), c.onQuery(), c.onAnswer());
+    }
+
+    private void guard(String name) {
+        if (requireTenant) {
+            throw new TenantRequiredException(name + "() needs a tenant scope: use rag.forTenant(...) "
+                    + "(RagLeap was built with requireTenant(true))");
+        }
+    }
+
+    /**
+     * Returns a tenant-scoped view over this instance (same connection pool, vector backend, cache and cost
+     * tracker). Everything ingested through it is tagged with metadata tenant_id, every search filters on that tag,
+     * session ids are prefixed with the tenant id, and documents can only be listed, deleted and updated if they
+     * carry the tag. Documents ingested without a tenant tag are not visible through a view. Works the same when
+     * this instance was built with requireTenant(true).
+     */
+    public TenantRagLeap forTenant(String tenantId) {
+        return new TenantRagLeap(new RagLeap(p, false, costLock, cacheLock), tenantId);
     }
 
     @Override
@@ -149,35 +179,42 @@ public final class RagLeap implements AutoCloseable {
     // ------------------------------------------------------------ ingestion
 
     public IngestResult ingest(String filename, byte[] rawBytes) throws SQLException {
+        guard("ingest");
         return p.ingestion().ingest(filename, rawBytes);
     }
 
     public IngestResult ingest(String filename, byte[] rawBytes, Map<String, Object> metadata) throws SQLException {
+        guard("ingest");
         return p.ingestion().ingest(filename, rawBytes, metadata);
     }
 
     public IngestResult ingestText(String filename, String text) throws SQLException {
+        guard("ingestText");
         return p.ingestion().ingestText(filename, text);
     }
 
     public IngestResult ingestText(String filename, String text, Map<String, Object> metadata, boolean sanitize,
                                    boolean warnOnInjectionRisk) throws SQLException {
+        guard("ingestText");
         return p.ingestion().ingestText(filename, text, metadata, sanitize, warnOnInjectionRisk);
     }
 
     /** Mode "ocr" reads text in the image (needs the Tesseract binary); "caption" describes it with a vision model. */
     public IngestResult ingestImage(String filename, byte[] rawBytes, String mode, String mimeType,
                                     Map<String, Object> metadata) throws SQLException {
+        guard("ingestImage");
         return p.ingestion().ingestImage(filename, rawBytes, mode, mimeType, metadata);
     }
 
     public IngestResult ingestAudio(String filename, byte[] rawBytes, TranscriptionConfig transcriber,
                                     Map<String, Object> metadata) throws SQLException {
+        guard("ingestAudio");
         return p.ingestion().ingestAudio(filename, rawBytes, transcriber, metadata);
     }
 
     public IngestResult ingestVideo(String filename, byte[] rawBytes, TranscriptionConfig transcriber,
                                     Map<String, Object> metadata) throws SQLException {
+        guard("ingestVideo");
         return p.ingestion().ingestVideo(filename, rawBytes, transcriber, metadata);
     }
 
@@ -187,6 +224,7 @@ public final class RagLeap implements AutoCloseable {
      * kept (Python drops it for that item type).
      */
     public List<BatchResult> ingestBatch(List<BatchItem> items) {
+        guard("ingestBatch");
         if (items == null || items.isEmpty()) {
             return List.of();
         }
@@ -248,6 +286,7 @@ public final class RagLeap implements AutoCloseable {
     /** Embeds the query and searches, without generating an answer. No rewrite and no session. */
     public List<SearchResult> retrieve(String query, int topK, boolean hybrid, Map<String, Object> metadataFilter)
             throws SQLException {
+        guard("retrieve");
         List<Double> embedding = embedQueryCached(query);
         if (embedding == null) {
             return List.of();
@@ -302,6 +341,7 @@ public final class RagLeap implements AutoCloseable {
      * always generated for the original question.
      */
     public AskResult ask(String query, AskOptions o) throws SQLException {
+        guard("ask");
         boolean hasSession = o.sessionId() != null && !o.sessionId().isEmpty();
         String historyPrefix = hasSession ? p.memory().buildHistoryPrompt(o.sessionId()) : "";
         ProviderConfig override = overrideProvider();
@@ -401,6 +441,7 @@ public final class RagLeap implements AutoCloseable {
      * used when streaming.
      */
     public void askStream(String query, AskOptions o, Consumer<String> onPiece) throws SQLException {
+        guard("askStream");
         List<Double> queryEmbedding = embedQueryCached(query);
         if (queryEmbedding == null) {
             onPiece.accept(EMBEDDING_FAILED);
@@ -452,10 +493,12 @@ public final class RagLeap implements AutoCloseable {
     // ------------------------------------------------- history, evaluation
 
     public List<ConversationMessage> getHistory(String sessionId) throws SQLException {
+        guard("getHistory");
         return p.memory().getHistory(sessionId);
     }
 
     public void clearSession(String sessionId) throws SQLException {
+        guard("clearSession");
         p.memory().clearSession(sessionId);
     }
 
@@ -504,11 +547,13 @@ public final class RagLeap implements AutoCloseable {
 
     /** Previously ingested documents, most recently uploaded first. */
     public List<DocumentSummary> listDocuments(int limit, int offset) throws SQLException {
+        guard("listDocuments");
         return p.backend().listDocuments(limit, offset);
     }
 
     /** Deletes a document and its chunks; false if there was no such document. */
     public boolean deleteDocument(String documentId) throws SQLException {
+        guard("deleteDocument");
         boolean deleted = p.backend().deleteDocument(documentId);
         if (deleted) {
             LOG.log(Level.INFO, "Deleted document " + documentId);
@@ -523,6 +568,7 @@ public final class RagLeap implements AutoCloseable {
      * filename to rename it, or null to keep the stored filename.
      */
     public IngestResult updateDocument(String documentId, String text, String filename) throws SQLException {
+        guard("updateDocument");
         String existing = filename;
         if (existing == null) {
             Optional<String> stored = p.backend().getDocumentFilename(documentId);
