@@ -8,7 +8,7 @@ differs from that comment, and why, so the issue is not silently rewritten.
 - `run(scope, input)` and `resume(scope, run_id, decisions)` take the scope as the FIRST, required argument. There is
   no unscoped run and no `require_scope` switch.
 - Tool steps run through `tools=` (a `ragleap_tools.Toolkit`) or `dispatch=` (any `dispatch(scope, name, arguments)`
-  returning a ToolResult). `GovernedToolkit.call` has exactly that shape, but it is unreleased in ragleap-tools 0.5.1,
+  returning a ToolResult). `GovernedToolkit.call` has exactly that shape, but it was unreleased in ragleap-tools 0.5.1 (update 2026-11-25: it is released in ragleap-tools 0.6.0),
   so flows 0.1.0 does not depend on it.
 - Taint is runtime, not static: a tool step may be marked `external` (its result is untrusted) or `outbound`. An
   outbound step reached while tainted pauses for approval (forced), each time.
