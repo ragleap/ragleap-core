@@ -2,7 +2,7 @@
 
 Open-source (MIT), local-first speech tooling, with Indian languages as a priority.
 
-**Status: pre-alpha. Versions 0.1.0 to 0.3.6 add `transcribe()` and `synthesize()` with a Whisper large-v3 engine and an Indic Parler-TTS engine (see "What 0.1.0 adds" below). Every model is unverified and none is a default. Each engine has been run on only a few clips on one maintainer's machine. This is a first release for testing, not a finished product.**
+**Status: pre-alpha. Versions 0.1.0 to 0.4.0 add `transcribe()` and `synthesize()` with a Whisper large-v3 engine and an Indic Parler-TTS engine (see "What 0.1.0 adds" below). Since 0.4.0 `whisper-large-v3` is verified (not a default), and the Whisper engine declares 31 languages, none of them Indian; every other model is unverified and none is a default. The Whisper engine's word and character error was measured on read speech in 81 languages (60 clips each, one run per language on a Colab GPU); the Parler engine has been run on only a few clips on one maintainer's machine. No noisy or telephone audio has been measured. This is a release for testing, not a finished product.**
 
 ## What works today
 
@@ -15,11 +15,11 @@ A command line and a small standard-library-only Python core (no runtime depende
     ragleap-voice models show indic-parler-tts
     ragleap-voice models check
 
-- `models list`, `show` and `check` read a manifest of candidate models with their licences, pinned revisions and status. Every entry is currently `unverified`: a research lead, not an endorsement. None is a default.
+- `models list`, `show` and `check` read a manifest of candidate models with their licences, pinned revisions and status. One entry, `whisper-large-v3`, is `verified` (the evidence is in `docs/verification-record-whisper-large-v3.md`); every other entry is `unverified`: a research lead, not an endorsement. None is a default.
 - Lock files record the size and SHA-256 of every file at a pinned revision. `models verify` checks a cache folder against them (offline, read-only). `models check` rejects verified or default entries that lack a matching lock, use licences outside the allowlist, or list pickle-capable files (formats that can run code when loaded).
 - `models pull NAME` downloads from Hugging Face only: HTTPS, a host allowlist, and the access token (`HF_TOKEN`) is sent only to huggingface.co. Every file is checked against its lock before anything enters the cache, and `--offline` makes no network calls. Entries can declare dependencies, which are pulled first.
 - `models lock NAME` is a maintainer tool that builds a lock by downloading and hashing every file.
-- Two entries are locked so far: `indic-parler-tts` (a gated Hugging Face model: accept its conditions on the website and set `HF_TOKEN`) and its tokenizer dependency `flan-t5-large-tokenizer`. Both are pinned but have not had a human review, so pulling them needs `--allow-unverified`.
+- Six entries are locked: `whisper-large-v3` (verified: pulling it needs no flag), `indic-parler-tts` (a gated Hugging Face model: accept its conditions on the website and set `HF_TOKEN`) with its tokenizer dependency `flan-t5-large-tokenizer`, and the candidates `naijavox-2`, `sunflowerasr-51-african-languages` and `zonos3-mini`. The candidates are pinned but have not had a human review, so pulling them needs `--allow-unverified`. A lock does not cover a native server binary (for `zonos3-mini` the operator builds it).
 
 Nothing in the package uses the network unless you run `models pull` or `models lock`.
 
@@ -45,8 +45,9 @@ Nothing in the package uses the network unless you run `models pull` or `models 
 
 Pre-alpha: names and signatures can still change. The core has no runtime dependencies. Engines are separate: the Whisper engine needs its extra (`pip install "ragleap-voice[whisper]"`; without it the call raises an error that names this command), and the Parler engine has no extra, because you set up its Python environment yourself (see issue 990 below).
 
-- `transcribe()` and `synthesize()`, which check the licence, the lock and the verification status of every model before an engine sees it, and hand engines verified folders only. Every model is `unverified` and none is a default, so calls need `allow_unverified=True`.
-- A Whisper large-v3 engine (optional extra `whisper`, faster-whisper). Run with the real model on two clips (English and Spanish) on a CPU, and on one Colab T4 with NVIDIA's cublas and cudnn pip packages preloaded by hand (the engine does not preload them). Other GPUs and CUDA versions have not been tried. Input must be mono 16-bit 16 kHz WAV.
+- `transcribe()` and `synthesize()`, which check the licence, the lock and the verification status of every model before an engine sees it, and hand engines verified folders only. `whisper-large-v3` is `verified` (not a default): after `models pull whisper-large-v3`, `transcribe()` with the Whisper engine needs no flag. Every other model is `unverified`, so calls that use one need `allow_unverified=True`.
+- A Whisper large-v3 engine (optional extra `whisper`, faster-whisper) that declares 31 languages: those whose measured error in `coverage/stt.csv` has a 95% interval ending at or below 15% on 60 read-speech clips (word error; character error for Mandarin, Cantonese and Thai). No Indian language qualifies (Hindi measured 26.8%). The rule is in `docs/design/coverage-matrix.md` section 7 and can be revised. Run with the real model on a CPU (int8, fresh environments on Python 3.12 and 3.10, one run each) and on Colab T4s with NVIDIA's cublas and cudnn pip packages preloaded by hand (the engine does not preload them). Other GPUs and CUDA versions have not been tried. Input must be mono 16-bit 16 kHz WAV.
+- Not exported: a ZONOS3-Mini engine (`ragleap_voice.zonos3_engine`) and a `Synthesizer` that keeps its server running (`ragleap_voice.synthesizer`), for Hindi and Telugu stock voices on the CPU. They need the native `zonos3-server` (built by you, on the PATH), they are not registered by default and the model is unverified. On one laptop CPU (one run) a 2 s sentence took about 6 s after a start-up of about 11 s; nobody has listened to the output.
 - An Indic Parler-TTS engine, run as an isolated worker from a Python environment you set up yourself (`RAGLEAP_VOICE_PARLER_PYTHON`). Run once with the real model on a T4 for Hindi and English. The model is gated on Hugging Face. The `parler-tts` library is installed from GitHub and is not covered by the lock files, and the versions of its dependencies are not pinned by us.
 - No emotion names are declared. Style goes through `options={"description": "..."}`, and what that changes has not been measured. Voice cloning is not built.
 - Isolation separates conflicting dependencies and keeps tokens out of the worker. It is not a security sandbox.
