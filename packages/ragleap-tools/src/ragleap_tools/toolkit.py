@@ -24,7 +24,7 @@ import json
 import logging
 from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Tuple, Union
 
-from ragleap_tools._schema import clip, drop_null_optionals, safe_text, validate_arguments
+from ragleap_tools._schema import ToolDefinitionError, clip, drop_null_optionals, safe_text, validate_arguments
 from ragleap_tools.base import Tool, ToolError, ToolResult
 
 _LOG = logging.getLogger("ragleap_tools")
@@ -101,14 +101,33 @@ class Toolkit:
             picked.append(t)
         return Toolkit(picked, max_arguments_chars=self.max_arguments_chars)
 
-    def to_openai_schema(self) -> List[Dict[str, Any]]:
-        return [t.to_openai_schema() for t in self._tools.values()]
+    def _each(self, method: str, **kwargs: Any) -> List[Dict[str, Any]]:
+        out: List[Dict[str, Any]] = []
+        for tool in self._tools.values():
+            try:
+                out.append(getattr(tool, method)(**kwargs))
+            except ToolDefinitionError as exc:
+                raise ToolDefinitionError("tool %r: %s" % (tool.name, exc)) from None
+        return out
+
+    def to_openai_schema(self, *, strict: bool = False) -> List[Dict[str, Any]]:
+        """Chat Completions shape; see Tool.to_openai_schema()."""
+        return self._each("to_openai_schema", strict=strict)
+
+    def to_openai_responses_schema(self, *, strict: bool = False) -> List[Dict[str, Any]]:
+        """Responses API shape; see Tool.to_openai_responses_schema()."""
+        return self._each("to_openai_responses_schema", strict=strict)
 
     def to_gemini_schema(self) -> List[Dict[str, Any]]:
-        return [t.to_gemini_schema() for t in self._tools.values()]
+        return self._each("to_gemini_schema")
 
-    def to_anthropic_schema(self) -> List[Dict[str, Any]]:
-        return [t.to_anthropic_schema() for t in self._tools.values()]
+    def to_gemini_tool_schema(self) -> List[Dict[str, Any]]:
+        """Flat Gemini tool shape; see Tool.to_gemini_tool_schema()."""
+        return self._each("to_gemini_tool_schema")
+
+    def to_anthropic_schema(self, *, strict: bool = False) -> List[Dict[str, Any]]:
+        """See Tool.to_anthropic_schema(); input_examples belong to one tool, so call that."""
+        return self._each("to_anthropic_schema", strict=strict)
 
     def prepare(self, name: Any, arguments: Any = None) -> Union[Tuple[Tool, Dict[str, Any]], ToolResult]:
         """Everything call() does before the handler runs.

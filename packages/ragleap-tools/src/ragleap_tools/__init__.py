@@ -61,6 +61,7 @@ exposed to LLM tool-calling without deliberate guardrails.
 """
 
 from ragleap_tools._schema import ToolDefinitionError, validate_arguments
+from ragleap_tools.strict import strict_schema
 from ragleap_tools.base import Tool, ToolError, ToolResult
 from ragleap_tools.decorator import tool
 from ragleap_tools.toolkit import Toolkit
@@ -120,6 +121,7 @@ __all__ = [
     "ToolResult",
     "ToolError",
     "ToolDefinitionError",
+    "strict_schema",
     "tool",
     "Toolkit",
     "GovernedToolkit",

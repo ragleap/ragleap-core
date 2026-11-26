@@ -13,8 +13,12 @@ show the model), an optional Tool.metadata dict, and to_anthropic_schema().
 
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional, Sequence
+
+from ragleap_tools._schema import ToolDefinitionError, validate_arguments
+from ragleap_tools.strict import strict_schema
 
 
 class ToolError(Exception):
@@ -24,6 +28,11 @@ class ToolError(Exception):
     message that is safe to show the model. Any other exception is treated as
     unexpected: only its type name reaches the model and the detail goes to the
     "ragleap_tools" logger."""
+
+
+def _require_bool(name: str, value: Any) -> None:
+    if not isinstance(value, bool):
+        raise TypeError("%s must be True or False, not %r" % (name, type(value).__name__))
 
 
 @dataclass
@@ -71,16 +80,36 @@ class Tool:
     handler: Callable[..., ToolResult]
     metadata: Dict[str, Any] = field(default_factory=dict)
 
-    def to_openai_schema(self) -> Dict[str, Any]:
-        """Returns the {"type": "function", "function": {...}} shape
-        OpenAI's `tools=` parameter expects."""
+    def to_openai_schema(self, *, strict: bool = False) -> Dict[str, Any]:
+        """Returns the {"type": "function", "function": {...}} shape of
+        OpenAI's Chat Completions ``tools=`` parameter. With ``strict=True``
+        the parameters are the strict_schema() form for OpenAI and the
+        function carries ``"strict": true``. The default output is unchanged.
+        For the Responses API use to_openai_responses_schema()."""
+        _require_bool("strict", strict)
+        function: Dict[str, Any] = {
+            "name": self.name,
+            "description": self.description,
+            "parameters": self.parameters,
+        }
+        if strict:
+            function["parameters"] = strict_schema(self.parameters, provider="openai")
+            function["strict"] = True
+        return {"type": "function", "function": function}
+
+    def to_openai_responses_schema(self, *, strict: bool = False) -> Dict[str, Any]:
+        """Returns the flat tool shape of OpenAI's Responses API: type, name,
+        description, parameters and strict at one level. ``strict`` is always
+        present and explicit, so the result never depends on a provider
+        default. With ``strict=True`` the parameters are the strict_schema()
+        form for OpenAI."""
+        _require_bool("strict", strict)
         return {
             "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.description,
-                "parameters": self.parameters,
-            },
+            "name": self.name,
+            "description": self.description,
+            "parameters": strict_schema(self.parameters, provider="openai") if strict else self.parameters,
+            "strict": strict,
         }
 
     def to_gemini_schema(self) -> Dict[str, Any]:
@@ -92,14 +121,45 @@ class Tool:
             "parameters": self.parameters,
         }
 
-    def to_anthropic_schema(self) -> Dict[str, Any]:
-        """Returns the shape Anthropic's Messages API `tools=` parameter
-        expects (name/description/input_schema)."""
+    def to_gemini_tool_schema(self) -> Dict[str, Any]:
+        """Returns the flat tool shape of the current Gemini function-calling
+        guide (type, name, description, parameters). to_gemini_schema() is
+        unchanged and still returns the bare declaration."""
         return {
+            "type": "function",
+            "name": self.name,
+            "description": self.description,
+            "parameters": self.parameters,
+        }
+
+    def to_anthropic_schema(self, *, strict: bool = False, input_examples: Optional[Sequence[Dict[str, Any]]] = None) -> Dict[str, Any]:
+        """Returns the shape Anthropic's Messages API `tools=` parameter
+        expects (name/description/input_schema). With ``strict=True`` the
+        input_schema is the strict_schema() form for Anthropic and the tool
+        carries ``"strict": true``. ``input_examples`` (example argument
+        dicts) adds the optional ``input_examples`` field; every example is
+        validated against this tool's parameters first and an invalid one
+        raises ToolDefinitionError. Examples are sent to the provider with
+        every request: do not put secrets or personal data in them. The
+        default output is unchanged."""
+        _require_bool("strict", strict)
+        schema: Dict[str, Any] = {
             "name": self.name,
             "description": self.description,
             "input_schema": self.parameters,
         }
+        if strict:
+            schema["input_schema"] = strict_schema(self.parameters, provider="anthropic")
+            schema["strict"] = True
+        if input_examples is not None:
+            if not isinstance(input_examples, (list, tuple)):
+                raise ToolDefinitionError("input_examples must be a list of argument dicts")
+            for i, example in enumerate(input_examples):
+                problem = validate_arguments(self.parameters, example)
+                if problem is not None:
+                    raise ToolDefinitionError("input_examples[%d]: %s" % (i, problem))
+            schema["input_examples"] = copy.deepcopy(list(input_examples))
+        return schema
 
     def call(self, /, **kwargs: Any) -> ToolResult:
         """Invokes the handler with the given keyword arguments.
