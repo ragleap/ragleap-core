@@ -23,7 +23,24 @@ public record RagLeapConfig(String databaseUrl, ProviderConfig primary, Embeddin
                             List<Consumer<Map<String, Object>>> onQuery,
                             List<Consumer<Map<String, Object>>> onAnswer,
                             Map<String, Map<String, Rate>> pricingTable, Double budgetUsdPerMonth,
-                            ProviderConfig budgetFallback) {
+                            ProviderConfig budgetFallback, boolean requireTenant) {
+
+    /** The layout before requireTenant existed: no tenant scope is required. */
+    public RagLeapConfig(String databaseUrl, ProviderConfig primary, EmbeddingConfig embedder,
+                         VectorBackend vectorBackend, List<ProviderConfig> fallbacks, double defaultTemperature,
+                         int defaultMaxTokens, int maxContextChars, Integer chunkSize, Integer chunkOverlap,
+                         boolean cacheEnabled, int cacheMaxSize, List<UnaryOperator<String>> inputGuardrails,
+                         List<UnaryOperator<String>> outputGuardrails,
+                         List<Consumer<Map<String, Object>>> onIngest,
+                         List<Consumer<Map<String, Object>>> onQuery,
+                         List<Consumer<Map<String, Object>>> onAnswer,
+                         Map<String, Map<String, Rate>> pricingTable, Double budgetUsdPerMonth,
+                         ProviderConfig budgetFallback) {
+        this(databaseUrl, primary, embedder, vectorBackend, fallbacks, defaultTemperature, defaultMaxTokens,
+                maxContextChars, chunkSize, chunkOverlap, cacheEnabled, cacheMaxSize, inputGuardrails,
+                outputGuardrails, onIngest, onQuery, onAnswer, pricingTable, budgetUsdPerMonth, budgetFallback,
+                false);
+    }
 
     public RagLeapConfig {
         Objects.requireNonNull(databaseUrl, "databaseUrl");
@@ -62,6 +79,7 @@ public record RagLeapConfig(String databaseUrl, ProviderConfig primary, Embeddin
         private Map<String, Map<String, Rate>> pricingTable;
         private Double budgetUsdPerMonth;
         private ProviderConfig budgetFallback;
+        private boolean requireTenant;
 
         private Builder(String databaseUrl, ProviderConfig primary, EmbeddingConfig embedder) {
             this.databaseUrl = databaseUrl;
@@ -154,11 +172,20 @@ public record RagLeapConfig(String databaseUrl, ProviderConfig primary, Embeddin
             return this;
         }
 
+        /**
+         * When true, every unscoped call (ingest, ask, retrieve, history, document management) throws
+         * TenantRequiredException; use {@link RagLeap#forTenant} instead. Default false.
+         */
+        public Builder requireTenant(boolean v) {
+            this.requireTenant = v;
+            return this;
+        }
+
         public RagLeapConfig build() {
             return new RagLeapConfig(databaseUrl, primary, embedder, vectorBackend, fallbacks, defaultTemperature,
                     defaultMaxTokens, maxContextChars, chunkSize, chunkOverlap, cacheEnabled, cacheMaxSize,
                     inputGuardrails, outputGuardrails, onIngest, onQuery, onAnswer, pricingTable,
-                    budgetUsdPerMonth, budgetFallback);
+                    budgetUsdPerMonth, budgetFallback, requireTenant);
         }
     }
 }
