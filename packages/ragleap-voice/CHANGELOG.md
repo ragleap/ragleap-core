@@ -4,6 +4,8 @@ All notable changes to `ragleap-voice` are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
+### Documentation and tests
+- `docs/design/api.md` section 6 and `docs/design/coverage-matrix.md` section 5 now say what `engine="auto"` does today (built-in engines that declare the language, ordered by name, the first one used; verification after the pick; no routing table yet), and `tests/test_auto_routing.py` pins it. No behaviour change.
 
 ## [0.4.0] - 2026-11-25
 ### Status

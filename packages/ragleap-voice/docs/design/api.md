@@ -84,6 +84,8 @@ Licences are not declared by the engine. They come from `models.toml`, which sta
 5. If nothing is left, raise `NoEngineError`, listing each candidate and why it was dropped.
 6. If the chosen engine fails while running, raise `EngineError`. There is no second attempt on another engine.
 
+Implemented in 0.4.0 (what the code does today, which is less than the list above): `auto_candidates` returns the built-in engines of the requested kind that declare the language, ordered by engine name, and the first one is used; a third-party engine is never returned. There is no routing table yet and no ranking by measured error (steps 3 and 4 are plans), and the verification of the models happens after the pick (step 2 is not a filter): if the first engine's model is unverified and the caller did not pass `allow_unverified=True`, `ModelNotVerifiedError` is raised and no other engine is tried. With one engine per kind registered by default (Whisper for speech to text, Parler for text to speech) the order has not mattered so far; it starts to matter when a second engine declares the same language. `tests/test_auto_routing.py` pins this behaviour.
+
 Cloud adapters (for example a hosted general-purpose provider, or Sarvam with the user's own key) may exist later as optional extras. They need `engine="name"`, a key from the environment, and they are excluded from `auto` in every case.
 
 ## 7. Verified cache folders and offline loading
