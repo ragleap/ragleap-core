@@ -59,6 +59,7 @@ Numeric thresholds for "good enough" are not set here. They are an open question
 `engine="auto"` reads the matrix: among installed engines that support the language, prefer the best measured
 row (lowest error, tier 2 or higher), then tier 1 in manifest order with a `notes` line saying nothing was measured.
 Each routing decision cites its row. No row means `NoEngineError`, not a guess.
+Not implemented yet (2026-11-26): `auto_candidates` orders by engine name and picks the first; see docs/design/api.md section 6.
 
 ## 6. Filling it
 
