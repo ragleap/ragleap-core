@@ -43,13 +43,24 @@ def pair():
 
 
 def test_linger_discards_what_the_peer_still_sends_and_stops_when_it_closes():
+    # The sender has its own thread: where socket buffers are small (macOS), sending 100,000 bytes before anyone reads blocks for ever.
     server_side, client_side = pair()
+
+    def send_then_close():
+        try:
+            client_side.sendall(b"y" * 100_000)
+        except OSError:
+            pass
+        finally:
+            client_side.close()
+
+    sender = threading.Thread(target=send_then_close, daemon=True)
+    sender.start()
     try:
-        client_side.sendall(b"y" * 100_000)
-        client_side.close()
-        assert linger(server_side, seconds=2.0) == 100_000
+        assert linger(server_side, seconds=5.0) == 100_000
     finally:
         server_side.close()
+        sender.join(5)
 
 
 def test_linger_is_bounded_in_bytes():

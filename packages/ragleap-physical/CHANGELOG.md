@@ -5,7 +5,11 @@ All notable changes are listed here. Format: Keep a Changelog.
 ## [Unreleased]
 
 ### Added
+- CI: a Windows job and a macOS job run the test suite on every change to this package (Python 3.11 and 3.13 on Windows, 3.10 and 3.13 on macOS). They are informative for now, not blocking, and their results are not a claim of Windows or macOS support.
 - The red-team harness has three more classes, for the memory caps (S11), the dry run and the workspace box (S6) and the simulated-adapter flag (S13). The flag class reports two behaviours of main as it stands as known, not as findings: a truthy value that is not True is accepted, and a flag changed after the Bridge is built is not noticed. S12 has no class (no honest probe) and S3 is covered only indirectly.
+
+### Fixed
+- A test of the lingering-close helper sent 100,000 bytes on a socket pair before reading, which blocks where socket buffers are small (macOS); the sender now runs in its own thread. No library code changed.
 
 ## [0.0.6] - 2026-11-24
 
