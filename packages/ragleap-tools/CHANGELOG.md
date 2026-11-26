@@ -5,6 +5,90 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `Tool.to_openai_responses_schema(*, strict=False)` and the same on `Toolkit`:
+  the flat tool shape of OpenAI's Responses API (`type`, `name`, `description`,
+  `parameters`, `strict`). `strict` is always present, so the result never
+  depends on a provider default.
+- `Tool.to_gemini_tool_schema()` and the same on `Toolkit`: the flat tool shape
+  of the current Gemini function-calling guide (`type`, `name`, `description`,
+  `parameters`). `to_gemini_schema()` still returns the bare declaration.
+- A keyword-only `strict` (a real bool, default `False`) on `to_openai_schema`
+  and `to_anthropic_schema`, on `Tool` and on `Toolkit`. With `strict=True` the
+  parameters are rewritten by `strict_schema()` and `"strict": true` is added.
+- `Tool.to_anthropic_schema(input_examples=...)`: Anthropic's optional
+  `input_examples`. Each example is validated against the tool's parameters
+  first (an invalid one raises `ToolDefinitionError`) and the list is copied.
+  Not on `Toolkit`, because examples belong to one tool.
+- `strict_schema(parameters, *, provider)` in the new module
+  `ragleap_tools.strict`, also exported from the package. `provider` is
+  `"openai"` or `"anthropic"`. It returns a deep copy and never changes its
+  input. OpenAI: every property is required, optional properties become "schema
+  or null", `default` is dropped, `pattern` and `format` are refused. Anthropic:
+  optional properties stay optional, `default`, `pattern` and `format` are
+  kept. Both: `additionalProperties: false` on every object, `title`,
+  `examples` and `$comment` dropped, and anything outside the supported subset
+  (numeric, length and array bounds, `oneOf`, `allOf`, `not`, `$ref`, `$defs`,
+  `patternProperties`, unknown keywords, untyped values) refused with
+  `ToolDefinitionError` naming the keyword and its path.
+- A `Toolkit` adapter error names the tool (`tool 'x': ...`).
+- A README section "Provider formats and strict mode" and amendments to
+  `docs/design/provider-formats.md` (the strict transform is per provider; the
+  sources of the supported subset; providers cache strict schemas).
+
+### Changed
+
+- `to_openai_schema` and `to_anthropic_schema` (on `Tool` and `Toolkit`) accept
+  keyword-only arguments. With the defaults their output, and the output of
+  `to_gemini_schema`, is byte-for-byte what it was.
+
+### Verified
+
+- 91 new tests (`tests/test_provider_formats.py`) with independent checkers that
+  look only at an output schema. Full suite with `ragleap-rag` installed: 616
+  passed and 1 skipped without `ragleap-security`, 617 passed with it, on
+  Python 3.10.12 (the VPS) and 3.12.3 (a sandbox).
+- The three existing adapter methods, on `Tool` and `Toolkit`, compared between
+  the previous commit and this change in separate processes over 318 cases (the
+  12 built-in tools, 300 generated `@tool` schemas, the two toolkits and four
+  hand-written schemas): byte-identical (553,273 bytes).
+- 60 deliberate breaks of the new code: 60 caught. The first run caught 54; the
+  six survivors were closed with tests and all 60 were run again.
+- Every built-in tool can be made strict for both providers. A `null` sent for an
+  optional parameter reaches the handler as omitted, through `Toolkit.call`, for
+  a sample tool.
+
+### Not verified
+
+- That OpenAI, Gemini or Anthropic accept any of the new shapes, or the output
+  of `strict_schema`, in a live request. No provider was contacted.
+- The supported subsets follow the providers' documents as read on 2026-11-23
+  and 2026-11-24 (some limits only from secondary mirrors), not live requests.
+- That OpenAI's Responses API treats tools as strict unless `strict: false` is
+  set (seen only in a search excerpt). The library does not depend on it,
+  because `strict` is always written explicitly.
+- Gemini's accepted schema subset is not compared with the schemas we generate
+  (they keep `default` and integer `enum`).
+- Provider limits such as the number of properties, nesting depth or a reported
+  cap on union-typed properties are not checked by `strict_schema` and may have
+  changed. OpenAI's form makes every optional property a union with null.
+- Anthropic's statement about forced `tool_choice` is from its documentation
+  and was not tested.
+
+### Known limitations
+
+- `strict_schema` refuses what it cannot express. It does not inline `$ref`, and
+  it does not approximate bounds. A tool that uses them keeps the non-strict
+  methods.
+- Only `"openai"` and `"anthropic"` have a strict form. Gemini has none here.
+- Provider-side strictness is defence in depth, not a security boundary: the
+  `Toolkit` still validates against the original parameters.
+- Providers compile and cache strict schemas: property names, enum values,
+  patterns and `input_examples` must not hold secrets or personal data.
+- The Python floor is unchanged in this change (3.10, which has reached end of
+  life). Raising it is planned as its own change.
+
 ## [0.6.0] - 2026-11-21
 
 ### Added
