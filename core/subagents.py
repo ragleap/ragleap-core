@@ -126,6 +126,13 @@ def with_delegate(tools: Dict[str, str], run: Dict) -> Dict[str, str]:
         return tools
 
 
+def resolved_tools(run: Dict) -> Dict[str, str]:
+    """THE tool list of a run. The gate hashes it into a child's signed start record (P1-A) and the loop uses the same
+    function to drive the child, so what was signed is what runs."""
+    from core.employees import actions
+    return limit_to_parent(with_delegate(actions.available_tools(), run), run)
+
+
 def parent_tool_names(parent: Dict) -> set:
     """The tool names a parent run may use. Today every run has the same list; this is the one place to narrow it per run."""
     from core.employees import actions
@@ -278,7 +285,9 @@ def delegate_step(parent: Dict, plan: Dict, service, role: Optional[str]) -> Opt
         agent_loop._save(parent)
     import uuid
     child_id = str(uuid.uuid4())
-    record = autonomy.spawn_record(auth.get("spawn_id"), child_id, parent["id"], target, int(parent.get("depth") or 0) + 1, auth["force_approval"])
+    child_depth = int(parent.get("depth") or 0) + 1
+    tools_hash = autonomy.tools_digest(resolved_tools({"id": child_id, "parent_id": parent["id"], "role": target, "depth": child_depth}))
+    record = autonomy.spawn_record(auth.get("spawn_id"), child_id, parent["id"], target, child_depth, auth["force_approval"], tools_hash)
     if record is None:
         return agent_loop._finish(parent, service, role, "done", "The proposed sub-agent task was not allowed.")
     step = {"tool": "delegate", "target": target, "content": task[:600], "sig": sig, "status": "running",

@@ -129,6 +129,9 @@ class _Cur:
         if sql.lstrip().upper().startswith("INSERT"):
             _Cur.inserts.append(params)
 
+    def fetchone(self):
+        return ("stored",)          # INSERT ... RETURNING action_id: a row came back, so the action was stored
+
     def fetchall(self):
         return _Cur.rows
 

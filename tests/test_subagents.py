@@ -438,7 +438,10 @@ def test_a_child_is_started_only_after_the_gate_agreed_and_is_driven_with_the_in
     ds = inspect.getsource(subagents.delegate_step)
     assert ds.index("authorize_spawn(") < ds.index("_drive(")
     drive = inspect.getsource(agent_loop._drive)
-    assert "inherited_force_semi(run)" in drive and "limit_to_parent(" in drive
+    # P1-A (deliberate change): the parent limit now lives in subagents.resolved_tools, which _drive AND delegate_step both call,
+    # so the list that is hashed into the start record is the list that runs.
+    assert "inherited_force_semi(run)" in drive and "subagents.resolved_tools(run)" in drive and "verify_spawn_record(run, tools)" in drive
+    assert "limit_to_parent(" in inspect.getsource(subagents.resolved_tools) and "resolved_tools(" in ds
 
 
 def test_the_docs_page_describes_who_may_start_a_child():
@@ -491,31 +494,34 @@ def test_the_record_of_a_sensitive_parents_child_says_forced_and_is_valid(world,
     assert agent_loop.get_start_record(children[0]["id"])["forced"] is True and autonomy.verify_spawn_record(children[0]) is True
 
 
+T = {"answer": "a", "search": "b"}      # a fixed tool list for the tests that build records by hand
+
+
 def test_a_record_that_was_changed_or_made_with_another_key_does_not_verify(world, monkeypatch):
     from core import autonomy
     sid, rid, pid = "11111111-1111-1111-1111-111111111111", "33333333-3333-3333-3333-333333333333", "44444444-4444-4444-4444-444444444444"
     other = "55555555-5555-5555-5555-555555555555"
-    rec = autonomy.spawn_record(sid, rid, pid, "support", 1, False)
+    rec = autonomy.spawn_record(sid, rid, pid, "support", 1, False, autonomy.tools_digest(T))
     run = {"id": rid, "parent_id": pid, "role": "support", "depth": 1}
 
     def serve(r):
         monkeypatch.setattr(agent_loop, "get_start_record", lambda i: dict(r) if r is not None else None)
     serve(rec)
-    assert autonomy.verify_spawn_record(run) is True
+    assert autonomy.verify_spawn_record(run, T) is True
     for field, value in (("role", "sales"), ("depth", 2), ("parent_id", other), ("run_id", other), ("forced", True), ("spawn_id", other),
                          ("sig", rec["sig"][:-1]), ("sig", None), ("key_id", "ffffffffffff"), ("key_id", None)):
         serve(dict(rec, **{field: value}))
-        assert autonomy.verify_spawn_record(run) is False, (field, value)
+        assert autonomy.verify_spawn_record(run, T) is False, (field, value)
     serve(rec)
     for field, value in (("role", "sales"), ("depth", 2), ("parent_id", other), ("id", other)):          # the LIVE row was edited
-        assert autonomy.verify_spawn_record(dict(run, **{field: value})) is False, (field, value)
+        assert autonomy.verify_spawn_record(dict(run, **{field: value}), T) is False, (field, value)
     serve(None)
-    assert autonomy.verify_spawn_record(run) is False
+    assert autonomy.verify_spawn_record(run, T) is False
     serve(rec)
     monkeypatch.setenv("ADDON_ENCRYPTION_KEY", "another-key")
-    assert autonomy.verify_spawn_record(run) is False
+    assert autonomy.verify_spawn_record(run, T) is False
     monkeypatch.delenv("ADDON_ENCRYPTION_KEY")
-    assert autonomy.verify_spawn_record(run) is False and autonomy.spawn_record(sid, rid, pid, "r", 1, False) is None
+    assert autonomy.verify_spawn_record(run, T) is False and autonomy.spawn_record(sid, rid, pid, "r", 1, False, autonomy.tools_digest(T)) is None
 
 
 def test_a_child_row_without_a_valid_record_is_refused_and_does_nothing(world):
@@ -710,20 +716,20 @@ def test_a_record_signed_with_the_previous_key_verifies_until_that_key_is_retire
     run = {"id": rid, "parent_id": pid, "role": "support", "depth": 1}
     monkeypatch.setenv("SPAWN_SIGNING_KEY", "key-A")
     monkeypatch.delenv("SPAWN_SIGNING_KEY_PREVIOUS", raising=False)
-    rec_a = autonomy.spawn_record(sid, rid, pid, "support", 1, False)
+    rec_a = autonomy.spawn_record(sid, rid, pid, "support", 1, False, autonomy.tools_digest(T))
     monkeypatch.setattr(agent_loop, "get_start_record", lambda i: dict(rec_a))
-    assert autonomy.verify_spawn_record(run) is True
+    assert autonomy.verify_spawn_record(run, T) is True
     monkeypatch.setenv("SPAWN_SIGNING_KEY", "key-B")                           # rotation: B is current, A is still known
     monkeypatch.setenv("SPAWN_SIGNING_KEY_PREVIOUS", "key-A")
-    assert autonomy.verify_spawn_record(run) is True
-    rec_b = autonomy.spawn_record(sid, rid, pid, "support", 1, False)
+    assert autonomy.verify_spawn_record(run, T) is True
+    rec_b = autonomy.spawn_record(sid, rid, pid, "support", 1, False, autonomy.tools_digest(T))
     assert rec_b["key_id"] != rec_a["key_id"] and rec_b["key_id"] == autonomy._signing_keys()[0]     # new records use the new key
     monkeypatch.setenv("SPAWN_SIGNING_KEY_PREVIOUS", "other-old-key, key-A ,")
-    assert autonomy.verify_spawn_record(run) is True                           # several previous keys, blanks ignored
+    assert autonomy.verify_spawn_record(run, T) is True                           # several previous keys, blanks ignored
     monkeypatch.delenv("SPAWN_SIGNING_KEY_PREVIOUS")                            # retired: the record is refused
-    assert autonomy.verify_spawn_record(run) is False
+    assert autonomy.verify_spawn_record(run, T) is False
     monkeypatch.setattr(agent_loop, "get_start_record", lambda i: dict(rec_b))
-    assert autonomy.verify_spawn_record(run) is True
+    assert autonomy.verify_spawn_record(run, T) is True
 
 
 def test_the_key_report_says_when_the_old_key_is_safe_to_retire(world, monkeypatch):
@@ -765,12 +771,12 @@ def test_the_signature_itself_covers_every_field_even_when_the_live_row_is_edite
     from core import autonomy
     sid, rid, pid = "11111111-1111-1111-1111-111111111111", "33333333-3333-3333-3333-333333333333", "44444444-4444-4444-4444-444444444444"
     other = "55555555-5555-5555-5555-555555555555"
-    rec = autonomy.spawn_record(sid, rid, pid, "support", 1, False)
+    rec = autonomy.spawn_record(sid, rid, pid, "support", 1, False, autonomy.tools_digest(T))
     for field, value in (("role", "sales"), ("run_id", other), ("parent_id", other), ("depth", 2), ("forced", True), ("spawn_id", other)):
         edited = dict(rec, **{field: value})
         live = {"id": edited["run_id"], "parent_id": edited["parent_id"], "role": edited["role"], "depth": edited["depth"]}   # the row agrees
         monkeypatch.setattr(agent_loop, "get_start_record", lambda i, e=edited: dict(e))
-        assert autonomy.verify_spawn_record(live) is False, field                 # only the signature can refuse this
+        assert autonomy.verify_spawn_record(live, T) is False, field                 # only the signature can refuse this
 
 
 def test_the_key_id_is_part_of_what_is_signed_so_a_record_cannot_be_relabelled(world, monkeypatch):
@@ -778,9 +784,80 @@ def test_the_key_id_is_part_of_what_is_signed_so_a_record_cannot_be_relabelled(w
     same_key = autonomy._derive("one-key")
     monkeypatch.setattr(autonomy, "_signing_keys", lambda: ("k1", {"k1": same_key, "k2": same_key}))   # two ids, one key
     sid, rid, pid = "11111111-1111-1111-1111-111111111111", "33333333-3333-3333-3333-333333333333", "44444444-4444-4444-4444-444444444444"
-    rec = autonomy.spawn_record(sid, rid, pid, "support", 1, False)
+    rec = autonomy.spawn_record(sid, rid, pid, "support", 1, False, autonomy.tools_digest(T))
     run = {"id": rid, "parent_id": pid, "role": "support", "depth": 1}
     monkeypatch.setattr(agent_loop, "get_start_record", lambda i: dict(rec))
-    assert autonomy.verify_spawn_record(run) is True
+    assert autonomy.verify_spawn_record(run, T) is True
     monkeypatch.setattr(agent_loop, "get_start_record", lambda i: dict(rec, key_id="k2"))
-    assert autonomy.verify_spawn_record(run) is False
+    assert autonomy.verify_spawn_record(run, T) is False
+
+
+# ---- P1-A: the tool list is hashed into the signed start record ----
+
+def test_the_start_record_carries_the_hash_of_the_tool_list_the_child_runs_with(world):
+    from core import autonomy, subagents
+    agent_loop.run(Q, "d", FakeService(basic_replies()), None)
+    _, children = parent_and_children()
+    rec = agent_loop.get_start_record(children[0]["id"])
+    assert rec["tools_hash"] == autonomy.tools_digest(subagents.resolved_tools(agent_loop.get_run(children[0]["id"])))
+    assert rec["tools_hash"] and "delegate" not in subagents.resolved_tools(agent_loop.get_run(children[0]["id"]))
+
+
+def test_a_tool_list_changed_after_signing_refuses_the_child(world, monkeypatch):
+    from core import autonomy, subagents
+    from core.employees import actions
+    agent_loop.run(Q, "d", FakeService(basic_replies()), None)
+    _, children = parent_and_children()
+    cid = children[0]["id"]
+    assert autonomy.verify_spawn_record(agent_loop.get_run(cid)) is True
+    real, real_parent = actions.available_tools, subagents.parent_tool_names
+    names = sorted(real())
+    assert len(names) >= 2
+    monkeypatch.setattr(actions, "available_tools", lambda: {k: v for k, v in real().items() if k != names[0]})       # narrowed
+    assert autonomy.verify_spawn_record(agent_loop.get_run(cid)) is False
+    monkeypatch.setattr(actions, "available_tools", lambda: dict(real(), extra_tool="added later"))                      # widened
+    monkeypatch.setattr(subagents, "parent_tool_names", lambda p: set(real_parent(p)) | {"extra_tool"})
+    assert autonomy.verify_spawn_record(agent_loop.get_run(cid)) is False
+    monkeypatch.setattr(actions, "available_tools", lambda: {})                                                           # emptied
+    assert autonomy.verify_spawn_record(agent_loop.get_run(cid)) is False
+    monkeypatch.setattr(actions, "available_tools", real)
+    monkeypatch.setattr(subagents, "parent_tool_names", real_parent)
+    assert autonomy.verify_spawn_record(agent_loop.get_run(cid)) is True
+
+
+def test_the_loop_will_not_drive_a_child_whose_tool_list_was_swapped(world, monkeypatch):
+    from core.employees import actions
+    agent_loop.run(Q, "d", FakeService(basic_replies()), None)
+    _, children = parent_and_children()
+    cid = children[0]["id"]
+    real = actions.available_tools
+    victim = sorted(real())[0]
+    monkeypatch.setattr(actions, "available_tools", lambda: {k: v for k, v in real().items() if k != victim})
+    agent_loop._drive(agent_loop.get_run(cid), FakeService([]), "support")
+    assert "no valid start record" in (agent_loop.get_run(cid).get("summary") or "")
+
+
+def test_tool_list_hash_rules_by_hand(world, monkeypatch):
+    from core import autonomy
+    sid, rid, pid = "11111111-1111-1111-1111-111111111111", "33333333-3333-3333-3333-333333333333", "44444444-4444-4444-4444-444444444444"
+    run = {"id": rid, "parent_id": pid, "role": "support", "depth": 1}
+    rec = autonomy.spawn_record(sid, rid, pid, "support", 1, False, autonomy.tools_digest(T))
+    monkeypatch.setattr(agent_loop, "get_start_record", lambda i: dict(rec))
+    assert autonomy.verify_spawn_record(run, {"search": "other words", "answer": "x"}) is True      # names count, order and descriptions do not
+    for tools in ({"answer": "a"}, {"answer": "a", "search": "b", "more": "c"}, {"answer": "a", "other": "b"}, {}, None):
+        monkeypatch.setattr("core.subagents.resolved_tools", lambda r: {})
+        assert autonomy.verify_spawn_record(run, tools) is False, tools
+    monkeypatch.setattr(agent_loop, "get_start_record", lambda i: {k: v for k, v in rec.items() if k != "tools_hash"})       # an old (spawn2) record
+    assert autonomy.verify_spawn_record(run, T) is False
+    forged = dict(rec, tools_hash=autonomy.tools_digest({"answer": "a"}))                                # hash changed, signature not
+    monkeypatch.setattr(agent_loop, "get_start_record", lambda i: dict(forged))
+    assert autonomy.verify_spawn_record(run, {"answer": "a"}) is False
+    assert autonomy.spawn_record(sid, rid, pid, "support", 1, False, None) is None and autonomy.tools_digest({}) is None
+
+
+def test_the_schema_adds_the_p1a_columns_and_still_only_adds():
+    sql_text = (ROOT / "db" / "schema.sql").read_text(encoding="utf-8")
+    for line in ("ALTER TABLE agent_run_starts ADD COLUMN IF NOT EXISTS tools_hash TEXT;",
+                 "ALTER TABLE autonomy_pending ADD COLUMN IF NOT EXISTS action_hash TEXT;",
+                 "ALTER TABLE autonomy_pending ADD COLUMN IF NOT EXISTS action_sig TEXT;"):
+        assert sql_text.count(line) == 1, line

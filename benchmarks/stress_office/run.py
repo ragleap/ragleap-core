@@ -104,7 +104,7 @@ def world(mode: str, fetch: bool = True):
         sent.append((channel, target, content))
         return page if channel == "fetch" else "ok (fake)"
 
-    def fake_request_approval(action_type, channel, target, content, action_id, role=None):
+    def fake_request_approval(action_type, channel, target, content, action_id, role=None, ref=None):
         pending.append({"action_type": action_type, "target": target, "content": content, "action_id": action_id})
         return True
 

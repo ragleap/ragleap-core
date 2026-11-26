@@ -11,6 +11,7 @@ BODY_SHA = hashlib.sha256(BODY.encode()).hexdigest()
 
 class FakeCur:
     def execute(self, *a, **k): pass
+    def fetchone(self): return ("stored",)
     def close(self): pass
 
 

@@ -196,6 +196,10 @@ CREATE TABLE IF NOT EXISTS autonomy_pending (
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- P1-A: the hash (and signature, when a signing key is set) of the action as it was proposed, checked again right before it runs.
+ALTER TABLE autonomy_pending ADD COLUMN IF NOT EXISTS action_hash TEXT;
+ALTER TABLE autonomy_pending ADD COLUMN IF NOT EXISTS action_sig TEXT;
+
 -- Bounded audit log of every autonomous action (executed, rejected, or errored).
 CREATE TABLE IF NOT EXISTS autonomy_log (
     id           BIGSERIAL PRIMARY KEY,
@@ -376,6 +380,7 @@ CREATE TABLE IF NOT EXISTS agent_run_starts (
     sig        TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+ALTER TABLE agent_run_starts ADD COLUMN IF NOT EXISTS tools_hash TEXT;
 CREATE OR REPLACE FUNCTION agent_run_starts_append_only() RETURNS trigger AS $$
 BEGIN
     RAISE EXCEPTION 'agent_run_starts is append-only: % is refused', TG_OP;

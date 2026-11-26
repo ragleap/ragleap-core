@@ -353,7 +353,7 @@ def list_pending(limit: int = 50) -> List[Dict]:
     try:
         cur = conn.cursor()
         cur.execute(
-            "SELECT action_id, action_type, channel, target, content, subject, role, created_at "
+            "SELECT action_id, action_type, channel, target, content, subject, role, created_at, action_hash "
             "FROM autonomy_pending ORDER BY created_at DESC LIMIT %s",
             (max(1, min(int(limit), 200)),),
         )
@@ -361,10 +361,12 @@ def list_pending(limit: int = 50) -> List[Dict]:
         cur.close()
     finally:
         conn.close()
-    keys = ("action_id", "action_type", "channel", "target", "content", "subject", "role", "created_at")
+    keys = ("action_id", "action_type", "channel", "target", "content", "subject", "role", "created_at", "action_hash")
     out = []
     for r in rows:
         d = dict(zip(keys, r))
+        d["action_hash"] = d.get("action_hash")
+        d["ref"] = (d["action_hash"] or "")[:12] or None
         if d["created_at"] is not None:
             d["created_at"] = d["created_at"].isoformat()
         d["display"] = _approval_preview(d["channel"], d["content"], limit=10**6)
@@ -372,7 +374,7 @@ def list_pending(limit: int = 50) -> List[Dict]:
     return out
 
 
-def resolve_pending(action_id: str, approve: bool, decided_by: Optional[Dict] = None) -> Optional[str]:
+def resolve_pending(action_id: str, approve: bool, decided_by: Optional[Dict] = None, action_hash: Optional[str] = None) -> Optional[str]:
     """
     Approve or reject one pending action through the SAME path as an owner chat
     reply ("YES/NO <id>"), so execution, logging and learning are identical.
@@ -383,7 +385,9 @@ def resolve_pending(action_id: str, approve: bool, decided_by: Optional[Dict] = 
         return None
     if not any(p["action_id"] == action_id for p in list_pending(200)):
         return None
-    return process_approval_response(f"{'YES' if approve else 'NO'} {action_id}", decided_by=decided_by)
+    if action_hash is not None and not re.fullmatch(r"[0-9a-fA-F]{12,64}", str(action_hash).strip()):
+        return f"Action {action_id} was not run: the reference must be 12 to 64 hex characters (the Ref shown with the action)."
+    return process_approval_response(f"{'YES' if approve else 'NO'} {action_id}", decided_by=decided_by, expected_hash=action_hash)
 
 
 def _decision_instructions(action_id: str) -> str:
@@ -403,8 +407,74 @@ def _decision_instructions(action_id: str) -> str:
     return f'Reply "YES {action_id}" to approve\nReply "NO {action_id}" to reject'
 
 
+def action_hash(action_id, action_type, channel, target, content, subject, role) -> str:
+    """SHA-256 of the canonical form of an action: id, type, channel, target, content, subject and role. Changing even one
+    character of any of them changes the hash (P1-A)."""
+    import hashlib
+
+    def s(v):
+        return "" if v is None else str(v)
+    body = json.dumps({"v": 1, "id": s(action_id), "type": s(action_type), "channel": s(channel), "target": s(target),
+                       "content": s(content), "subject": s(subject), "role": None if role is None else str(role)},
+                      sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(body.encode("utf-8", "surrogatepass")).hexdigest()
+
+
+def _approval_mac(key: bytes, key_id, action_id, ahash) -> str:
+    import hashlib
+    msg = "|".join(("approval1", str(key_id), str(action_id), str(ahash)))
+    return hmac.new(key, msg.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def approval_binding(action_id, action_type, channel, target, content, subject, role):
+    """(hash, signature) stored with a proposed action. The signature is "<key id>:<hmac>", or None when no signing key is
+    configured (then only the hash is stored, which catches a changed field but not a rewritten hash)."""
+    h = action_hash(action_id, action_type, channel, target, content, subject, role)
+    key_id, keys = _signing_keys()
+    if key_id is None:
+        return h, None
+    return h, f"{key_id}:{_approval_mac(keys[key_id], key_id, action_id, h)}"
+
+
+def verify_approval(action_id, action_type, channel, target, content, subject, role, stored_hash, stored_sig):
+    """(ok, reason): does the exact action about to run still match what was proposed? Fails closed on any error."""
+    try:
+        if not stored_hash:
+            return True, "legacy_unbound"          # a row from before P1-A; rows expire after APPROVAL_EXPIRY_HOURS
+        if not hmac.compare_digest(action_hash(action_id, action_type, channel, target, content, subject, role), str(stored_hash)):
+            return False, "hash_mismatch"
+        key_id, keys = _signing_keys()
+        if stored_sig:
+            kid, _, mac = str(stored_sig).partition(":")
+            key = keys.get(kid)
+            if key is None:
+                return False, "unknown_key"
+            if not hmac.compare_digest(_approval_mac(key, kid, action_id, str(stored_hash)), mac):
+                return False, "bad_signature"
+            return True, "ok"
+        if key_id is not None:
+            return False, "signature_missing"      # a key is configured now: an unsigned row could be a downgrade
+        return True, "ok_hash_only"
+    except Exception as e:
+        logger.warning("Approval check failed, refusing: %s", e)
+        return False, "check_failed"
+
+
+def _execute_approved(action_id: str, fields: Dict, stored_hash, stored_sig):
+    """THE last step before an approved action runs: recompute the hash of the exact fields about to be executed and compare
+    it with the one the owner approved. Returns (True, result) or (False, reason); on False nothing was sent."""
+    ok, why = verify_approval(action_id, fields.get("action_type"), fields.get("channel"), fields.get("target"), fields.get("content"),
+                              fields.get("subject"), fields.get("role"), stored_hash, stored_sig)
+    if not ok:
+        _audit_event("approval_mismatch", action_id=action_id, action_type=fields.get("action_type"), channel=fields.get("channel"), reason=why)
+        return False, why
+    if why == "legacy_unbound":
+        _audit_event("approval_legacy_unbound", action_id=action_id, action_type=fields.get("action_type"))
+    return True, _send_via_channel(fields["channel"], fields["target"], fields["content"])
+
+
 def request_approval(action_type: str, channel: str, target: str,
-                      content: str, action_id: str, role: Optional[str] = None) -> bool:
+                      content: str, action_id: str, role: Optional[str] = None, ref: Optional[str] = None) -> bool:
     """
     Send an approval request to the owner over the configured approval
     channel. Uses the same channel senders as _send_via_channel - approval
@@ -419,12 +489,14 @@ def request_approval(action_type: str, channel: str, target: str,
         return False
 
     role_line = f"Role: {role}\n" if role else ""
+    ref_line = f"Ref: {str(ref)[:12]}\n" if ref else ""
     msg = (
         f"Approval Request\n\n"
         f"Action: {action_type}\n"
         f"{role_line}"
         f"Channel: {channel}\n"
-        f"Target: {target}\n\n"
+        f"Target: {target}\n"
+        f"{ref_line}\n"
         f"Message preview:\n{_approval_preview(channel, content)}\n\n"
         f"{_decision_instructions(action_id)}"
     )
@@ -523,28 +595,41 @@ def _signing_keys():
     return (_key_id(cur) if cur else None), keys
 
 
-def _spawn_mac(key: bytes, key_id, spawn_id, run_id, parent_id, role, depth, forced) -> str:
+def tools_digest(tools) -> Optional[str]:
+    """SHA-256 of the sorted tool NAMES a run may use (None for an empty list: a run with no tools is never started)."""
+    import hashlib
+    names = sorted(str(k) for k in (tools or {}))
+    if not names:
+        return None
+    return hashlib.sha256(json.dumps(names, separators=(",", ":")).encode("utf-8")).hexdigest()
+
+
+def _spawn_mac(key: bytes, key_id, spawn_id, run_id, parent_id, role, depth, forced, tools_hash) -> str:
     # key_id is in the message on purpose even though a wrong key id already fails today (the key lookup and the key itself
     # differ). It binds a record to the key it names, so a later change that lets two ids share a key cannot let a record be
     # re-labelled. tests/test_subagents.py proves it directly; do not drop it as redundant.
     import hashlib
     import hmac
-    msg = "|".join(("spawn2", str(key_id), str(spawn_id), str(run_id), str(parent_id), str(role), str(int(depth)), "1" if forced else "0"))
+    # tools_hash (P1-A) binds the exact tool list the child was started with, so a swap between signing and execution is refused.
+    msg = "|".join(("spawn3", str(key_id), str(spawn_id), str(run_id), str(parent_id), str(role), str(int(depth)), "1" if forced else "0",
+                    str(tools_hash)))
     return hmac.new(key, msg.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
-def spawn_record(spawn_id, run_id, parent_id, role, depth, forced) -> Optional[Dict]:
+def spawn_record(spawn_id, run_id, parent_id, role, depth, forced, tools_hash) -> Optional[Dict]:
     """The signed start record of a child, written once with its run (the table is append-only). None when it cannot be made."""
     key_id, keys = _signing_keys()
-    if key_id is None or not spawn_id or not run_id or not parent_id:
+    if key_id is None or not spawn_id or not run_id or not parent_id or not tools_hash:
         return None
     return {"spawn_id": spawn_id, "run_id": run_id, "parent_id": parent_id, "role": role, "depth": int(depth), "forced": bool(forced),
-            "key_id": key_id, "sig": _spawn_mac(keys[key_id], key_id, spawn_id, run_id, parent_id, role, depth, forced)}
+            "tools_hash": tools_hash, "key_id": key_id,
+            "sig": _spawn_mac(keys[key_id], key_id, spawn_id, run_id, parent_id, role, depth, forced, tools_hash)}
 
 
-def verify_spawn_record(run: Dict) -> bool:
+def verify_spawn_record(run: Dict, tools=None) -> bool:
     """True only when the run has a start record in the append-only table, the record's parent, role and depth are the live
-    row's, its key is still configured (current or previous) and its signature matches. Anything else is refused."""
+    row's, the tool list the run is about to use (`tools`, else subagents.resolved_tools) has the recorded hash, its key is
+    still configured (current or previous) and its signature matches. Anything else is refused."""
     try:
         import hmac
         from core import agent_loop
@@ -558,10 +643,19 @@ def verify_spawn_record(run: Dict) -> bool:
         if (str(rec["run_id"]), str(rec["parent_id"]), rec.get("role"), int(rec["depth"])) != \
                 (str(rid), str(run["parent_id"]), run.get("role"), int(run.get("depth") or 0)):
             return False
+        if tools is None:
+            from core import subagents
+            tools = subagents.resolved_tools(run)
+        have, recorded = tools_digest(tools), rec.get("tools_hash")
+        if not have or not recorded or not hmac.compare_digest(str(have), str(recorded)):
+            return False                           # a legacy record (no hash), an empty list or a swapped list is refused
         key = _signing_keys()[1].get(rec["key_id"])
         if key is None:
             return False
-        want = _spawn_mac(key, rec["key_id"], rec["spawn_id"], rec["run_id"], rec["parent_id"], rec.get("role"), rec["depth"], rec["forced"])
+        # `recorded` and `have` are equal here (the compare above refused otherwise), so signing over either gives the same MAC:
+        # a mutation that swaps them is equivalent, not a test gap. The hash check above is what refuses a swapped list.
+        want = _spawn_mac(key, rec["key_id"], rec["spawn_id"], rec["run_id"], rec["parent_id"], rec.get("role"), rec["depth"], rec["forced"],
+                          recorded)
         return hmac.compare_digest(want, str(rec["sig"]))
     except Exception:
         return False
@@ -684,24 +778,37 @@ def execute_or_request(action_type: str, channel: str, target: str,
             return {"status": "error", "result": "action failed; see server logs"}
 
     elif mode == "semi":
-        action_id = str(uuid.uuid4())[:8].upper()
+        subject = subject or ""
+        stored, ahash = None, None
         conn = get_connection()
         try:
             cur = conn.cursor()
-            cur.execute(
-                "INSERT INTO autonomy_pending (action_id, action_type, channel, target, content, subject, role) "
-                "VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                (action_id, action_type, channel, target, content, subject, role),
-            )
+            for _ in range(6):                      # a clash on the short id draws a new id; the prompt is only sent for a stored action
+                candidate = str(uuid.uuid4())[:8].upper()
+                h, sig = approval_binding(candidate, action_type, channel, target, content, subject, role)
+                cur.execute(
+                    "INSERT INTO autonomy_pending (action_id, action_type, channel, target, content, subject, role, action_hash, action_sig) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (action_id) DO NOTHING RETURNING action_id",
+                    (candidate, action_type, channel, target, content, subject, role, h, sig),
+                )
+                if cur.fetchone():
+                    stored, ahash = candidate, h
+                    break
             conn.commit()
             cur.close()
         except Exception as e:
+            stored, ahash = None, None
             logger.warning(f"failed to store pending action: {e}")
         finally:
             conn.close()
+        if not stored:
+            _audit_event("action_not_stored", action_type=action_type, channel=channel, target=target, role=role)
+            return {"status": "error", "result": "could not store the action for approval; nothing was sent"}
+        action_id = stored
 
-        _audit_event("action_proposed", content=content, action_id=action_id, action_type=action_type, channel=channel, target=target, role=role)
-        sent = request_approval(action_type, channel, target, content, action_id, role=role)
+        _audit_event("action_proposed", content=content, action_id=action_id, action_type=action_type, channel=channel, target=target, role=role,
+                     action_hash=ahash)
+        sent = request_approval(action_type, channel, target, content, action_id, role=role, ref=ahash)
         return {"status": "pending_approval", "action_id": action_id, "approval_sent": sent}
 
     return {"status": "skipped", "result": "unknown mode"}
@@ -725,7 +832,7 @@ def _approval_expiry_hours() -> int:
     return h if h > 0 else 876000
 
 
-def process_approval_response(message: str, decided_by: Optional[Dict] = None) -> Optional[str]:
+def process_approval_response(message: str, decided_by: Optional[Dict] = None, expected_hash: Optional[str] = None) -> Optional[str]:
     """
     Process an owner reply of the form "YES ABC123" or "NO ABC123".
     Returns a human-readable reply, or None if the message isn't an
@@ -744,19 +851,23 @@ def process_approval_response(message: str, decided_by: Optional[Dict] = None) -
         cur = conn.cursor()
         # Claim the pending row atomically: only the caller whose DELETE removes the row may
         # run the effect. A second, simultaneous answer (dashboard, API or chat) finds no row.
+        # expected_hash (the Ref the owner saw, 12 or more hex characters) must match the stored hash, else nothing is consumed.
+        eh = (expected_hash or "").strip().lower() or None
         cur.execute(
-            "DELETE FROM autonomy_pending WHERE action_id = %s "
+            "DELETE FROM autonomy_pending WHERE action_id = %s AND (%s::text IS NULL OR left(coalesce(action_hash, ''), length(%s::text)) = %s::text) "
             "RETURNING action_type, channel, target, content, subject, role, "
-            "(created_at < now() - make_interval(hours => %s))",
-            (action_id, _approval_expiry_hours()),
+            "(created_at < now() - make_interval(hours => %s)), action_hash, action_sig",
+            (action_id, eh, eh, eh, _approval_expiry_hours()),
         )
         row = cur.fetchone()
         conn.commit()
         if not row:
             cur.close()
+            if eh:
+                return f"Action {action_id} was not run: not found, already processed, or the reference does not match."
             return f"Action {action_id} not found or already processed."
 
-        action_type, channel, target, content, subject, role, expired = row
+        action_type, channel, target, content, subject, role, expired, ahash, asig = row
         cur.close()
     except Exception as e:
         logger.error(f"process_approval_response lookup error: {e}", exc_info=True)
@@ -781,7 +892,13 @@ def process_approval_response(message: str, decided_by: Optional[Dict] = None) -
         return (f"Action {action_id} expired (it waited longer than {_approval_expiry_hours()} hours) and was not run. "
                 "Ask for it again if you still want it.")
 
-    result = _send_via_channel(channel, target, content)
+    ran, result = _execute_approved(action_id, {"action_type": action_type, "channel": channel, "target": target, "content": content,
+                                                "subject": subject, "role": role}, ahash, asig)
+    if not ran:
+        log_autonomous_action(action_type, channel, target, content, f"REFUSED: the action does not match what was approved ({result})",
+                              approved=False, role=role, decided_by=decided_by, action_id=action_id)
+        _notify_agent_loop(action_id, False, "", action_type)
+        return f"Action {action_id} was NOT run: it does not match what was proposed ({result}). Ask for it again."
     log_autonomous_action(action_type, channel, target, content, result, approved=True, role=role,
                           decided_by=decided_by, action_id=action_id)
     employee_learning.learn_from_owner_approval(

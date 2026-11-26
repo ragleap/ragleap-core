@@ -135,10 +135,10 @@ def _save_child(run: Dict, record: Dict) -> None:
              run.get("parent_id"), int(run.get("depth") or 0), int(run.get("tokens_used") or 0)),
         )
         cur.execute(
-            "INSERT INTO agent_run_starts (spawn_id, run_id, parent_id, role, depth, forced, key_id, sig) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+            "INSERT INTO agent_run_starts (spawn_id, run_id, parent_id, role, depth, forced, key_id, sig, tools_hash) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
             (record["spawn_id"], record["run_id"], record["parent_id"], record.get("role"), int(record["depth"]),
-             bool(record["forced"]), record["key_id"], record["sig"]),
+             bool(record["forced"]), record["key_id"], record["sig"], record.get("tools_hash")),
         )
         conn.commit()
         cur.close()
@@ -157,13 +157,13 @@ def get_start_record(run_id) -> Optional[Dict]:
     conn = get_connection()
     try:
         cur = conn.cursor()
-        cur.execute("SELECT spawn_id, run_id, parent_id, role, depth, forced, key_id, sig FROM agent_run_starts WHERE run_id = %s", (rid,))
+        cur.execute("SELECT spawn_id, run_id, parent_id, role, depth, forced, key_id, sig, tools_hash FROM agent_run_starts WHERE run_id = %s", (rid,))
         r = cur.fetchone()
         cur.close()
         if r is None:
             return None
         return {"spawn_id": str(r[0]), "run_id": str(r[1]), "parent_id": str(r[2]), "role": r[3], "depth": int(r[4]),
-                "forced": bool(r[5]), "key_id": r[6], "sig": r[7]}
+                "forced": bool(r[5]), "key_id": r[6], "sig": r[7], "tools_hash": r[8]}
     finally:
         conn.close()
 
@@ -512,8 +512,8 @@ def _finish(run: Dict, service, role: Optional[str], status: str, note: str = ""
 
 def _drive(run: Dict, service, role: Optional[str]) -> Optional[Dict]:
     from core.autonomy import execute_or_request, inherited_force_semi, verify_spawn_record  # lazy: avoids an import cycle
-    tools = subagents.limit_to_parent(subagents.with_delegate(actions.available_tools(), run), run)
-    if run.get("parent_id") and not verify_spawn_record(run):          # a child the gate did not start is never driven
+    tools = subagents.resolved_tools(run)
+    if run.get("parent_id") and not verify_spawn_record(run, tools):          # a child the gate did not start is never driven
         return _finish(run, None, role, "failed", "Stopped: this sub-agent has no valid start record.")
     limit = max_steps()
     while True:
