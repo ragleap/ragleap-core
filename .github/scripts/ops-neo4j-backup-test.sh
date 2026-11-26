@@ -92,8 +92,9 @@ fi
 echo "kubectl image lines under test:"
 grep -n 'image: alpine/kubectl' "$CRON"
 [ "$(count_in "$CRON" 'database dump neo4j --to-path')" = "1" ] || stop "dump command anchor does not match once"
-sed 's#database dump neo4j --to-path#database dump doesnotexist --to-path#' "$CRON" > "$FAILCRON"
+sed -E 's#database dump neo4j (--to-path=/backups/neo4j-\$\{TIMESTAMP\})#database dump doesnotexist \1 2>/backups/faildump.err#' "$CRON" > "$FAILCRON"
 [ "$(count_in "$FAILCRON" 'database dump doesnotexist --to-path')" = "1" ] || stop "failing variant was not produced"
+[ "$(count_in "$FAILCRON" '2>/backups/faildump.err')" = "1" ] || stop "failing variant does not write the error file"
 
 AUTH=$(sed -n 's/^  NEO4J_AUTH: *//p' "$K8S/neo4j-secret.yaml")
 [ -n "$AUTH" ] || stop "NEO4J_AUTH not found in neo4j-secret.yaml"
@@ -135,7 +136,6 @@ neo4j_available() { kubectl -n "$NS" wait --for=jsonpath='{.status.availableRepl
 job_logs() { # job name: logs of every container of the job pods, found by label, never waiting long
   kubectl -n "$NS" get pods -l "job-name=$1" -o jsonpath='{range .items[*].status.containerStatuses[*]}{.name}{" restarts="}{.restartCount}{" state="}{.state.waiting.reason}{.state.terminated.reason}{" last="}{.lastState.terminated.reason}{"/"}{.lastState.terminated.exitCode}{"\n"}{end}' 2>&1 || true
   kubectl -n "$NS" logs -l "job-name=$1" --all-containers --prefix --tail=25 --ignore-errors --pod-running-timeout=10s 2>&1 | grep -v 'Files: ' || true
-  kubectl -n "$NS" logs -l "job-name=$1" -c dump --previous --prefix --tail=15 --ignore-errors --pod-running-timeout=10s 2>&1 | grep -v 'Files: ' || true
 }
 
 echo "== deploy neo4j from the real manifests"
@@ -226,6 +226,31 @@ if [ "$FAILED" = "1" ]; then ok "leg 2: the dump really failed (the leg is valid
 echo "job logs (leg 2):"; job_logs bk-fail
 M=$(marker_count || true)
 if [ "$M" = "1" ]; then ok "leg 2: marker row intact after the failed dump"; else bad "leg 2: marker row missing after the failed dump (got '${M}')"; fi
+
+kubectl -n "$NS" delete pod backup-err --ignore-not-found >/dev/null
+kubectl -n "$NS" apply -f - <<'YAML'
+apiVersion: v1
+kind: Pod
+metadata:
+  name: backup-err
+  namespace: ragleap-core
+spec:
+  restartPolicy: Never
+  containers:
+    - name: c
+      image: busybox:1.36
+      command: ["sh", "-c", "if [ -f /backups/faildump.err ]; then tail -n 20 /backups/faildump.err; else echo no faildump.err file; fi"]
+      volumeMounts:
+        - name: b
+          mountPath: /backups
+  volumes:
+    - name: b
+      persistentVolumeClaim:
+        claimName: ragleap-backup-data
+YAML
+kubectl -n "$NS" wait --for=jsonpath='{.status.phase}'=Succeeded pod/backup-err --timeout=120s || true
+echo "leg 2 dump error (evidence, not a check):"
+kubectl -n "$NS" logs backup-err --pod-running-timeout=10s 2>&1 | head -20 || true
 
 poll_stop
 echo
