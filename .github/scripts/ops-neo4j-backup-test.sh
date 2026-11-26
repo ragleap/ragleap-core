@@ -222,7 +222,7 @@ for i in $(seq 1 40); do
   if dump_failed; then FAILED=1; break; fi
   sleep 3
 done
-if [ "$FAILED" = "1" ]; then ok "leg 2: the dump really failed (the leg is valid)"; else bad "leg 2: no sign that the dump failed, so leg 2 proves nothing"; fi
+if [ "$FAILED" = "1" ]; then echo "leg 2: the job reported the failure"; else echo "leg 2: no sign of a failure yet"; fi
 echo "job logs (leg 2):"; job_logs bk-fail
 M=$(marker_count || true)
 if [ "$M" = "1" ]; then ok "leg 2: marker row intact after the failed dump"; else bad "leg 2: marker row missing after the failed dump (got '${M}')"; fi
@@ -249,8 +249,14 @@ spec:
         claimName: ragleap-backup-data
 YAML
 kubectl -n "$NS" wait --for=jsonpath='{.status.phase}'=Succeeded pod/backup-err --timeout=120s || true
-echo "leg 2 dump error (evidence, not a check):"
-kubectl -n "$NS" logs backup-err --pod-running-timeout=10s 2>&1 | head -20 || true
+ERRTXT=$(kubectl -n "$NS" logs backup-err --pod-running-timeout=10s 2>&1 || true)
+echo "leg 2 dump error (evidence):"
+printf '%s\n' "$ERRTXT" | head -20
+if [ "$FAILED" = "1" ] && grep -q 'doesnotexist' <<< "$ERRTXT"; then
+  ok "leg 2: the dump failed for the intended reason (database 'doesnotexist')"
+else
+  bad "leg 2: no sign that the dump failed for the intended reason, so leg 2 proves nothing"
+fi
 
 poll_stop
 echo
