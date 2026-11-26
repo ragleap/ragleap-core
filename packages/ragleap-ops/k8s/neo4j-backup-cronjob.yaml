@@ -78,7 +78,7 @@ spec:
                     sleep 2
                   done
                   echo "Signal received -- scaling ragleap-neo4j back up."
-                  kubectl scale deployment ragleap-neo4j --replicas=1
+                  echo "break: scale-up removed"
                   echo "Scale-up complete."
               volumeMounts:
                 - name: signal

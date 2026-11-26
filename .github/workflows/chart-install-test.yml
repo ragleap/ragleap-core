@@ -1,22 +1,29 @@
-name: chart-install-test
+name: ops-neo4j-backup-test
 
-# Install, upgrade and uninstall test for the three RagLeap Helm charts on a throwaway kind cluster.
-# Manual (workflow_dispatch) or when a PR changes this file or the test script. Not a required check.
+# Test of the neo4j backup cronjob (packages/ragleap-ops/k8s/neo4j-backup-cronjob.yaml) on a throwaway kind cluster:
+# a normal backup, and a backup whose dump fails on purpose (neo4j must still come back).
+# Manual (workflow_dispatch, optionally with a kubectl image to try) or when a PR changes the cronjob, this file or the
+# test script. Not a required check.
 on:
   workflow_dispatch:
+    inputs:
+      kubectl_image:
+        description: "Optional kubectl image to test instead of the one in the manifest, for example alpine/kubectl:1.37.2"
+        required: false
+        default: ""
   pull_request:
     branches: [main]
     paths:
-      - .github/workflows/chart-install-test.yml
-      - .github/scripts/chart-install-test.sh
+      - .github/workflows/ops-neo4j-backup-test.yml
+      - .github/scripts/ops-neo4j-backup-test.sh
+      - packages/ragleap-ops/k8s/neo4j-backup-cronjob.yaml
 
 permissions:
   contents: read
-  packages: read
 
 jobs:
-  chart-install-test:
-    name: chart-install-test (k8s ${{ matrix.k8s }})
+  ops-neo4j-backup-test:
+    name: ops-neo4j-backup-test (k8s ${{ matrix.k8s }})
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     # One leg per Kubernetes version (node images from the kind v0.33.0 release notes, pinned by digest).
@@ -36,10 +43,9 @@ jobs:
       - name: Tool versions
         run: |
           kubectl version --client
-          helm version --short
-          kind version || echo "kind is not preinstalled; the test script downloads v0.24.0"
-      - name: Install, upgrade and uninstall the three charts on kind
+          kind version || echo "kind is not preinstalled; the test script downloads v0.33.0"
+      - name: Test the neo4j backup cronjob on kind
         env:
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           KIND_NODE_IMAGE: ${{ matrix.node_image }}
-        run: bash .github/scripts/chart-install-test.sh
+          KUBECTL_IMAGE: ${{ github.event.inputs.kubectl_image }}
+        run: bash .github/scripts/ops-neo4j-backup-test.sh
