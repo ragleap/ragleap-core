@@ -90,7 +90,7 @@ from ragleap_tools.vision import (
     make_vision_tool,
 )
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"
 
 # Tools with no config/state needed - usable directly.
 STATELESS_TOOLS = [

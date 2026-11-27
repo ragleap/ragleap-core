@@ -390,13 +390,15 @@ rushed inclusion here:
 
 ## Status
 
-v0.6.0. 525 tests pass and 1 is skipped (526 pass with the optional
-`security` extra installed), including real security verification
+v0.7.0. 616 tests pass and 1 is skipped (617 pass with the optional
+`security` extra installed; the `ingest` extra is installed in both), including real security verification
 for the two risk-sensitive tools (calculator's code-injection
 rejection, file ops' path-traversal and symlink-escape rejection) -
 not just documented as safe, actually tested against real attack
 vectors. `GovernedToolkit` has no network component, so there is nothing
-to live-check for it, and it does not authenticate anybody.
+to live-check for it, and it does not authenticate anybody. The provider
+formats and `strict_schema` (0.7.0) have not been sent to any provider either;
+see the CHANGELOG.
 
 Not live-verified: that OpenAI, Gemini or Anthropic accept the schemas `@tool`
 generates (they use the same shape as the built-in tools plus `default` and
