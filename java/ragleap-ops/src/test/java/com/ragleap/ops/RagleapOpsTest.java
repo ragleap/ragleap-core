@@ -11,8 +11,8 @@ class RagleapOpsTest {
         String chart = RagleapOps.readHelmString("ragleap-ops/Chart.yaml");
 
         assertTrue(chart.contains("name: ragleap-ops"), chart);
-        assertTrue(chart.matches("(?s).*\\bversion:\\s*['\"]?0\\.6\\.2['\"]?.*"), chart);
-        assertTrue(chart.matches("(?s).*\\bappVersion:\\s*['\"]?0\\.6\\.2['\"]?.*"), chart);
+        assertTrue(chart.matches("(?s).*\\bversion:\\s*['\"]?0\\.6\\.3['\"]?.*"), chart);
+        assertTrue(chart.matches("(?s).*\\bappVersion:\\s*['\"]?0\\.6\\.3['\"]?.*"), chart);
     }
 
     @Test

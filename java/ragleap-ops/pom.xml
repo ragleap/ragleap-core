@@ -6,7 +6,7 @@
 
   <groupId>com.ragleap</groupId>
   <artifactId>ragleap-ops</artifactId>
-  <version>0.6.2</version>
+  <version>0.6.3</version>
   <name>Ragleap Ops Resources</name>
   <description>Java JAR distribution of Ragleap Ops Helm and Kubernetes resources.</description>
   <url>https://github.com/ragleap/ragleap-core</url>
