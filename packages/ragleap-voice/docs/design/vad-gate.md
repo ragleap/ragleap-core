@@ -73,7 +73,21 @@ Status: pre-alpha, not exported, off by default. [verified: code and tests in th
 
 ## 10. gate="silero" in transcribe() (2026-11-26)
 
-Status: pre-alpha, opt-in, off by default [tested: fake backend; the real model file has not been run through `transcribe()` yet]. `transcribe(audio, gate="silero", gate_options={"model_path": "/path/to/silero_vad_16k_op15.onnx"})` runs `SileroGate` over the clip after the model has been verified and before the engine; if the detector reports no speech, an empty `Transcript` with a note is returned and the engine is not run. `Transcriber.transcribe` accepts the same arguments. It is not wired into `transcribe_stream`.
+Status: pre-alpha, opt-in, off by default [tested: fake backend; one run of the real model file through `transcribe()` is recorded in section 11]. `transcribe(audio, gate="silero", gate_options={"model_path": "/path/to/silero_vad_16k_op15.onnx"})` runs `SileroGate` over the clip after the model has been verified and before the engine; if the detector reports no speech, an empty `Transcript` with a note is returned and the engine is not run. `Transcriber.transcribe` accepts the same arguments. It is not wired into `transcribe_stream`.
 - Options: `model_path` is required (the file is not bundled and must have the pinned SHA-256 of section 9; a missing file raises `ModelNotFoundError`, a wrong one `ModelNotVerifiedError`), and the detector's own options (`threshold`, `min_speech_windows`, `hangover_windows`, `hard_cap_windows`). The clip must be mono 16-bit PCM at 16000 Hz, otherwise `UnsupportedFeatureError`. It needs the extra `vad`.
 - Why: in four clean-install checks of 0.4.0 (Python 3.12 and 3.10, TestPyPI and PyPI) `whisper-large-v3` wrote "Thank you." for a 3 s synthetic tone, and the engine's own note flagged it: the known failure of writing a fluent phrase for non-speech. The level gate (`gate="energy"`) cannot help: it accepted 99.0% to 99.6% of 796 real recorded noise files, while Silero accepted 4.4% to 5.4% of the same files (one run, `benchmarks/voice/README.md`).
 - What it does not do: nothing was measured about missed speech or speech mixed with noise; a clip with fewer than `min_speech_windows` consecutive speech windows (default 3, about 0.1 s) counts as no speech; and a gate cannot fix words the engine mishears. The thresholds are the untuned benchmark values.
+
+## 11. The real model file through transcribe() (2026-11-26, laptop CPU, Python 3.12, one run)
+
+`ragleap-voice` from `main` (with the gate), `faster-whisper` 1.2.1, `onnxruntime` 1.32.0, `whisper-large-v3` pulled through the installed package without `--allow-unverified`, `silero_vad_16k_op15.onnx` fetched from `snakers4/silero-vad` at commit `066409f3d9db` (path `src/silero_vad/data/`, 1,289,603 bytes, SHA-256 equal to the pin). Language `en`, `device="cpu"`, default gate options.
+
+| Input | gate off | gate silero |
+|---|---|---|
+| 3 s of silence | "Thank you." (41.3 s, includes the model load) | empty, 0.3 s, engine not run |
+| 3 s tone (the input of the 0.4.0 install checks) | "Thank you." (25.4 s) | empty, 0.2 s, engine not run |
+| 3 s white noise at -23 dBFS | "Thank you." (24.8 s) | empty, 0.1 s, engine not run |
+| 2.2 s Hindi stock-voice clip read as English | "Namaste! Aap ka swaagat hai." (23.8 s) | passed (speech from 0.22 s), same text (24.4 s) |
+
+So the false transcript appeared for all three non-speech inputs with the gate off, and the gate removed all three and let the speech clip through unchanged. Peak memory of the process was 4129 MB (the cause of the 1 GB above the 3 GB of the earlier checks was not investigated).
+- Limits: one run, three synthetic non-speech inputs and one synthetic speech clip. Nothing was measured on speech mixed with noise, short or quiet speech, accents, or noise recorded on a phone line; the 796-file result of section 9 (4.4% to 5.4% false accepts) remains the broader evidence. A clip with fewer than three speech windows (about 0.1 s) is dropped. The thresholds are the untuned benchmark values.
