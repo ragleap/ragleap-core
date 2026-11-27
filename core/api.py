@@ -148,7 +148,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="RagLeap Core API",
     description="Minimal self-hosted RAG pipeline — BYOK, no platform fallback keys.",
-    version="0.13.10",
+    version="0.13.11",
     lifespan=lifespan,
 )
 
