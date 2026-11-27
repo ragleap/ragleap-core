@@ -83,6 +83,90 @@ def _count_children(run_id: str) -> int:
         conn.close()
 
 
+def reservation_limit(parent: Dict) -> int:
+    """How many tokens the children of this parent may hold in total (reserved while running, actual once ended): the tree cap
+    minus what the parent itself used, and never more than the parent role's own remaining budget. The role ledger is a cost
+    counter and fails OPEN (None = no cap); the tree cap always applies."""
+    room = tree_tokens() - int((parent or {}).get("tokens_used") or 0)
+    try:
+        role = (parent or {}).get("role")
+        left = budget.remaining(None if role in ("auto", "team") else role)
+    except Exception:
+        left = None
+    return room if left is None else min(room, left)
+
+
+def reserve_child(parent_id: str, cap: int, limit: int) -> Optional[Dict]:
+    """Reserve `cap` tokens and one child slot on the PARENT's row in ONE conditional UPDATE (compare-and-swap in the database).
+    Two spawns that look at the same remaining budget cannot both win: the row lock makes the second UPDATE re-check the
+    condition against the first one's result. None = refused (slots used up, not enough budget left, or the database could not
+    be reached: a spawn limit is a safety counter, so it fails CLOSED). A crash after this call leaves a reservation that only
+    lowers what the parent may still spawn and goes away with the parent run."""
+    from core.employees._db import get_connection
+    try:
+        conn = get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute("UPDATE agent_runs SET reserved_tokens = reserved_tokens + %s, spawned = spawned + 1 "
+                        "WHERE id = %s AND spawned < %s AND reserved_tokens + %s <= %s "
+                        "RETURNING reserved_tokens, spawned", (int(cap), str(parent_id), max_children(), int(cap), int(limit)))
+            row = cur.fetchone()
+            conn.commit()
+            cur.close()
+        finally:
+            conn.close()
+        return {"reserved": int(row[0]), "spawned": int(row[1])} if row else None
+    except Exception as e:
+        logger.warning("Sub-agent reservation failed (refusing the spawn): %s", e)
+        return None
+
+
+def refund_child(parent_id: str, cap: int) -> None:
+    """Give back a reservation whose child row was never written."""
+    from core.employees._db import get_connection
+    try:
+        conn = get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute("UPDATE agent_runs SET reserved_tokens = GREATEST(0, reserved_tokens - %s), spawned = GREATEST(0, spawned - 1) "
+                        "WHERE id = %s", (int(cap), str(parent_id)))
+            conn.commit()
+            cur.close()
+        finally:
+            conn.close()
+    except Exception as e:
+        logger.warning("Sub-agent refund failed (the reservation stays; that only lowers the budget): %s", e)
+
+
+def release_child(child_id: str) -> bool:
+    """A child ended: turn its reservation into what it really used. Safe to call twice (the child's own reservation is zeroed
+    under a row lock, so only the first call changes the parent). True when a reservation was settled."""
+    from core.employees._db import get_connection
+    try:
+        conn = get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT parent_id, reserved_tokens, tokens_used FROM agent_runs WHERE id = %s AND reserved_tokens > 0 FOR UPDATE",
+                        (str(child_id),))
+            row = cur.fetchone()
+            if not row:
+                conn.commit()
+                cur.close()
+                return False
+            parent_id, cap, used = row[0], int(row[1]), int(row[2] or 0)
+            cur.execute("UPDATE agent_runs SET reserved_tokens = 0 WHERE id = %s", (str(child_id),))
+            cur.execute("UPDATE agent_runs SET reserved_tokens = GREATEST(0, reserved_tokens - %s + %s) WHERE id = %s",
+                        (cap, used, str(parent_id)))
+            conn.commit()
+            cur.close()
+            return True
+        finally:
+            conn.close()
+    except Exception as e:
+        logger.warning("Sub-agent reservation release failed (the reservation stays; that only lowers the budget): %s", e)
+        return False
+
+
 def _tree_used(root_id: str) -> int:
     from core.employees._db import get_connection
     conn = get_connection()
@@ -300,11 +384,20 @@ def delegate_step(parent: Dict, plan: Dict, service, role: Optional[str]) -> Opt
         agent_loop._save(parent)
         return None
     try:
+        cap = child_tokens()
+        if reserve_child(parent["id"], cap, reservation_limit(parent)) is None:       # P1-B: one atomic UPDATE, before anything is created
+            if _count_children(parent["id"]) >= max_children():
+                return agent_loop._finish(parent, service, role, "done", f"Stopped: the limit of {max_children()} sub-agents was reached.")
+            return agent_loop._finish(parent, None, role, "budget", "Stopped: the sub-agent token budget is fully reserved.")
         child = {"id": None, "role": target, "query": task[:agent_loop.TEXT_CAP], "context_answer": "", "status": "running",
                  "steps": [], "tainted": bool(parent["tainted"]), "pending_action_id": None, "summary": "",
                  "parent_id": parent["id"], "depth": int(parent.get("depth") or 0) + 1, "tokens_used": 0,
                  "deadline": time.time() + child_seconds()}
-        agent_loop._save_child(child, record)
+        try:
+            agent_loop._save_child(child, record, reserved=cap)
+        except Exception:
+            refund_child(parent["id"], cap)
+            raise
         step["child_run_id"] = child["id"]
         parent["steps"].append(step)
         agent_loop._save(parent)
@@ -318,6 +411,8 @@ def delegate_step(parent: Dict, plan: Dict, service, role: Optional[str]) -> Opt
     finally:
         sem.release()
     fresh = agent_loop.get_run(child["id"])
+    if not fresh or fresh["status"] != "waiting_approval":
+        release_child(child["id"])           # idempotent: normally the child's own end already settled it
     if fresh and fresh["status"] == "waiting_approval":
         step["status"] = "waiting_child"
         parent["status"] = "waiting_approval"
@@ -336,6 +431,8 @@ def on_child_ended(child: Dict) -> None:
     """A child run ended. If its parent was put on hold for it (the child needed an approval), the parent goes on."""
     try:
         from core import agent_loop
+        if child.get("id"):
+            release_child(child["id"])       # settle the child's budget reservation (P1-B), whatever happens to the parent
         parent = agent_loop.get_run(child["parent_id"]) if child.get("parent_id") else None
         if not parent or parent["status"] != "waiting_approval":
             return

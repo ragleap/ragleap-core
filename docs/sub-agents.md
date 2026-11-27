@@ -52,3 +52,11 @@ The Runs tab of the dashboard shows sub-agent runs under their parent and has a 
 ## The start record also binds the tool list
 
 A child's signed start record includes a hash of the sorted names of the tools it may use (`spawn3` records). The same function (`resolved_tools`) builds that list when the child is started and when it is driven, so a child whose tool list changed in between (a tool removed, added or the list emptied) is refused, and so is an older record that has no hash. A setting change while a child waits for an approval can therefore make that child stop; that is the safe direction.
+
+## A child's budget is reserved before it exists
+
+Before a child run is created, the parent's row takes the child's token cap and one child slot with a single conditional database statement (an atomic compare-and-swap, not a read followed by a write). Two spawns that look at the same remaining budget at the same moment cannot both take it: the second one is refused. The room for children is the tree cap (`SUBAGENT_TREE_TOKENS`) minus what the parent itself used, and never more than the parent role's remaining budget. The limit is a hard bound: the total reserved never goes above it.
+
+When a child ends, its reservation turns into what it really used (a child that used more than its cap is counted at its real use). A child that waits for an approval keeps its reservation. If the child row cannot be written the reservation is given back; if the app stops in between, the reservation stays and only lowers what that parent may still spawn. The check fails closed: if the database cannot be reached, no child starts. The role ledger is a cost counter and still fails open.
+
+The reservation is worst case: a parent that already used much of the tree cap may be refused a child even though the child would have used less. Children of one parent still run one after another today, so this guards the Phase 3 parallel spawning that comes next.

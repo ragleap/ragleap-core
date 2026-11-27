@@ -120,7 +120,7 @@ def _save(run: Dict) -> None:
         conn.close()
 
 
-def _save_child(run: Dict, record: Dict) -> None:
+def _save_child(run: Dict, record: Dict, reserved: int = 0) -> None:
     """Insert a child run and its start record in ONE transaction. The start record row is written once and never changed:
     the table agent_run_starts is append-only (database triggers refuse UPDATE, DELETE and TRUNCATE)."""
     conn = get_connection()
@@ -128,11 +128,11 @@ def _save_child(run: Dict, record: Dict) -> None:
         cur = conn.cursor()
         cur.execute(
             "INSERT INTO agent_runs (id, role, query, context_answer, status, steps, tainted, "
-            "pending_action_id, summary, parent_id, depth, tokens_used) "
-            "VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s)",
+            "pending_action_id, summary, parent_id, depth, tokens_used, reserved_tokens) "
+            "VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s)",
             (record["run_id"], run.get("role"), run["query"], run["context_answer"], run["status"], json.dumps(run["steps"]),
              run["tainted"], run.get("pending_action_id"), run.get("summary", ""),
-             run.get("parent_id"), int(run.get("depth") or 0), int(run.get("tokens_used") or 0)),
+             run.get("parent_id"), int(run.get("depth") or 0), int(run.get("tokens_used") or 0), int(reserved)),
         )
         cur.execute(
             "INSERT INTO agent_run_starts (spawn_id, run_id, parent_id, role, depth, forced, key_id, sig, tools_hash) "
