@@ -12,6 +12,7 @@ All notable changes are listed here. Format: Keep a Changelog.
 - The licence of the `mcp` SDK (extra `interop`, used by tests only) is recorded in `THIRD_PARTY_NOTICES.md`: MIT, from the package metadata of versions 1.28.0 and 1.30.0 on PyPI, read on 2026-11-26 (#1116). Versions in between were not read.
 
 ### Fixed
+- The operator console: after refusing a client with 503 because every connection slot is taken, the console reads and discards what that client has sent, in at most 8 helper threads that the accept loop never waits for; when all 8 are busy the connection is closed at once, as before. Whether the bounded lingering close after a busy refusal removes the intermittent Windows connection reset (#1336) is not verified: Linux cannot show it, and only repeated Windows runs can.
 - A test of the lingering-close helper sent 100,000 bytes on a socket pair before reading, which blocks where socket buffers are small (macOS); the sender now runs in its own thread. No library code changed.
 
 ## [0.0.6] - 2026-11-24

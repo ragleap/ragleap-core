@@ -49,10 +49,14 @@ def _view(bridge: Bridge, proposal) -> dict:
 
 _BUSY = b"HTTP/1.0 503 Service Unavailable\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
 
+# At most this many helper threads read and discard what a refused client has sent (see _ConsoleServer.process_request).
+MAX_LINGER_HELPERS = 8
+
 
 class _ConsoleServer(socketserver.ThreadingMixIn, HTTPServer):
     """One thread per connection, at most ``MAX_CONNECTIONS`` at once. A connection that arrives when every slot is taken is answered with 503
-    at once and closed. A client that stalls holds one slot until the read timeout, never the whole console."""
+    at once; a helper thread then reads and discards what that client has sent (a lingering close, at most ``MAX_LINGER_HELPERS`` helpers; when all
+    are busy the connection is closed at once). A client that stalls holds one slot until the read timeout, never the whole console."""
     daemon_threads = True
 
     def __init__(self, address, handler, max_connections: Optional[int] = None) -> None:
@@ -63,6 +67,10 @@ class _ConsoleServer(socketserver.ThreadingMixIn, HTTPServer):
         self.lingered_calls = 0
         self.drained_bytes = 0
         self.refused_busy = 0
+        self.refused_unlingered = 0
+        self.lingering_now = 0
+        self.lingering_peak = 0
+        self._helpers = threading.BoundedSemaphore(MAX_LINGER_HELPERS)
 
     def count(self, **deltas: int) -> None:
         with self._counts:
@@ -77,6 +85,16 @@ class _ConsoleServer(socketserver.ThreadingMixIn, HTTPServer):
                 request.sendall(_BUSY)
             except OSError:
                 pass
+            # Read and discard what the client has already sent, so that the 503 is not lost to a connection reset (seen on Windows). A helper
+            # thread does it, never this loop: the accept loop must not wait for a client. When every helper is busy the connection is closed at once.
+            if self._helpers.acquire(blocking=False):
+                try:
+                    threading.Thread(target=self._linger_and_close, args=(request,), daemon=True).start()
+                    return
+                except Exception:
+                    self._helpers.release()
+            else:
+                self.count(refused_unlingered=1)
             self.shutdown_request(request)
             return
         try:
@@ -84,6 +102,22 @@ class _ConsoleServer(socketserver.ThreadingMixIn, HTTPServer):
         except BaseException:
             self._slots.release()
             raise
+
+    def _linger_and_close(self, request) -> None:
+        with self._counts:
+            self.lingering_now += 1
+            self.lingering_peak = max(self.lingering_peak, self.lingering_now)
+        try:
+            n = linger(request)
+            self.count(lingered_bytes=n, lingered_calls=1)
+        finally:
+            with self._counts:
+                self.lingering_now -= 1
+            try:
+                self.shutdown_request(request)
+            except Exception:
+                pass
+            self._helpers.release()
 
     def process_request_thread(self, request, client_address) -> None:
         try:
