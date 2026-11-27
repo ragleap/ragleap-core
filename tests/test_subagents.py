@@ -287,6 +287,16 @@ def test_a_child_over_its_own_token_cap_stops_and_the_parent_goes_on(world, monk
 
 
 def test_the_tree_cap_stops_the_whole_tree(world, monkeypatch):
+    # P1-B: the cap is now checked BEFORE the child exists (its budget is reserved atomically), so no child row is written.
+    monkeypatch.setattr(subagents, "tree_tokens", lambda: 1)
+    agent_loop.run(Q, "d", FakeService([plan("delegate", "support", TASK)]), None)
+    parent, children = parent_and_children()
+    assert children == [] and parent["status"] == "budget" and world["sent"] == []
+    assert "fully reserved" in parent["summary"]
+
+
+def test_the_running_tree_cap_still_stops_a_child_whose_budget_was_reserved(world, monkeypatch):
+    monkeypatch.setattr(subagents, "reservation_limit", lambda p: 10 ** 9)          # let the reservation pass: this is the second line of defence
     monkeypatch.setattr(subagents, "tree_tokens", lambda: 1)
     agent_loop.run(Q, "d", FakeService([plan("delegate", "support", TASK)]), None)
     parent, children = parent_and_children()
@@ -588,8 +598,18 @@ def test_the_role_budget_left_is_the_smallest_remaining_cap_and_none_without_a_c
     assert budget.remaining("sales") is None                           # fails open, like every token budget
 
 
+def test_a_spawn_is_refused_when_the_parents_remaining_budget_cannot_hold_the_child_cap(world, monkeypatch):
+    from core import budget
+    monkeypatch.setenv("BUDGET_ROLE_DAILY_OVERRIDES", "sales=100000")
+    monkeypatch.setattr(budget, "_used", lambda role, period: 99950 if role == "sales" else 0)       # 50 tokens left, a child may take 8000
+    agent_loop.run(Q, "d", FakeService([plan("delegate", "support", TASK), DONE, "Parent summary."]), "sales", False)
+    parent, children = parent_and_children()
+    assert children == [] and parent["status"] == "budget" and world["sent"] == [] and "fully reserved" in parent["summary"]
+
+
 def test_a_child_stops_when_its_parents_remaining_budget_is_spent(world, monkeypatch):
     from core import budget
+    monkeypatch.setattr(subagents, "reservation_limit", lambda p: 10 ** 9)       # past the reservation; budget_stop is the second line
     monkeypatch.setenv("BUDGET_ROLE_DAILY_OVERRIDES", "sales=100000")
     monkeypatch.setattr(budget, "_used", lambda role, period: 99950 if role == "sales" else 0)     # the parent role has 50 tokens left
     svc = FakeService([plan("delegate", "support", TASK), plan("run_code", content="print(1)"), DONE, "Parent summary."])
@@ -861,3 +881,68 @@ def test_the_schema_adds_the_p1a_columns_and_still_only_adds():
                  "ALTER TABLE autonomy_pending ADD COLUMN IF NOT EXISTS action_hash TEXT;",
                  "ALTER TABLE autonomy_pending ADD COLUMN IF NOT EXISTS action_sig TEXT;"):
         assert sql_text.count(line) == 1, line
+
+
+# ---- P1-B: the reservation inside a real delegation ----
+
+def test_a_delegation_reserves_then_settles_the_childs_budget(world):
+    agent_loop.run(Q, "d", FakeService(basic_replies()), None)
+    parent, children = parent_and_children()
+    from core.employees._db import get_connection
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT reserved_tokens, spawned FROM agent_runs WHERE id = %s", (parent["id"],))
+    reserved, spawned = cur.fetchone()
+    cur.execute("SELECT reserved_tokens, tokens_used FROM agent_runs WHERE id = %s", (children[0]["id"],))
+    child_reserved, used = cur.fetchone()
+    cur.close()
+    conn.close()
+    assert spawned == 1 and child_reserved == 0 and reserved == used          # settled to what the child really used
+
+
+def test_a_spawn_is_refused_when_the_siblings_hold_the_whole_budget(world, monkeypatch):
+    from core.employees._db import get_connection
+    real_save = agent_loop._save
+
+    def save_then_fill(run):
+        real_save(run)
+        if run.get("parent_id") is None and run.get("id"):
+            conn = get_connection()
+            cur = conn.cursor()
+            cur.execute("UPDATE agent_runs SET reserved_tokens = %s WHERE id = %s", (subagents.tree_tokens(), run["id"]))
+            conn.commit()
+            cur.close()
+            conn.close()
+    monkeypatch.setattr(agent_loop, "_save", save_then_fill)
+    agent_loop.run(Q, "d", FakeService([plan("delegate", "support", TASK), DONE, "Parent summary."]), None)
+    parent, children = parent_and_children()
+    assert children == [] and parent["status"] == "budget" and "fully reserved" in parent["summary"] and world["sent"] == []
+
+
+def test_a_failed_child_insert_gives_the_reservation_back(world, monkeypatch):
+    from core.employees._db import get_connection
+    monkeypatch.setattr(agent_loop, "_save_child", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("insert failed")))
+    agent_loop.run(Q, "d", FakeService([plan("delegate", "support", TASK), DONE, "Parent summary."]), None)       # the loop treats it as non-fatal
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT reserved_tokens, spawned FROM agent_runs WHERE parent_id IS NULL ORDER BY created_at DESC LIMIT 1")
+    assert cur.fetchone() == (0, 0)
+    cur.close()
+    conn.close()
+
+
+def test_a_child_that_ends_without_finishing_still_settles_its_reservation(world, monkeypatch):
+    from core.employees._db import get_connection
+    real_drive = agent_loop._drive
+    monkeypatch.setattr(agent_loop, "_drive", lambda run, service, role: None if run.get("parent_id") else real_drive(run, service, role))
+    # the child's drive returns and its run row stays "running"; the parent is driven normally
+    agent_loop.run(Q, "d", FakeService([plan("delegate", "support", TASK), DONE, "Parent summary."]), None)
+    parent, children = parent_and_children()
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT reserved_tokens, spawned FROM agent_runs WHERE id = %s", (parent["id"],))
+    assert cur.fetchone() == (0, 1)
+    cur.execute("SELECT reserved_tokens FROM agent_runs WHERE id = %s", (children[0]["id"],))
+    assert cur.fetchone() == (0,)
+    cur.close()
+    conn.close()

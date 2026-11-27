@@ -362,6 +362,10 @@ ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS parent_id UUID;
 ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS depth INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS cancel_requested BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS tokens_used INTEGER NOT NULL DEFAULT 0;
+-- P1-B: a parent's reserved/used child tokens and number of children started, and a child's own reservation (all changed only by
+-- single conditional UPDATE statements in core/subagents.py).
+ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS reserved_tokens INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS spawned INTEGER NOT NULL DEFAULT 0;
 -- The start record of a sub-agent, written once when the gate allowed it and never updated (spawn_sig is an HMAC).
 ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS spawn_id UUID;
 ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS spawn_forced BOOLEAN;
