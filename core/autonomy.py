@@ -662,7 +662,7 @@ def verify_spawn_record(run: Dict, tools=None) -> bool:
 
 
 def authorize_spawn(parent: Dict, target_role: str) -> Dict:
-    """THE decision to start a sub-agent (Phase 0, P0-H). core/subagents.delegate_step starts a child only after this said yes.
+    """THE decision to start a sub-agent (Phase 0, P0-H). execute_delegation (below) starts a child only after this said yes.
 
     Checks the owner's switch, the depth, the number of children, and tells whether the child will be forced to ask for
     approval for every action (a sensitive role at or above the parent). Every decision is audited. Fails closed."""
@@ -688,6 +688,28 @@ def authorize_spawn(parent: Dict, target_role: str) -> Dict:
     _audit_event("subagent_authorized" if allowed else "subagent_denied", parent_run=str((parent or {}).get("id")),
                  role=str(target_role), reason=reason, force_approval=force, spawn_id=spawn_id)
     return {"allowed": allowed, "reason": reason, "force_approval": force, "spawn_id": spawn_id}
+
+
+def execute_delegation(parent: Dict, plan: Dict, service, role: Optional[str]) -> Optional[Dict]:
+    """THE ONE way a sub-agent is started (P1-C). The agent loop calls this and nothing else; it asks authorize_spawn and only
+    on a yes hands over to subagents.run_delegation (the boundary scan and a tripwire test pin both facts).
+
+    There is no separate owner prompt for the spawn itself: a spawn has no effect on the outside world, and every action a
+    child takes goes through execute_or_request on its own (modes, taint, sensitive roles, forced approval). Returns None when
+    the parent should go on, or an outcome dict when it must stop."""
+    from core import agent_loop, subagents
+    if agent_loop._cancelled(parent):
+        return agent_loop._finish(parent, None, role, "cancelled", "Stopped: cancelled by the owner.")
+    target = str((plan or {}).get("target", "")).strip()
+    task = str((plan or {}).get("content", "")).strip()
+    if not task or len(task) > subagents.TASK_CAP or target not in subagents._active_roles():
+        return agent_loop._finish(parent, service, role, "done", "The proposed sub-agent task was not allowed.")
+    auth = authorize_spawn(parent, target)                   # the decision; nothing below runs without its yes
+    if not auth["allowed"]:
+        if auth["reason"] == "child_limit":
+            return agent_loop._finish(parent, service, role, "done", f"Stopped: the limit of {subagents.max_children()} sub-agents was reached.")
+        return agent_loop._finish(parent, service, role, "done", "The proposed sub-agent task was not allowed.")
+    return subagents.run_delegation(parent, service, role, target, task, auth)
 
 
 def execute_or_request(action_type: str, channel: str, target: str,

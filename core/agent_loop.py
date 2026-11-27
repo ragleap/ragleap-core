@@ -543,7 +543,8 @@ def _drive(run: Dict, service, role: Optional[str]) -> Optional[Dict]:
         if not plan or tool in ("", "done", "none"):
             return _finish(run, service, role, "done")
         if tool == "delegate" and "delegate" in tools:
-            stop = subagents.delegate_step(run, plan, service, role)
+            from core import autonomy
+            stop = autonomy.execute_delegation(run, plan, service, role)     # P1-C: the gate starts the child, not this module
             if stop is not None:
                 return stop
             continue

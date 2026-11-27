@@ -60,3 +60,9 @@ Before a child run is created, the parent's row takes the child's token cap and 
 When a child ends, its reservation turns into what it really used (a child that used more than its cap is counted at its real use). A child that waits for an approval keeps its reservation. If the child row cannot be written the reservation is given back; if the app stops in between, the reservation stays and only lowers what that parent may still spawn. The check fails closed: if the database cannot be reached, no child starts. The role ledger is a cost counter and still fails open.
 
 The reservation is worst case: a parent that already used much of the tree cap may be refused a child even though the child would have used less. Children of one parent still run one after another today, so this guards the Phase 3 parallel spawning that comes next.
+
+## Only the gate starts a child
+
+The agent loop never starts a child itself. It calls `execute_delegation` in `core/autonomy.py` (the same module as the gate for every other action). That function checks the plan, asks `authorize_spawn` (owner switch, depth, number of children, signing key, forced approval for sensitive roles) and only on a yes hands over to `subagents.run_delegation`, which reserves the budget, writes the signed start record and drives the child. `run_delegation` refuses anything that does not carry the gate's decision. The boundary scan treats `run_delegation` like the other executors: it may only appear inside `execute_delegation`, and a test pins that the loop calls nothing else.
+
+There is no separate owner prompt for the spawn itself. A spawn has no effect on the outside world, and every action a child takes goes through the gate on its own (autonomy mode, taint, sensitive roles, forced approval), so the owner still approves each effect. In the capability declaration `delegate` keeps `per_mode`, which for this one operation means: the gate decides the spawn, the effects are decided one by one.

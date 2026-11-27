@@ -62,7 +62,8 @@ _NOTES = {
     "delegate": "Off unless the owner turns sub-agents on and grants this operation. A child run starts with the "
                 "parent's taint, and its taint comes back to the parent. A child's tools are cut down to the parent's, and "
                 "a sensitive role anywhere above a child forces approval for every child action. A child's tokens and steps "
-                "count against its parent's.",
+                "count against its parent's. The gate decides each spawn without a separate owner prompt (execute_delegation); "
+                "each child action is approved on its own.",
 }
 
 

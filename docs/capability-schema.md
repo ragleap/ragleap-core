@@ -61,7 +61,7 @@ The core's own tools carry a class that a declaration cannot lower: `fetch_page`
 
 ## Explicit grants and inheritance (not enforced yet)
 
-An operation with `grant: explicit` is denied unless the owner grants it by name; nothing is granted by default. `delegate` always needs a grant, and a declaration cannot remove that. `inherits` states the limits of the runs an operation starts: a child may use only tools its parent may use (`tools: parent_subset`; the core cuts the list down when a child starts), and taint travels both ways (`taint: both_ways`: a child starts with the parent's taint and hands its own back). `inherits` needs `grant: explicit`.
+An operation with `grant: explicit` is denied unless the owner grants it by name; nothing is granted by default. `delegate` always needs a grant, and a declaration cannot remove that. The gate (`execute_delegation`) decides each spawn itself without a separate owner prompt, because every effect of a child is gated on its own. `inherits` states the limits of the runs an operation starts: a child may use only tools its parent may use (`tools: parent_subset`; the core cuts the list down when a child starts), and taint travels both ways (`taint: both_ways`: a child starts with the parent's taint and hands its own back). `inherits` needs `grant: explicit`.
 
 ## `descriptive` is not enforced
 

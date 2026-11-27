@@ -344,22 +344,14 @@ def _apply_child(parent: Dict, step: Dict, child: Optional[Dict]) -> None:
         parent["tainted"] = True
 
 
-def delegate_step(parent: Dict, plan: Dict, service, role: Optional[str]) -> Optional[Dict]:
-    """Run one delegation for a parent run. Returns None when the parent should go on with its next step, or an
-    outcome dict when the parent must stop (finished, or waiting because the child needs an approval)."""
-    from core import agent_loop
-    if agent_loop._cancelled(parent):
-        return agent_loop._finish(parent, None, role, "cancelled", "Stopped: cancelled by the owner.")
-    target = str(plan.get("target", "")).strip()
-    task = str(plan.get("content", "")).strip()
-    if not task or len(task) > TASK_CAP or target not in _active_roles():
-        return agent_loop._finish(parent, service, role, "done", "The proposed sub-agent task was not allowed.")
-    from core import autonomy
-    auth = autonomy.authorize_spawn(parent, target)          # the gate decides; nothing below runs without its yes
-    if not auth["allowed"]:
-        if auth["reason"] == "child_limit":
-            return agent_loop._finish(parent, service, role, "done", f"Stopped: the limit of {max_children()} sub-agents was reached.")
-        return agent_loop._finish(parent, service, role, "done", "The proposed sub-agent task was not allowed.")
+def run_delegation(parent: Dict, service, role: Optional[str], target: str, task: str, auth: Dict) -> Optional[Dict]:
+    """Start and drive one child for a parent run. NOT to be called directly: core.autonomy.execute_delegation (the gate) is the
+    only caller (a tripwire test and the boundary scan enforce it) and passes the decision `auth` it got from authorize_spawn.
+    Returns None when the parent should go on with its next step, or an outcome dict when the parent must stop (finished, or
+    waiting because the child needs an approval)."""
+    from core import agent_loop, autonomy
+    if not isinstance(auth, dict) or auth.get("allowed") is not True or not auth.get("spawn_id"):
+        return agent_loop._finish(parent, service, role, "done", "The proposed sub-agent task was not allowed.")      # defence in depth
     sig = ["delegate", target, hashlib.sha256(task.encode()).hexdigest()[:16]]
     if any(s.get("sig") == sig for s in parent["steps"]):
         return agent_loop._finish(parent, service, role, "done", "Stopped: the same action was proposed twice.")
