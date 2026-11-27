@@ -673,6 +673,35 @@
    "status": "limitation",
    "evidence": [],
    "note": "Observed on main by the harness in simulation (seed 1, 100 cases per class: 37 cases of the truthy value and 12 of the late change). Both are fail-open readings of a declared flag. A stricter check is planned (a flag that must be exactly True, read again at apply), after which the harness will report a regression instead of a known behaviour. Not a statement about real devices."
+  },
+  {
+   "id": "C47",
+   "claim": "after refusing a client with 503 because every connection slot is taken, the console reads and discards what that client has sent, in at most 8 helper threads that the accept loop never waits for",
+   "where": "CHANGELOG.md",
+   "status": "verified",
+   "evidence": [
+    {
+     "type": "test",
+     "ref": "tests/test_console_busy_linger.py::test_a_busy_refusal_reads_and_discards_what_the_client_already_sent"
+    },
+    {
+     "type": "test",
+     "ref": "tests/test_console_busy_linger.py::test_a_flood_of_silent_refused_clients_does_not_hold_up_the_accept_loop"
+    },
+    {
+     "type": "test",
+     "ref": "tests/test_console_busy_linger.py::test_the_lingering_helpers_stay_within_their_cap_and_are_all_given_back"
+    }
+   ],
+   "note": "Issue 1336. REAL, Python 3.10.12, loopback, simulated adapters only; checked through the server's counters. Deliberate breaks checked: lingering done inline in the accept loop, no lingering, no cap on the helpers, helpers not given back."
+  },
+  {
+   "id": "C48",
+   "claim": "Whether the bounded lingering close after a busy refusal removes the intermittent Windows connection reset (#1336) is not verified",
+   "where": "CHANGELOG.md",
+   "status": "limitation",
+   "evidence": [],
+   "note": "A hosted Windows runner showed WinError 10053 once in the console test that fills every slot, and passed on a rerun and on other runs. Linux keeps the answer after the close, so only repeated Windows runs can show whether the helper removes the reset."
   }
  ]
 }
