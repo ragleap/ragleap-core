@@ -4,6 +4,8 @@ All notable changes to `ragleap-voice` are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
+### Added
+- `transcribe(..., gate="silero", gate_options={"model_path": ...})` (also `Transcriber.transcribe`): an opt-in voice-activity gate that runs the pinned Silero model file (supplied by the user; extra `vad`) before the engine and returns an empty transcript without running the engine when no speech is detected. Off by default; `gate="off"` and `gate="energy"` are unchanged; not wired into `transcribe_stream`. On 796 real noise recordings the level gate passed 99.0% to 99.6% and Silero 4.4% to 5.4% (one run, `benchmarks/voice/README.md`); its behaviour on speech was not measured and the real model file has not yet been run through `transcribe()`. Not in any release yet.
 ### Documentation and tests
 - `docs/design/api.md` section 6 and `docs/design/coverage-matrix.md` section 5 now say what `engine="auto"` does today (built-in engines that declare the language, ordered by name, the first one used; verification after the pick; no routing table yet), and `tests/test_auto_routing.py` pins it. No behaviour change.
 
