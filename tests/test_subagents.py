@@ -445,10 +445,13 @@ def test_the_tool_limit_for_a_child_is_the_intersection_and_fails_closed(world, 
 
 def test_a_child_is_started_only_after_the_gate_agreed_and_is_driven_with_the_inherited_limits():
     import inspect
-    ds = inspect.getsource(subagents.delegate_step)
-    assert ds.index("authorize_spawn(") < ds.index("_drive(")
+    from core import autonomy
+    gate = inspect.getsource(autonomy.execute_delegation)          # P1-C (deliberate change): the gate function, then the spawn
+    assert gate.index("authorize_spawn(") < gate.index("run_delegation(")
+    ds = inspect.getsource(subagents.run_delegation)
+    assert ds.index("reserve_child(") < ds.index("_drive(")
     drive = inspect.getsource(agent_loop._drive)
-    # P1-A (deliberate change): the parent limit now lives in subagents.resolved_tools, which _drive AND delegate_step both call,
+    # P1-A (deliberate change): the parent limit now lives in subagents.resolved_tools, which _drive AND run_delegation both call,
     # so the list that is hashed into the start record is the list that runs.
     assert "inherited_force_semi(run)" in drive and "subagents.resolved_tools(run)" in drive and "verify_spawn_record(run, tools)" in drive
     assert "limit_to_parent(" in inspect.getsource(subagents.resolved_tools) and "resolved_tools(" in ds
@@ -946,3 +949,89 @@ def test_a_child_that_ends_without_finishing_still_settles_its_reservation(world
     assert cur.fetchone() == (0,)
     cur.close()
     conn.close()
+
+
+# ---- P1-C: a child can only be started through the gate ----
+
+def _bare_parent():
+    run = {"id": None, "role": None, "query": "q", "context_answer": "", "status": "running", "steps": [], "tainted": False,
+           "pending_action_id": None, "summary": "", "parent_id": None, "depth": 0, "tokens_used": 0}
+    agent_loop._save(run)
+    return run
+
+
+def _children_of(pid):
+    from core.employees._db import get_connection
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT count(*) FROM agent_runs WHERE parent_id = %s", (pid,))
+    n = cur.fetchone()[0]
+    cur.close()
+    conn.close()
+    return n
+
+
+def test_the_agent_loop_reaches_a_child_only_through_the_gate_function():
+    import inspect
+    src = inspect.getsource(agent_loop)
+    assert "autonomy.execute_delegation(" in src and "run_delegation" not in src and "delegate_step" not in src
+    assert not hasattr(subagents, "delegate_step")
+
+
+def test_the_gate_refuses_and_audits_when_sub_agents_are_off(world, monkeypatch):
+    from core import autonomy
+    events = []
+    monkeypatch.setattr(autonomy, "_audit_event", lambda event, **f: events.append((event, f)))
+    monkeypatch.setattr(subagents, "enabled", lambda: False)
+    parent = _bare_parent()
+    out = autonomy.execute_delegation(parent, {"tool": "delegate", "target": "support", "content": TASK}, None, None)
+    assert out is not None and _children_of(parent["id"]) == 0
+    assert any(e == "subagent_denied" and f["reason"] == "sub_agents_off" for e, f in events)
+
+
+@pytest.mark.parametrize("plan", [{"target": "support", "content": ""}, {"target": "nobody", "content": "x"},
+                                  {"target": "support", "content": "x" * 5000}, {}])
+def test_the_gate_refuses_a_bad_plan_without_asking_the_spawn_code(world, monkeypatch, plan):
+    from core import autonomy
+    monkeypatch.setattr(subagents, "run_delegation", lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not be reached")))
+    parent = _bare_parent()
+    assert autonomy.execute_delegation(parent, plan, None, None) is not None and _children_of(parent["id"]) == 0
+
+
+def test_a_forged_or_missing_decision_starts_no_child(world):
+    parent = _bare_parent()
+    for auth in (None, {}, {"allowed": False, "spawn_id": "x"}, {"allowed": True}, {"allowed": "yes", "spawn_id": "x"}, {"spawn_id": "x"}):
+        out = subagents.run_delegation(parent, None, None, "support", TASK, auth)
+        assert out is not None, auth
+    assert _children_of(parent["id"]) == 0
+
+
+def test_a_spawn_the_gate_denies_never_reaches_the_spawn_code(world, monkeypatch):
+    from core import autonomy
+    monkeypatch.setattr(autonomy, "authorize_spawn", lambda p, t: {"allowed": False, "reason": "check_failed", "force_approval": True, "spawn_id": None})
+    monkeypatch.setattr(subagents, "run_delegation", lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not be reached")))
+    parent = _bare_parent()
+    assert autonomy.execute_delegation(parent, {"tool": "delegate", "target": "support", "content": TASK}, None, None) is not None
+
+
+def test_a_normal_delegation_still_runs_end_to_end_through_the_gate(world):
+    agent_loop.run(Q, "d", FakeService(basic_replies()), None)
+    parent, children = parent_and_children()
+    assert parent["status"] == "done" and len(children) == 1 and children[0]["status"] == "done"
+
+
+def test_the_declaration_and_the_docs_say_who_decides_the_spawn():
+    from core.connector_host import builtin_declarations as bd
+    note = bd.builtin_declaration("delegate")["descriptive"]["notes"]
+    assert "execute_delegation" in note and "without a separate" in note
+    for doc in ("sub-agents.md", "capability-schema.md"):
+        assert "execute_delegation" in (ROOT / "docs" / doc).read_text(encoding="utf-8"), doc
+
+
+def test_a_cancelled_parent_starts_no_child_and_the_gate_is_not_asked(world, monkeypatch):
+    from core import autonomy
+    monkeypatch.setattr(agent_loop, "cancel_requested", lambda rid: True)
+    monkeypatch.setattr(autonomy, "authorize_spawn", lambda p, t: (_ for _ in ()).throw(AssertionError("must not be reached")))
+    parent = _bare_parent()
+    out = autonomy.execute_delegation(parent, {"tool": "delegate", "target": "support", "content": TASK}, None, None)
+    assert out is not None and _children_of(parent["id"]) == 0 and "cancelled" in str(out)

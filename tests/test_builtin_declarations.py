@@ -151,10 +151,17 @@ def test_a_child_inherits_the_parent_taint_and_hands_its_own_back():
     assert 'if child and child.get("tainted"):' in src and 'parent["tainted"] = True' in src   # child -> parent
 
 
-def test_delegate_is_started_from_exactly_one_place():
+def _call_sites(name):
     calls = []
     for p in list((ROOT / "core").rglob("*.py")) + list((ROOT / "channels").rglob("*.py")):
         for node in ast.walk(ast.parse(p.read_text(encoding="utf-8"))):
-            if isinstance(node, ast.Call) and getattr(node.func, "attr", getattr(node.func, "id", "")) == "delegate_step":
+            if isinstance(node, ast.Call) and getattr(node.func, "attr", getattr(node.func, "id", "")) == name:
                 calls.append(str(p.relative_to(ROOT)))
-    assert calls == ["core/agent_loop.py"]
+    return calls
+
+
+def test_delegate_is_started_from_exactly_one_place():
+    # P1-C (deliberate change): the loop calls the GATE function; only the gate calls the function that starts a child.
+    assert _call_sites("execute_delegation") == ["core/agent_loop.py"]
+    assert _call_sites("run_delegation") == ["core/autonomy.py"]
+    assert _call_sites("delegate_step") == []

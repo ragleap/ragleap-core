@@ -135,3 +135,35 @@ def test_inside_the_gate_the_senders_may_only_appear_in_send_via_channel(tmp_pat
 def test_the_named_exception_is_explicit_and_reasoned():
     assert ("core/folder_ingest.py", "file_access", "_base") in scan.EXECUTOR_EXCEPTIONS
     assert all(isinstance(v, str) and len(v) > 10 for v in scan.EXECUTOR_EXCEPTIONS.values())
+
+
+# ---- P1-C: starting a sub-agent is an execution path the scan watches ----
+
+def test_run_delegation_is_an_executor_found_in_other_modules():
+    src = "from core import subagents\ndef go(p):\n    return subagents.run_delegation(p, None, None, 'a', 'b', {})\n"
+    assert [(r[2], r[3]) for r in _refs(src, "core/agent_loop.py")] == [("subagents", "run_delegation")]
+    assert _refs("from core import subagents\nok = subagents.enabled() and subagents.resolved_tools({})\n", "core/agent_loop.py") == []
+
+
+def test_outside_the_gate_run_delegation_is_a_violation_and_inside_only_in_execute_delegation(tmp_path):
+    (tmp_path / "core").mkdir()
+    for d in ("channels", "scripts", "sandbox"):
+        (tmp_path / d).mkdir()
+    (tmp_path / "core" / "agent_loop.py").write_text("from core import subagents\ndef f():\n    subagents.run_delegation(1, 2, 3, 4, 5, 6)\n")
+    (tmp_path / "core" / "autonomy.py").write_text(
+        "from core import subagents\n"
+        "def execute_delegation():\n    return subagents.run_delegation(1, 2, 3, 4, 5, 6)\n"
+        "def other():\n    return subagents.run_delegation(1, 2, 3, 4, 5, 6)\n")
+    out = scan.executor_violations(tmp_path)
+    assert len(out) == 2
+    assert any("core/agent_loop.py" in o and "must only be used from core/autonomy.py" in o for o in out)
+    assert any("core/autonomy.py" in o and "outside execute_delegation" in o and "other" in o for o in out)
+
+
+def test_the_subagents_module_itself_is_still_scanned_for_the_other_executors(tmp_path):
+    (tmp_path / "core").mkdir()
+    for d in ("channels", "scripts", "sandbox"):
+        (tmp_path / d).mkdir()
+    (tmp_path / "core" / "subagents.py").write_text("from core import code_exec\ndef f():\n    return code_exec.run_code('x')\n")
+    out = scan.executor_violations(tmp_path)
+    assert len(out) == 1 and "core/subagents.py" in out[0] and "code_exec.run_code" in out[0]

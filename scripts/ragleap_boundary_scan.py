@@ -4,7 +4,8 @@
 Two checks, both AST-based, so comments and strings never trigger them:
 
 1. EXECUTORS: only core/autonomy.py may reference the functions that act on the outside world (send, run, fetch,
-   call a tool, touch files), and inside autonomy.py the senders may appear only in _send_via_channel.
+   call a tool, touch files) or start a sub-agent (subagents.run_delegation), and inside autonomy.py the senders may
+   appear only in _send_via_channel and run_delegation only in execute_delegation.
 2. CONNECTORS: code under core/integrations must not use the network, the environment or a subprocess directly;
    it must go through HostServices (a later phase). Today's legacy uses are listed in a baseline file.
 
@@ -24,17 +25,21 @@ EXECUTORS = {
     "page_fetch": {"fetch_page"},
     "mcp_client": {"call_tool"},
     "file_access": {"list_files", "read_file", "preview_change", "write_file", "delete_file", "preview_raw", "stat_raw"},
+    "subagents": {"run_delegation"},      # starting a child run is an execution path too (P1-C)
 }
 EXECUTOR_HOME = {"core/autonomy.py"}
 SENDER_ONLY_IN = "_send_via_channel"   # inside autonomy.py the action senders may appear only in this function
 SENDER_MODULES = {"action_senders", "code_exec", "page_fetch", "mcp_client"}
+DELEGATION_MODULES = {"subagents"}
+DELEGATION_ONLY_IN = "execute_delegation"   # inside autonomy.py run_delegation may appear only in this function
 # Named exceptions (module file, executor module, function) with the reason.
 EXECUTOR_EXCEPTIONS = {
     ("core/folder_ingest.py", "file_access", "_base"): "reads granted folders for ingestion through the runner (FOLDER_INGEST_ENABLED, read-only, not an agent action)",
     ("core/folder_ingest.py", "file_access", "_headers"): "same as above",
 }
 # Executor-module files themselves are not scanned for Part 1.
-EXECUTOR_FILES = {f"core/{m}.py" for m in EXECUTORS}
+# core/subagents.py is NOT listed: it is a normal module that must not reach the other executors either, so it stays scanned.
+EXECUTOR_FILES = {f"core/{m}.py" for m in EXECUTORS if m != "subagents"}
 
 NETWORK_MODULES = {"requests", "httpx", "aiohttp", "socket", "subprocess"}
 NETWORK_DOTTED = {"urllib.request", "http.client"}
@@ -95,6 +100,8 @@ def executor_violations(root: pathlib.Path):
                 if r in EXECUTOR_HOME:
                     if mod in SENDER_MODULES and enclosing != SENDER_ONLY_IN:
                         out.append(f"{r}:{line} {mod}.{fn} is used outside {SENDER_ONLY_IN} (in {enclosing})")
+                    if mod in DELEGATION_MODULES and enclosing != DELEGATION_ONLY_IN:
+                        out.append(f"{r}:{line} {mod}.{fn} is used outside {DELEGATION_ONLY_IN} (in {enclosing})")
                     continue
                 out.append(f"{r}:{line} {mod}.{fn} must only be used from core/autonomy.py")
     return out
