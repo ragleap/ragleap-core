@@ -46,6 +46,7 @@ without an independent hardware safety stop.
 
 - Plan, decisions, safety rules and conventions: [docs/HANDOVER.md](docs/HANDOVER.md)
 - Design (formats, safety envelope, threat model): [docs/design/phase0-interface.md](docs/design/phase0-interface.md)
+- What the version numbers promise and when 0.1.0 and 1.0.0 may be used: [docs/versioning.md](docs/versioning.md)
 
 ## Try it
 
