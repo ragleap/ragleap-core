@@ -259,3 +259,23 @@ contain secrets or personal data. The docstrings and the README say so.
   strict subsets (documents only); Gemini's subset; the Responses default.
   The sentence above that no prototype exists is superseded by the
   implementation.
+
+### A4. The Python floor stays at 3.10 in 0.7.0 (2026-11-27)
+
+Section 3 and decision 4 proposed raising `requires-python` to `>=3.11` in
+0.7.0, with users on 3.10 staying on 0.6.0. That is not done in 0.7.0. What was
+found while building it:
+
+- Nothing in the 0.7.0 code needs 3.11: the full suite passes on Python 3.10.12.
+- The packages that depend on `ragleap-tools` (integrations, agents, flows) take
+  it from PyPI without an upper bound, so a 3.10 install would quietly stay on
+  0.6.0 instead of failing, and nobody would be told.
+- A stated deprecation policy is one of the 1.0.0 gates and does not exist yet.
+
+Instead, the CI jobs of `ragleap-tools` and `ragleap-integrations` now also run
+Python 3.13, 3.14 and 3.15 (PR 1584; every one of the twelve matrix entries
+was green on 2026-11-27; the branch rules do not require them), 3.10 stays, the
+classifiers list 3.13 to 3.15, and the 0.7.0 changelog says that 3.10 is end of
+life and that a later release is expected to raise the minimum to 3.11. Decision
+4 is therefore "not in 0.7.0", and decision 5 is done for these two packages
+only (3.10 to 3.15); the other packages' jobs are not ours.

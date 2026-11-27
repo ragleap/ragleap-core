@@ -5,6 +5,8 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-27
+
 ### Added
 
 - `Tool.to_openai_responses_schema(*, strict=False)` and the same on `Toolkit`:
@@ -42,6 +44,8 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `to_openai_schema` and `to_anthropic_schema` (on `Tool` and `Toolkit`) accept
   keyword-only arguments. With the defaults their output, and the output of
   `to_gemini_schema`, is byte-for-byte what it was.
+- The package classifiers now list Python 3.13, 3.14 and 3.15. The CI job of this
+  package ran its suite on those versions (see Verified).
 
 ### Verified
 
@@ -58,6 +62,9 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Every built-in tool can be made strict for both providers. A `null` sent for an
   optional parameter reaches the handler as omitted, through `Toolkit.call`, for
   a sample tool.
+- On 2026-11-27 GitHub Actions ran this package's suite, including the new tests,
+  on Python 3.10, 3.11, 3.12, 3.13, 3.14 and 3.15 (the checks of PR 1584, all
+  green). A sandbox run gave 617 passed on 3.13.18, 3.14.10 and 3.15.2.
 
 ### Not verified
 
@@ -86,8 +93,10 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `Toolkit` still validates against the original parameters.
 - Providers compile and cache strict schemas: property names, enum values,
   patterns and `input_examples` must not hold secrets or personal data.
-- The Python floor is unchanged in this change (3.10, which has reached end of
-  life). Raising it is planned as its own change.
+- Python 3.10 reached end of life in October 2026 and is still supported by
+  this release (`requires-python` is still `>=3.10`, and CI still runs it). A
+  later release is expected to raise the minimum to 3.11; this changelog will
+  say so before that happens.
 
 ## [0.6.0] - 2026-11-21
 
