@@ -19,6 +19,8 @@ from .filler import check as _check_filler
 from .gate import describe as _describe_gate
 from .gate import evaluate as _evaluate_gate
 from .gate import validate as _validate_gate
+from .gate_silero import decide as _silero_decide
+from .gate_silero import validate_options as _silero_options
 from .licences import check_licence
 from .locks import LockError, load_lock, lock_digest, validate_lock, verify_dir
 from .manifest import ManifestError, default_manifest_path, load_manifest
@@ -231,19 +233,24 @@ def _transcribe(audio, registry, manifest_path, *, language=None, engine="auto",
         raise ValueError("engine must be 'auto' or an engine name")
     if options is not None and not isinstance(options, Mapping):
         raise TypeError("options must be a dict or None")
-    _validate_gate(gate, gate_options)
+    silero = _silero_options(gate_options) if gate == "silero" else _validate_gate(gate, gate_options)
     data, _info = read_wav(audio)
     eng = _pick_engine(registry, engine, language)
     dirs, status, unverified = _resolve_models(eng, manifest_path, cache_dir, allow_unverified)
     gate_notes = []
+    passed = True
     if gate == "energy":
         decision = _evaluate_gate(data, gate_options)
         gate_notes.append(_describe_gate(decision))
-        if not decision.passed:
-            if unverified:
-                gate_notes.append("unverified model(s) checked because allow_unverified=True: %s." % ", ".join(unverified))
-            return Transcript(text="", language=language, engine=eng.name, model=", ".join(eng.manifest_entries),
-                              model_status=status, segments=(), notes=tuple(gate_notes))
+        passed = decision.passed
+    elif gate == "silero":
+        passed, note = _silero_decide(data, silero)
+        gate_notes.append(note)
+    if not passed:
+        if unverified:
+            gate_notes.append("unverified model(s) checked because allow_unverified=True: %s." % ", ".join(unverified))
+        return Transcript(text="", language=language, engine=eng.name, model=", ".join(eng.manifest_entries),
+                          model_status=status, segments=(), notes=tuple(gate_notes))
     request = Request(kind="stt", language=language, audio=data, timestamps=bool(timestamps), options=dict(options or {}))
     try:
         res, closing = _locked_run(eng, dirs, request)
