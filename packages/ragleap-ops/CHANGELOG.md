@@ -5,8 +5,27 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- The neo4j backup CronJob (`k8s/neo4j-backup-cronjob.yaml`) now uses `alpine/kubectl:1.37.2` in its `scale-down` init container and its `scale-up-watcher` sidecar, instead of `alpine/kubectl:1.34.2`. A Trivy scan of 1.34.2 (run 45165064261) failed the fixable-CRITICAL gate (libcrypto3 CVE-2026-31789, fixed in 3.5.6-r0), and no newer 1.34 tag exists on Docker Hub (checked 2026-11-26), so the image had to move to a newer minor. 1.36.4 also failed the gate (run 45633714795: brotli-libs CVE-2026-111497, fixed in 1.2.1-r0). 1.37.2 passed with no CRITICAL (run 45634193251; it still has 3 HIGH findings, all Go modules compiled into the kubectl binary, which the gate does not fail on). The image is pinned by tag, not by digest. `alpine/kubectl:1.37.2` is added to the Trivy image matrix; the image scan does not run on pull requests, so it is first scanned by the next scheduled or manual run.
+
+### Verified
+
+- New workflow `ops-neo4j-backup-test` (script `.github/scripts/ops-neo4j-backup-test.sh`): on kind it applies the real manifests, writes a marker row to neo4j, creates a Job from the CronJob and makes 11 checks. Leg 1 (normal backup): the Job completes, neo4j is seen at 0 replicas and returns to 1 available replica, a non-empty `neo4j.dump` is in the backup volume, and the marker row survives the restart. Leg 2 (the dump fails on purpose, using a database name that does not exist): neo4j is scaled to 0 and back to 1, the dump's saved error names that database, and the marker row is intact. neo4j was at 0 replicas for 13 to 17 seconds per leg across these runs.
+- Results on kind v1.34.11, v1.36.4 and v1.37.0 (single node each), each version a separate job. Before the image change, with `alpine/kubectl:1.34.2`: 11 of 11 on all three (run 45806233008). With `alpine/kubectl:1.37.2`: 11 of 11 on all three (run 45806287054), so kubectl 1.37.2 worked against a v1.34.11 cluster for the three commands this CronJob runs (`kubectl scale` twice and `kubectl wait --for=delete`).
+- The test can fail. Each break below was applied on its own throwaway tag and turned all three versions red: the scale-up command replaced by an echo (run 45807160612, 6 of 11); the completion signal moved so it fires only after a successful dump, which is the gap the sidecar closes (run 45807106774, 8 of 11); a deployment name that does not exist in the scale-down (run 45807216793, 6 of 11); the `patch` verb removed from the Role (run 45807273368, 6 of 11).
+- These runs came from throwaway tags. A new workflow file cannot be dispatched before it exists on the default branch, so on those tags the same workflow content ran under the file name of an existing workflow. The workflow and script in this change are byte for byte the versions that ran.
+
+### Known limitations
+
+- Restoring a dump is not tested; the test checks only that a non-empty `neo4j.dump` exists.
+- Single-node kind clusters only. Only kubectl 1.37.2 against Kubernetes v1.34.11, v1.36.4 and v1.37.0 was run; a 1.35 cluster was not. The CronJob schedule firing on its own was not waited for: the test creates the Job from the CronJob by hand.
+- The case of neo4j already being at 0 replicas when the Job starts (`kubectl wait --for=delete` with no pods) was seen once, in the break run that removed the scale-up command, with `alpine/kubectl:1.34.2`; the step succeeded there. It was not run with `alpine/kubectl:1.37.2`.
+- The test prints an empty replica-history line for a leg in which the replica count never leaves 0. This affects only that printed line, not any check.
+
 ### Documentation
 
+- README, "Backup / Disaster Recovery": the section said that after a failed neo4j dump the deployment is intentionally left at 0 replicas, and that the CronJob wrapper had been validated only structurally. Both were out of date. Since the `scale-up-watcher` sidecar was added, neo4j is scaled back up after a failed dump too (the RUNBOOK already said so), and the new workflow exercises the wrapper end to end. The section now says that.
 - README: how upgrades between published chart versions behave. In CI on kind (`chart-upgrade-test`: run 40221366116 on the runner's default cluster, and run 40267480140 on Kubernetes v1.34.11, v1.36.4 and v1.37.0, single-node each), `helm upgrade` from the published `0.5.2` to the `0.6.2` chart left the Postgres and Neo4j pods, volumes and data untouched, and a plain `helm upgrade` with no `--set` kept the `app.replicaCount` and `voice.replicaCount` values set at install (both stayed at zero). One chart version pair only. Not tested: upgrades that change values, rollbacks, Kubernetes versions other than those three, multi-node scheduling, application behaviour.
 
 ## [0.6.2] - 2026-10-24

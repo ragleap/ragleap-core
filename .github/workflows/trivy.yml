@@ -44,6 +44,8 @@ jobs:
           - postgres:16-alpine
           - postgres:16
           - busybox:1.36
+          # Image of the neo4j backup cronjob (packages/ragleap-ops/k8s/neo4j-backup-cronjob.yaml); pinned by tag, not floating.
+          - alpine/kubectl:1.37.2
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0

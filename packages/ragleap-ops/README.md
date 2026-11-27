@@ -225,14 +225,15 @@ real image -- only `dump` exists in Community). The CronJob scales
 runs `neo4j-admin database dump` against the now-unlocked PVC via a Job
 with the same volume mounted.
 
-**Important design decision -- fail loud, no automatic restart:** if the
-dump step fails, neo4j is intentionally left scaled to 0 rather than
-automatically restored. Coupling application uptime to backup success
-was considered and rejected -- a silently-failing backup with automatic
-scale-up could leave a real backup gap unnoticed for a long time while
-the app appears healthy. Monitor CronJob/Job success explicitly
-(`kubectl get cronjobs`, `kubectl get jobs`, or your alerting stack) and
-manually restore service after confirming/investigating a failure:
+**Design decision -- neo4j comes back even when the backup fails:** the
+CronJob's `scale-up-watcher` sidecar scales `ragleap-neo4j` back to 1
+replica once the dump container has ended, whether the dump succeeded or
+failed (the dump container writes a signal file from an `EXIT` trap).
+Without it, a failed or interrupted dump left neo4j at 0 replicas until
+someone noticed. A failed dump is still not silent: the Job ends in
+`Failed`. Monitor CronJob/Job success explicitly
+(`kubectl get cronjobs`, `kubectl get jobs`, or your alerting stack).
+If neo4j is ever found at 0 replicas, restore service with:
 
 ```bash
 kubectl scale deployment ragleap-neo4j --replicas=1
@@ -242,11 +243,15 @@ Verification performed: both `pg_dump` and the scale-to-zero +
 `neo4j-admin dump` pattern were live-tested against real running
 instances on a real kind cluster -- `pg_dump` produced a valid dump
 against the live database; the neo4j pattern produced a real, complete
-257.8MiB dump (36 files) via the Job mechanism. The scheduled CronJob
-wrapper itself (RBAC, scale-down init container, timing) was validated
-structurally (`python3 -c "import yaml..."` parse + document/kind
-checks) but not exercised end-to-end via an actual cron trigger this
-session.
+257.8MiB dump (36 files) via the Job mechanism. The CronJob
+wrapper (RBAC, scale-down init container, scale-up sidecar) is exercised
+end to end in CI by the workflow `ops-neo4j-backup-test`, which creates a
+Job from the CronJob on kind v1.34.11, v1.36.4 and v1.37.0 (single node
+each). A normal backup scaled neo4j to 0 and back to 1 and left a
+non-empty `neo4j.dump` in the backup volume. A backup whose dump fails on
+purpose (a database name that does not exist) still ended with neo4j at 1
+replica. Not tested: restoring a dump, the `0 3 * * *` schedule firing on
+its own, and multi-node clusters.
 
 ## Autoscaling and disruption budgets
 
