@@ -4,8 +4,12 @@ All notable changes to `ragleap-voice` are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
+
+## [0.4.1] - 2026-11-26
+### Status
+- Still pre-alpha. A patch release: public behaviour is unchanged unless a caller asks for the new opt-in gate. Nothing changed in `models.toml`, the locks or the coverage data. `whisper-large-v3` stays the only verified model (not a default); the Whisper engine still declares 31 languages and no Indian one.
 ### Added
-- `transcribe(..., gate="silero", gate_options={"model_path": ...})` (also `Transcriber.transcribe`): an opt-in voice-activity gate that runs the pinned Silero model file (supplied by the user; extra `vad`) before the engine and returns an empty transcript without running the engine when no speech is detected. Off by default; `gate="off"` and `gate="energy"` are unchanged; not wired into `transcribe_stream`. On 796 real noise recordings the level gate passed 99.0% to 99.6% and Silero 4.4% to 5.4% (one run, `benchmarks/voice/README.md`); its behaviour on speech was not measured; one run of the real model file through `transcribe()` (laptop CPU) removed the "Thank you." that whisper-large-v3 wrote for 3 s of silence, a tone and white noise, and let a speech clip through (`docs/design/vad-gate.md` section 11). Not in any release yet.
+- `transcribe(..., gate="silero", gate_options={"model_path": ...})` (also `Transcriber.transcribe`): an opt-in voice-activity gate that runs the pinned Silero model file (supplied by the user; extra `vad`) before the engine and returns an empty transcript without running the engine when no speech is detected. Off by default; `gate="off"` and `gate="energy"` are unchanged; not wired into `transcribe_stream`. On 796 real noise recordings the level gate passed 99.0% to 99.6% and Silero 4.4% to 5.4% (one run, `benchmarks/voice/README.md`); its behaviour on speech was not measured; one run of the real model file through `transcribe()` (laptop CPU) removed the "Thank you." that whisper-large-v3 wrote for 3 s of silence, a tone and white noise, and let a speech clip through (`docs/design/vad-gate.md` section 11).
 ### Documentation and tests
 - `docs/design/api.md` section 6 and `docs/design/coverage-matrix.md` section 5 now say what `engine="auto"` does today (built-in engines that declare the language, ordered by name, the first one used; verification after the pick; no routing table yet), and `tests/test_auto_routing.py` pins it. No behaviour change.
 
