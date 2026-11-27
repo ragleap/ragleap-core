@@ -15,7 +15,7 @@ from .transcriber import Transcriber
 from .whisper_engine import WhisperEngine
 from .parler_engine import make_parler_engine
 
-__version__ = "0.4.0"
+__version__ = "0.4.1"
 
 register_engine(WhisperEngine())
 register_engine(make_parler_engine())
