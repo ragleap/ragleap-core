@@ -33,6 +33,12 @@ export interface GraphIndexOptions {
   sleep?: (seconds: number) => Promise<void>;
   /** Jitter source for the retry backoff, 0 to 1. Default: Math.random. */
   random?: () => number;
+  /**
+   * Temporal relation edges (default false). When true, a relation edge that loses all support is closed (valid_to set)
+   * instead of deleted, a closed edge that gets support again is reopened, findRelations and communities use open
+   * edges only, and findRelations can answer asOf questions.
+   */
+  temporal?: boolean;
 }
 
 const DEFAULT_LOGGER: GraphLogger = {
@@ -95,12 +101,20 @@ export class GraphIndex {
   #runner: CypherRunner | null;
   #logger: GraphLogger;
   #timing: UpsertTiming;
+  #temporal: boolean;
 
   /** Internal: use GraphIndex.connect(). */
-  constructor(runner: CypherRunner | null, logger: GraphLogger, timing: UpsertTiming = DEFAULT_TIMING) {
+  constructor(runner: CypherRunner | null, logger: GraphLogger, timing: UpsertTiming = DEFAULT_TIMING, temporal: boolean = false) {
+    if (typeof temporal !== "boolean") throw new RangeError("temporal must be a bool");
     this.#runner = runner;
     this.#logger = logger;
     this.#timing = timing;
+    this.#temporal = temporal;
+  }
+
+  /** True if relation edges are closed instead of deleted (see GraphIndexOptions.temporal). */
+  get temporal(): boolean {
+    return this.#temporal;
   }
 
   /**
@@ -109,13 +123,15 @@ export class GraphIndex {
    */
   static async connect(source?: GraphConfig | CypherRunner | null, options: GraphIndexOptions = {}): Promise<GraphIndex> {
     const logger = options.logger ?? DEFAULT_LOGGER;
+    const temporal = options.temporal === undefined ? false : options.temporal;
+    if (typeof temporal !== "boolean") throw new RangeError("temporal must be a bool");
     const resolved = source === undefined ? new GraphConfig() : source;
     const candidate = resolved instanceof GraphConfig ? openRunner(resolved, logger) : resolved;
     const runner = candidate === null ? null : await connectRunner(candidate, logger);
     return new GraphIndex(runner, logger, {
       sleep: options.sleep ?? DEFAULT_TIMING.sleep,
       random: options.random ?? DEFAULT_TIMING.random,
-    });
+    }, temporal);
   }
 
   isAvailable(): boolean {
@@ -162,7 +178,7 @@ export class GraphIndex {
     chunks: readonly UpsertChunk[] | null | undefined,
     options: UpsertOptions = {},
   ): Promise<UpsertSummary> {
-    return upsertDocumentWithRetry(this.#runner, this.#logger, this.#timing, documentId, title, chunks, options);
+    return upsertDocumentWithRetry(this.#runner, this.#logger, this.#timing, documentId, title, chunks, options, this.#temporal);
   }
 
   /** Documents connected to the given entity names, ranked by matched-entity count and summed edge weight. */
@@ -177,7 +193,7 @@ export class GraphIndex {
 
   /** Typed relations involving the entity; direction is outgoing (default), incoming or both. */
   async findRelations(entityName: string, options: RelationsOptions = {}): Promise<RelationHit[]> {
-    return queries.findRelations(this.#runner, this.#logger, entityName, options);
+    return queries.findRelations(this.#runner, this.#logger, entityName, options, this.#temporal);
   }
 
   /** Per-document contributions to the edges between two entities (either order). */
@@ -192,12 +208,12 @@ export class GraphIndex {
 
   /** Groups the entities of a namespace into communities without writing anything (rejects with a RangeError for bad arguments). */
   async detectCommunities(options: DetectOptions = {}): Promise<Community[]> {
-    return communityStore.detectIndexCommunities(this.#runner, this.#logger, options);
+    return communityStore.detectIndexCommunities(this.#runner, this.#logger, options, this.#temporal);
   }
 
   /** Detects the communities and stores them as :Community nodes (unchanged ones are kept with their summary). */
   async refreshCommunities(options: RefreshOptions = {}): Promise<RefreshResult> {
-    return communityStore.refreshIndexCommunities(this.#runner, this.#logger, options);
+    return communityStore.refreshIndexCommunities(this.#runner, this.#logger, options, this.#temporal);
   }
 
   /** Stored communities, optionally only those containing the given entities. */

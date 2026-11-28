@@ -76,12 +76,10 @@ function makeSummarizer(kind: string, events: unknown[]): (info: CommunityInfo) 
 
 test("the Cypher texts match Python", { skip }, () => {
   const texts = load().texts as Record<string, string>;
-  // Python has two more statements (temporal edges: relates_edges_open, relations_open); temporal edges are not ported to TypeScript yet.
-  const notPorted = ["relates_edges_open", "relations_open"];
-  assert.deepEqual(Object.keys(texts).filter((k) => !(k in COMMUNITY_STATEMENTS)).sort(), notPorted);
-  assert.equal(Object.keys(texts).length, Object.keys(COMMUNITY_STATEMENTS).length + notPorted.length);
+  // Every Python statement is ported, including the two temporal ones (relates_edges_open, relations_open).
+  assert.deepEqual(Object.keys(texts).filter((k) => !(k in COMMUNITY_STATEMENTS)).sort(), []);
+  assert.equal(Object.keys(texts).length, Object.keys(COMMUNITY_STATEMENTS).length);
   for (const [name, text] of Object.entries(texts)) {
-    if (notPorted.includes(name)) continue;
     assert.equal(norm(COMMUNITY_STATEMENTS[name]), norm(text), name);
   }
 });
