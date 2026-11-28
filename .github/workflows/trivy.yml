@@ -32,8 +32,8 @@ jobs:
         image:
           - prom/prometheus:v3.16.0
           - grafana/grafana:12.4.15
-          - grafana/loki:3.7.10
-          - prom/alertmanager:v0.35.0
+          - grafana/loki:3.7.11
+          - prom/alertmanager:v0.35.1
           - grafana/promtail:3.3.0
           - grafana/alloy:v1.22.0
           - quay.io/prometheuscommunity/postgres-exporter:v0.20.1
