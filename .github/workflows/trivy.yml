@@ -32,7 +32,7 @@ jobs:
         image:
           - prom/prometheus:v3.16.0
           - grafana/grafana:12.4.15
-          - grafana/loki:3.7.10
+          - grafana/loki:3.7.11
           - prom/alertmanager:v0.35.0
           - grafana/promtail:3.3.0
           - grafana/alloy:v1.22.0
