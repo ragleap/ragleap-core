@@ -58,6 +58,7 @@ class _ConsoleServer(socketserver.ThreadingMixIn, HTTPServer):
     at once; a helper thread then reads and discards what that client has sent (a lingering close, at most ``MAX_LINGER_HELPERS`` helpers; when all
     are busy the connection is closed at once). A client that stalls holds one slot until the read timeout, never the whole console."""
     daemon_threads = True
+    request_queue_size = 128  # the standard library default is 5: a tight burst of connections overflowed it and each dropped one waited about a second for the kernel's retry
 
     def __init__(self, address, handler, max_connections: Optional[int] = None) -> None:
         super().__init__(address, handler)
