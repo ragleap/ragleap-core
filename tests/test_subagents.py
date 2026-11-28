@@ -1201,3 +1201,83 @@ def test_a_start_record_cannot_be_made_without_every_part(world):
     assert autonomy.spawn_record(None, ids[1], ids[2], "support", 1, False, th, kh, False) is None
     assert autonomy.spawn_record(ids[0], None, ids[2], "support", 1, False, th, kh, False) is None
     assert autonomy.spawn_record(ids[0], ids[1], None, "support", 1, False, th, kh, False) is None
+
+
+# ---- P1-E: a refused spawn frees what a dead child left behind, and says why when it still cannot spawn ----
+
+def _inject_holder(world, monkeypatch, idle, status="running"):
+    """After the parent run is first saved, make another child of it hold the whole budget (a dead one, or a live one)."""
+    from core.employees._db import get_connection
+    real_save = agent_loop._save
+    done = {"v": False}
+
+    def save_then_hold(run):
+        real_save(run)
+        if run.get("parent_id") is None and run.get("id") and not done["v"]:
+            done["v"] = True
+            holder = {"id": None, "role": "support", "query": "holder", "context_answer": "", "status": status, "steps": [], "tainted": False,
+                      "pending_action_id": None, "summary": "", "parent_id": run["id"], "depth": 1, "tokens_used": 0}
+            real_save(holder)
+            conn = get_connection()
+            cur = conn.cursor()
+            cur.execute("UPDATE agent_runs SET reserved_tokens = %s, updated_at = now() - make_interval(secs => %s) WHERE id = %s",
+                        (subagents.tree_tokens(), idle, holder["id"]))
+            cur.execute("UPDATE agent_runs SET reserved_tokens = %s, spawned = 1 WHERE id = %s", (subagents.tree_tokens(), run["id"]))
+            conn.commit()
+            cur.close()
+            conn.close()
+    monkeypatch.setattr(agent_loop, "_save", save_then_hold)
+
+
+def test_a_dead_childs_reservation_does_not_block_a_new_spawn(world, monkeypatch):
+    events = []
+    monkeypatch.setattr(subagents, "_emit", lambda event, **f: events.append((event, f)))
+    _inject_holder(world, monkeypatch, idle=agent_loop.CANCEL_STALE_SECONDS + 120)
+    agent_loop.run(Q, "d", FakeService(basic_replies()), None)
+    parent, _ = parent_and_children()
+    from core.employees._db import get_connection
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT status FROM agent_runs WHERE parent_id = %s AND query = 'holder'", (parent["id"],))
+    assert cur.fetchone() == ("failed",)
+    cur.execute("SELECT count(*) FROM agent_runs WHERE parent_id = %s AND query <> 'holder' AND status = 'done'", (parent["id"],))
+    assert cur.fetchone()[0] == 1
+    cur.close()
+    conn.close()
+    assert parent["status"] == "done"
+    assert any(e == "subagent_reservation_released" and f["reason"] == "abandoned_running" for e, f in events)
+    assert not any(e == "subagent_denied" for e, f in events)
+
+
+def test_a_live_childs_reservation_still_blocks_and_the_refusal_says_why(world, monkeypatch):
+    events = []
+    monkeypatch.setattr(subagents, "_emit", lambda event, **f: events.append((event, f)))
+    _inject_holder(world, monkeypatch, idle=3)
+    agent_loop.run(Q, "d", FakeService([plan("delegate", "support", TASK), DONE, "Parent summary."]), None)
+    parent, _ = parent_and_children()
+    assert parent["status"] == "budget" and "fully reserved" in parent["summary"] and "reason: budget_reserved" in parent["summary"]
+    denied = [f for e, f in events if e == "subagent_denied"]
+    assert len(denied) == 1 and denied[0]["reason"] == "budget_reserved" and denied[0]["reserved"] == subagents.tree_tokens()
+    assert denied[0]["cap"] == subagents.child_tokens() and not any(e == "subagent_reservation_released" for e, f in events)
+
+
+def test_a_spawn_over_the_child_limit_is_refused_with_its_code(world, monkeypatch):
+    from core.employees._db import get_connection
+    events = []
+    monkeypatch.setattr(subagents, "_emit", lambda event, **f: events.append((event, f)))
+    real_save = agent_loop._save
+
+    def save_then_fill(run):
+        real_save(run)
+        if run.get("parent_id") is None and run.get("id"):
+            conn = get_connection()
+            cur = conn.cursor()
+            cur.execute("UPDATE agent_runs SET spawned = %s WHERE id = %s", (subagents.max_children(), run["id"]))
+            conn.commit()
+            cur.close()
+            conn.close()
+    monkeypatch.setattr(agent_loop, "_save", save_then_fill)
+    agent_loop.run(Q, "d", FakeService([plan("delegate", "support", TASK), DONE, "Parent summary."]), None)
+    parent, children = parent_and_children()
+    assert children == [] and "reason: child_limit" in parent["summary"]
+    assert any(e == "subagent_denied" and f["reason"] == "child_limit" and f["spawned"] == subagents.max_children() for e, f in events)

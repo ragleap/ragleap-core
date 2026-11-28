@@ -167,6 +167,109 @@ def release_child(child_id: str) -> bool:
         return False
 
 
+def refusal_reason(parent_id: str, cap: int, limit: int):
+    """Why a reservation was refused, as (code, facts) for the audit and for the parent's summary. Read AFTER the refusal, only to
+    explain it (the refusal itself is the one atomic UPDATE). Codes: child_limit, budget_reserved, reservation_unavailable."""
+    from core.employees._db import get_connection
+    try:
+        conn = get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT reserved_tokens, spawned FROM agent_runs WHERE id = %s", (str(parent_id),))
+            row = cur.fetchone()
+            cur.close()
+        finally:
+            conn.close()
+        if not row:
+            return "reservation_unavailable", {}
+        reserved, spawned = int(row[0]), int(row[1])
+        facts = {"reserved": reserved, "limit": int(limit), "cap": int(cap), "spawned": spawned, "max_children": max_children()}
+        if spawned >= max_children():
+            return "child_limit", facts
+        if reserved + int(cap) > int(limit):
+            return "budget_reserved", facts
+        return "reservation_unavailable", facts          # the state changed between the refusal and this read
+    except Exception as e:
+        logger.warning("Could not explain a refused sub-agent reservation: %s", e)
+        return "reservation_unavailable", {}
+
+
+def _refusal_text(code: str, facts: Dict) -> str:
+    if code == "child_limit":
+        return f"Stopped: the limit of {facts.get('max_children', max_children())} sub-agents was reached (reason: child_limit)."
+    if code == "budget_reserved":
+        return (f"Stopped: the sub-agent token budget is fully reserved (reason: budget_reserved; {facts.get('reserved')} of "
+                f"{facts.get('limit')} tokens are held and a child needs {facts.get('cap')}).")
+    return "Stopped: the sub-agent budget could not be checked (reason: reservation_unavailable)."
+
+
+def _abandon_child(child_id: str, status: str, stale_seconds: int) -> bool:
+    """End a child run nobody is working on any more. ONE conditional UPDATE: it only changes a run that still has the status we
+    saw and has not been saved for longer than the stale limit, so a child that is alive (its save moves updated_at) is never hit."""
+    from core.employees._db import get_connection
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("UPDATE agent_runs SET status = 'failed', updated_at = now(), "
+                    "summary = 'Stopped: this run was abandoned (no activity for over 15 minutes, for example after a restart); its budget reservation was released.' "
+                    "WHERE id = %s AND status = %s AND updated_at < now() - make_interval(secs => %s)",
+                    (str(child_id), status, int(stale_seconds)))
+        done = cur.rowcount == 1
+        conn.commit()
+        cur.close()
+        return done
+    finally:
+        conn.close()
+
+
+def reconcile_children(parent_id: str) -> Dict:
+    """Settle or release the budget reservations of this parent's children that a dead child left behind (P1-E). Called when a
+    spawn is refused for budget, so a leaked reservation cannot shrink the parent's budget for good. For every child that still holds
+    a reservation: an ended child is settled to what it really used; a child "running" with no save for longer than the stale limit,
+    or "waiting_approval" with no pending action and no save for that long, is ended as failed and settled; a live child or one
+    truly waiting for an approval is left alone. Every change writes an audit event. Never raises."""
+    from core import agent_loop
+    from core.employees._db import get_connection
+    out = {"settled": 0, "released": 0, "kept": 0, "changed": False}
+    try:
+        stale = int(agent_loop.CANCEL_STALE_SECONDS)
+        conn = get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT c.id, c.status, c.tokens_used, c.reserved_tokens, EXTRACT(EPOCH FROM (now() - c.updated_at)), "
+                        "EXISTS (SELECT 1 FROM autonomy_pending p WHERE p.action_id = c.pending_action_id) "
+                        "FROM agent_runs c WHERE c.parent_id = %s AND c.reserved_tokens > 0", (str(parent_id),))
+            rows = cur.fetchall()
+            cur.close()
+        finally:
+            conn.close()
+        for cid, status, used, reserved, idle, has_pending in rows:
+            cid, idle = str(cid), float(idle or 0)
+            if status not in ("running", "waiting_approval"):
+                if release_child(cid):
+                    out["settled"] += 1
+                    _emit("subagent_reservation_settled", parent_run=str(parent_id), child_run=cid, reason="child_ended",
+                          reserved=int(reserved), used=int(used or 0))
+                continue
+            # This idle test is a cheap pre-filter. _abandon_child repeats it atomically inside its UPDATE, so a mutation of this line is
+            # equivalent (a live child is still refused there and counted as kept), not a test gap; the live-child tests pin the outcome.
+            if not (idle > stale and (status == "running" or not has_pending)):
+                out["kept"] += 1
+                continue
+            if _abandon_child(cid, status, stale):
+                release_child(cid)
+                out["released"] += 1
+                _emit("subagent_reservation_released", parent_run=str(parent_id), child_run=cid, reason="abandoned_" + status,
+                      idle_seconds=int(idle), reserved=int(reserved), used=int(used or 0))
+            else:
+                out["kept"] += 1
+    except Exception as e:
+        logger.warning("Sub-agent reservation reconciliation failed (nothing was changed after the failure): %s", e)
+        out["error"] = True
+    out["changed"] = bool(out["settled"] or out["released"])
+    return out
+
+
 def _tree_used(root_id: str) -> int:
     from core.employees._db import get_connection
     conn = get_connection()
@@ -408,10 +511,14 @@ def run_delegation(parent: Dict, service, role: Optional[str], target: str, task
         return None
     try:
         cap = child_tokens()
-        if reserve_child(parent["id"], cap, reservation_limit(parent)) is None:       # P1-B: one atomic UPDATE, before anything is created
-            if _count_children(parent["id"]) >= max_children():
-                return agent_loop._finish(parent, service, role, "done", f"Stopped: the limit of {max_children()} sub-agents was reached.")
-            return agent_loop._finish(parent, None, role, "budget", "Stopped: the sub-agent token budget is fully reserved.")
+        limit = reservation_limit(parent)
+        if reserve_child(parent["id"], cap, limit) is None:       # P1-B: one atomic UPDATE, before anything is created
+            swept = reconcile_children(parent["id"])              # P1-E: free what a dead child left behind, then try once more
+            if not (swept["changed"] and reserve_child(parent["id"], cap, limit) is not None):
+                code, facts = refusal_reason(parent["id"], cap, limit)
+                _emit("subagent_denied", parent_run=parent["id"], role=target, reason=code, **facts)
+                return agent_loop._finish(parent, service if code == "child_limit" else None, role,
+                                          "done" if code == "child_limit" else "budget", _refusal_text(code, facts))
         child = {"id": None, "role": target, "query": child_query, "context_answer": "", "status": "running",
                  "steps": [], "tainted": child_tainted, "pending_action_id": None, "summary": "",
                  "parent_id": parent["id"], "depth": int(parent.get("depth") or 0) + 1, "tokens_used": 0,
