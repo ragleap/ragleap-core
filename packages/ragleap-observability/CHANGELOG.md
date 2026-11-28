@@ -5,6 +5,13 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.8] - 2026-11-28
+
+### Changed
+
+- AlertManager image pinned to v0.35.1 (was v0.35.0). Proven on a throwaway tag before this change: the Trivy image scan gate passed (run 46143649066), chart install, upgrade and uninstall on Kubernetes v1.34.11, v1.36.4 and v1.37.0 passed (run 46143668097), and the kind alert test passed (run 46143685704). What changed upstream in this release was not reviewed; the runs show only that nothing these tests check broke.
+- Loki image pinned to 3.7.11 (was 3.7.10). Proven on a throwaway tag before this change: the Trivy image scan gate passed (run 46143467862), chart install, upgrade and uninstall on Kubernetes v1.34.11, v1.36.4 and v1.37.0 passed (run 46143489969), and the kind alert test, including the Alloy job, passed (run 46143510085). What changed upstream in this release was not reviewed; the runs show only that nothing these tests check broke.
+
 ## [0.8.7] - 2026-11-21
 
 ### Changed

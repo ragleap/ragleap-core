@@ -62,7 +62,7 @@ grafana:
 
 loki:
   enabled: true
-  image: grafana/loki:3.7.10
+  image: grafana/loki:3.7.11
   port: 3100
   retention: 168h   # 7 days -- UNVERIFIED, size for real retention needs
 
@@ -82,7 +82,7 @@ alloy:
 
 alertmanager:
   enabled: true
-  image: prom/alertmanager:v0.35.0
+  image: prom/alertmanager:v0.35.1
   port: 9093
   # No real receiver configured yet -- the default route logs to a
   # webhook receiver pointed at a placeholder URL that will fail
