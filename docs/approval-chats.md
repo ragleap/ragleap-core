@@ -21,5 +21,11 @@ Right before an approved action runs, RagLeap recomputes the hash from the exact
 - Typed replies stay `YES <id>` and `NO <id>`.
 - The approve API route accepts an optional `action_hash` query parameter (the `Ref`, 12 to 64 hex characters). A different value runs nothing and leaves the action pending.
 - Without a signing key only the hash is stored. That catches a changed field but not a database writer who also rewrites the hash. With a key, a rewritten hash or a removed signature is refused.
-- A pending action created before this change has no hash. It still runs (and is audited as `approval_legacy_unbound`) until it expires after `APPROVAL_EXPIRY_HOURS`. A database writer could use this to skip the check for such rows.
+- A pending action without a hash, or without a policy digest (made before these bindings existed, or written by hand into the table), is refused and never run. The owner is told to ask again. Nothing is grandfathered.
 - If the action cannot be stored, no approval message is sent and the agent step ends with an error.
+
+### Approved under these settings
+
+The hash does not cover the situation around the action, so a second digest does: a SHA-256 of the autonomy settings the action was proposed under (mode, allowed actions, allowed channels, approval channel and chat). It is stored with the pending action and covered by the signature. Right before the action runs it is recomputed from the settings as they are now. If you changed any of them in between, the action does not run, an `approval_mismatch` audit event with the reason `policy_changed` is written, and you are told to ask again (that is the safe direction: switching autonomy off, or removing a channel, also cancels what was waiting). The order of the allowed lists does not matter, and changing a setting and changing it back is fine.
+
+Without a signing key the digests are stored but not signed, so a database writer could rewrite both. When the capability registry is wired into the gate, its generation will join this digest.

@@ -199,6 +199,8 @@ CREATE TABLE IF NOT EXISTS autonomy_pending (
 -- P1-A: the hash (and signature, when a signing key is set) of the action as it was proposed, checked again right before it runs.
 ALTER TABLE autonomy_pending ADD COLUMN IF NOT EXISTS action_hash TEXT;
 ALTER TABLE autonomy_pending ADD COLUMN IF NOT EXISTS action_sig TEXT;
+-- P1-D: the digest of the autonomy settings the action was proposed under (signed with the hash, compared again before it runs).
+ALTER TABLE autonomy_pending ADD COLUMN IF NOT EXISTS policy_hash TEXT;
 
 -- Bounded audit log of every autonomous action (executed, rejected, or errored).
 CREATE TABLE IF NOT EXISTS autonomy_log (

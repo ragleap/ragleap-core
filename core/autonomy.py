@@ -420,27 +420,49 @@ def action_hash(action_id, action_type, channel, target, content, subject, role)
     return hashlib.sha256(body.encode("utf-8", "surrogatepass")).hexdigest()
 
 
-def _approval_mac(key: bytes, key_id, action_id, ahash) -> str:
+def policy_digest(settings: Optional[Dict] = None) -> str:
+    """SHA-256 of the autonomy settings an approval is given under: mode, allowed actions, allowed channels and the approval
+    chat. It is stored (and signed) with a pending action and compared again right before the action runs, so an approval
+    given under one policy cannot run under another. (When the capability registry is wired into the gate, its generation
+    joins this digest.) get_autonomy_settings falls back to the safe default when the database fails, which also changes
+    the digest, so a failure refuses the action."""
     import hashlib
-    msg = "|".join(("approval1", str(key_id), str(action_id), str(ahash)))
+    s = settings if settings is not None else get_autonomy_settings()
+    body = json.dumps({"v": 1, "mode": s.get("mode"), "actions": sorted(str(a) for a in (s.get("actions") or [])),
+                       "channels": sorted(str(c) for c in (s.get("channels") or [])),
+                       "approval_channel": s.get("approval_channel"), "approval_target": s.get("approval_target")},
+                      sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(body.encode("utf-8", "surrogatepass")).hexdigest()
+
+
+def _approval_mac(key: bytes, key_id, action_id, ahash, policy) -> str:
+    import hashlib
+    msg = "|".join(("approval2", str(key_id), str(action_id), str(ahash), str(policy)))
     return hmac.new(key, msg.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
-def approval_binding(action_id, action_type, channel, target, content, subject, role):
-    """(hash, signature) stored with a proposed action. The signature is "<key id>:<hmac>", or None when no signing key is
-    configured (then only the hash is stored, which catches a changed field but not a rewritten hash)."""
+def approval_binding(action_id, action_type, channel, target, content, subject, role, policy: Optional[str] = None):
+    """(hash, signature) stored with a proposed action; the signature covers the hash AND the policy digest. The signature is
+    "<key id>:<hmac>", or None when no signing key is configured (then only the hash is stored, which catches a changed
+    field but not a rewritten hash)."""
     h = action_hash(action_id, action_type, channel, target, content, subject, role)
+    policy = policy or policy_digest()
     key_id, keys = _signing_keys()
     if key_id is None:
         return h, None
-    return h, f"{key_id}:{_approval_mac(keys[key_id], key_id, action_id, h)}"
+    return h, f"{key_id}:{_approval_mac(keys[key_id], key_id, action_id, h, policy)}"
 
 
-def verify_approval(action_id, action_type, channel, target, content, subject, role, stored_hash, stored_sig):
-    """(ok, reason): does the exact action about to run still match what was proposed? Fails closed on any error."""
+def verify_approval(action_id, action_type, channel, target, content, subject, role, stored_hash, stored_sig,
+                    stored_policy=None, current_policy=None):
+    """(ok, reason): does the exact action about to run still match what was proposed, under the policy it was approved
+    under? A row without a hash or without a policy digest (made before the binding existed, or written by hand) is refused,
+    never run. Fails closed on any error."""
     try:
         if not stored_hash:
-            return True, "legacy_unbound"          # a row from before P1-A; rows expire after APPROVAL_EXPIRY_HOURS
+            return False, "unbound_refused"
+        if not stored_policy:
+            return False, "unbound_policy_refused"
         if not hmac.compare_digest(action_hash(action_id, action_type, channel, target, content, subject, role), str(stored_hash)):
             return False, "hash_mismatch"
         key_id, keys = _signing_keys()
@@ -449,27 +471,39 @@ def verify_approval(action_id, action_type, channel, target, content, subject, r
             key = keys.get(kid)
             if key is None:
                 return False, "unknown_key"
-            if not hmac.compare_digest(_approval_mac(key, kid, action_id, str(stored_hash)), mac):
+            if not hmac.compare_digest(_approval_mac(key, kid, action_id, str(stored_hash), str(stored_policy)), mac):
                 return False, "bad_signature"
-            return True, "ok"
-        if key_id is not None:
+            ok_reason = "ok"
+        elif key_id is not None:
             return False, "signature_missing"      # a key is configured now: an unsigned row could be a downgrade
-        return True, "ok_hash_only"
+        else:
+            ok_reason = "ok_hash_only"
+        now = current_policy if current_policy is not None else policy_digest()
+        if not hmac.compare_digest(str(now), str(stored_policy)):
+            return False, "policy_changed"          # the autonomy settings are not the ones it was approved under
+        return True, ok_reason
     except Exception as e:
         logger.warning("Approval check failed, refusing: %s", e)
         return False, "check_failed"
 
 
-def _execute_approved(action_id: str, fields: Dict, stored_hash, stored_sig):
+_REFUSAL_TEXT = {
+    "hash_mismatch": "it does not match what was proposed",
+    "policy_changed": "your autonomy settings changed after it was proposed",
+    "unbound_refused": "it was created before approvals were bound to the exact action",
+    "unbound_policy_refused": "it was created before approvals were bound to your autonomy settings",
+}
+
+
+def _execute_approved(action_id: str, fields: Dict, stored_hash, stored_sig, stored_policy=None):
     """THE last step before an approved action runs: recompute the hash of the exact fields about to be executed and compare
-    it with the one the owner approved. Returns (True, result) or (False, reason); on False nothing was sent."""
+    it with the one the owner approved, and check that the autonomy settings are still the ones it was approved under.
+    Returns (True, result) or (False, reason); on False nothing was sent."""
     ok, why = verify_approval(action_id, fields.get("action_type"), fields.get("channel"), fields.get("target"), fields.get("content"),
-                              fields.get("subject"), fields.get("role"), stored_hash, stored_sig)
+                              fields.get("subject"), fields.get("role"), stored_hash, stored_sig, stored_policy)
     if not ok:
         _audit_event("approval_mismatch", action_id=action_id, action_type=fields.get("action_type"), channel=fields.get("channel"), reason=why)
         return False, why
-    if why == "legacy_unbound":
-        _audit_event("approval_legacy_unbound", action_id=action_id, action_type=fields.get("action_type"))
     return True, _send_via_channel(fields["channel"], fields["target"], fields["content"])
 
 
@@ -802,16 +836,17 @@ def execute_or_request(action_type: str, channel: str, target: str,
     elif mode == "semi":
         subject = subject or ""
         stored, ahash = None, None
+        pdigest = policy_digest()                   # the settings this approval is given under
         conn = get_connection()
         try:
             cur = conn.cursor()
             for _ in range(6):                      # a clash on the short id draws a new id; the prompt is only sent for a stored action
                 candidate = str(uuid.uuid4())[:8].upper()
-                h, sig = approval_binding(candidate, action_type, channel, target, content, subject, role)
+                h, sig = approval_binding(candidate, action_type, channel, target, content, subject, role, policy=pdigest)
                 cur.execute(
-                    "INSERT INTO autonomy_pending (action_id, action_type, channel, target, content, subject, role, action_hash, action_sig) "
-                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (action_id) DO NOTHING RETURNING action_id",
-                    (candidate, action_type, channel, target, content, subject, role, h, sig),
+                    "INSERT INTO autonomy_pending (action_id, action_type, channel, target, content, subject, role, action_hash, action_sig, "
+                    "policy_hash) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (action_id) DO NOTHING RETURNING action_id",
+                    (candidate, action_type, channel, target, content, subject, role, h, sig, pdigest),
                 )
                 if cur.fetchone():
                     stored, ahash = candidate, h
@@ -878,7 +913,7 @@ def process_approval_response(message: str, decided_by: Optional[Dict] = None, e
         cur.execute(
             "DELETE FROM autonomy_pending WHERE action_id = %s AND (%s::text IS NULL OR left(coalesce(action_hash, ''), length(%s::text)) = %s::text) "
             "RETURNING action_type, channel, target, content, subject, role, "
-            "(created_at < now() - make_interval(hours => %s)), action_hash, action_sig",
+            "(created_at < now() - make_interval(hours => %s)), action_hash, action_sig, policy_hash",
             (action_id, eh, eh, eh, _approval_expiry_hours()),
         )
         row = cur.fetchone()
@@ -889,7 +924,7 @@ def process_approval_response(message: str, decided_by: Optional[Dict] = None, e
                 return f"Action {action_id} was not run: not found, already processed, or the reference does not match."
             return f"Action {action_id} not found or already processed."
 
-        action_type, channel, target, content, subject, role, expired, ahash, asig = row
+        action_type, channel, target, content, subject, role, expired, ahash, asig, apol = row
         cur.close()
     except Exception as e:
         logger.error(f"process_approval_response lookup error: {e}", exc_info=True)
@@ -915,12 +950,13 @@ def process_approval_response(message: str, decided_by: Optional[Dict] = None, e
                 "Ask for it again if you still want it.")
 
     ran, result = _execute_approved(action_id, {"action_type": action_type, "channel": channel, "target": target, "content": content,
-                                                "subject": subject, "role": role}, ahash, asig)
+                                                "subject": subject, "role": role}, ahash, asig, apol)
     if not ran:
-        log_autonomous_action(action_type, channel, target, content, f"REFUSED: the action does not match what was approved ({result})",
+        text = _REFUSAL_TEXT.get(result, "its integrity check failed")
+        log_autonomous_action(action_type, channel, target, content, f"REFUSED: {text} ({result})",
                               approved=False, role=role, decided_by=decided_by, action_id=action_id)
         _notify_agent_loop(action_id, False, "", action_type)
-        return f"Action {action_id} was NOT run: it does not match what was proposed ({result}). Ask for it again."
+        return f"Action {action_id} was NOT run: {text} ({result}). Ask for it again."
     log_autonomous_action(action_type, channel, target, content, result, approved=True, role=role,
                           decided_by=decided_by, action_id=action_id)
     employee_learning.learn_from_owner_approval(

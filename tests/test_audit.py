@@ -8,6 +8,9 @@ import uuid
 import pytest
 from fastapi.testclient import TestClient
 
+import sys as _s, os as _o
+_s.path.insert(0, _o.path.dirname(__file__))
+from _bound_rows import insert_bound  # noqa: E402
 from core import audit, autonomy, document_store, office, users
 
 BOOT = {"x-api-key": "boot-key"}
@@ -71,8 +74,7 @@ def wait_for(cond, secs=3.0):
 
 def pending(content="x"):
     action_id = "".join(random.choice(string.ascii_uppercase + string.digits) for _ in range(8))
-    _sql("INSERT INTO autonomy_pending (action_id, action_type, channel, target, content, role) "
-         "VALUES (%s, 'send_message', 'telegram', 'chat1', %s, 'support')", (action_id, MARK + content))
+    insert_bound(action_id, "send_message", "telegram", "chat1", MARK + content, role="support")
     return action_id
 
 
