@@ -135,10 +135,11 @@ def _save_child(run: Dict, record: Dict, reserved: int = 0) -> None:
              run.get("parent_id"), int(run.get("depth") or 0), int(run.get("tokens_used") or 0), int(reserved)),
         )
         cur.execute(
-            "INSERT INTO agent_run_starts (spawn_id, run_id, parent_id, role, depth, forced, key_id, sig, tools_hash) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            "INSERT INTO agent_run_starts (spawn_id, run_id, parent_id, role, depth, forced, key_id, sig, tools_hash, task_hash, tainted) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
             (record["spawn_id"], record["run_id"], record["parent_id"], record.get("role"), int(record["depth"]),
-             bool(record["forced"]), record["key_id"], record["sig"], record.get("tools_hash")),
+             bool(record["forced"]), record["key_id"], record["sig"], record.get("tools_hash"), record.get("task_hash"),
+             None if record.get("tainted") is None else bool(record["tainted"])),
         )
         conn.commit()
         cur.close()
@@ -157,13 +158,14 @@ def get_start_record(run_id) -> Optional[Dict]:
     conn = get_connection()
     try:
         cur = conn.cursor()
-        cur.execute("SELECT spawn_id, run_id, parent_id, role, depth, forced, key_id, sig, tools_hash FROM agent_run_starts WHERE run_id = %s", (rid,))
+        cur.execute("SELECT spawn_id, run_id, parent_id, role, depth, forced, key_id, sig, tools_hash, task_hash, tainted FROM agent_run_starts WHERE run_id = %s", (rid,))
         r = cur.fetchone()
         cur.close()
         if r is None:
             return None
         return {"spawn_id": str(r[0]), "run_id": str(r[1]), "parent_id": str(r[2]), "role": r[3], "depth": int(r[4]),
-                "forced": bool(r[5]), "key_id": r[6], "sig": r[7], "tools_hash": r[8]}
+                "forced": bool(r[5]), "key_id": r[6], "sig": r[7], "tools_hash": r[8], "task_hash": r[9],
+                "tainted": None if r[10] is None else bool(r[10])}
     finally:
         conn.close()
 
@@ -511,10 +513,13 @@ def _finish(run: Dict, service, role: Optional[str], status: str, note: str = ""
 
 
 def _drive(run: Dict, service, role: Optional[str]) -> Optional[Dict]:
-    from core.autonomy import execute_or_request, inherited_force_semi, verify_spawn_record  # lazy: avoids an import cycle
+    from core.autonomy import check_spawn_record, execute_or_request, inherited_force_semi  # lazy: avoids an import cycle
     tools = subagents.resolved_tools(run)
-    if run.get("parent_id") and not verify_spawn_record(run, tools):          # a child the gate did not start is never driven
-        return _finish(run, None, role, "failed", "Stopped: this sub-agent has no valid start record.")
+    if run.get("parent_id"):                                                   # a child the gate did not start is never driven
+        record_ok, why = check_spawn_record(run, tools)
+        if not record_ok:
+            subagents._emit("subagent_refused", run_id=run.get("id"), parent_run=run.get("parent_id"), reason=why)
+            return _finish(run, None, role, "failed", f"Stopped: this sub-agent has no valid start record ({why}).")
     limit = max_steps()
     while True:
         if _cancelled(run):

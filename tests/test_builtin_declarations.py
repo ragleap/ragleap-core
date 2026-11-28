@@ -147,7 +147,7 @@ def test_the_delegate_limits_equal_the_real_sub_agent_limits(monkeypatch):
 
 def test_a_child_inherits_the_parent_taint_and_hands_its_own_back():
     src = (ROOT / "core" / "subagents.py").read_text(encoding="utf-8")
-    assert '"tainted": bool(parent["tainted"])' in src            # parent -> child
+    assert 'child_tainted = bool(parent["tainted"])' in src and '"tainted": child_tainted' in src      # parent -> child (P1-F: also signed)
     assert 'if child and child.get("tainted"):' in src and 'parent["tainted"] = True' in src   # child -> parent
 
 

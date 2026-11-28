@@ -387,6 +387,9 @@ CREATE TABLE IF NOT EXISTS agent_run_starts (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ALTER TABLE agent_run_starts ADD COLUMN IF NOT EXISTS tools_hash TEXT;
+-- P1-F: a digest of the child's role and instruction text, and the taint it started with (both signed in the start record).
+ALTER TABLE agent_run_starts ADD COLUMN IF NOT EXISTS task_hash TEXT;
+ALTER TABLE agent_run_starts ADD COLUMN IF NOT EXISTS tainted BOOLEAN;
 CREATE OR REPLACE FUNCTION agent_run_starts_append_only() RETURNS trigger AS $$
 BEGIN
     RAISE EXCEPTION 'agent_run_starts is append-only: % is refused', TG_OP;

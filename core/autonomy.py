@@ -629,70 +629,144 @@ def _signing_keys():
     return (_key_id(cur) if cur else None), keys
 
 
-def tools_digest(tools) -> Optional[str]:
-    """SHA-256 of the sorted tool NAMES a run may use (None for an empty list: a run with no tools is never started)."""
+# Tool name -> the function that does the work (P1-F). The dispatcher (_send_via_channel) chooses a function by the channel string;
+# this table is the second statement of the same fact, and tests/test_start_record.py parses the dispatcher and fails if the two
+# ever disagree (and if a tool or an operation has no entry).
+TOOL_HANDLERS = {
+    "send_webhook": "core.action_senders:send_webhook",
+    "send_slack": "core.action_senders:send_slack",
+    "send_email": "core.action_senders:send_email",
+    "update_crm_record": "core.action_senders:send_crm_update",
+    "schedule_event": "core.action_senders:send_calendar_event",
+    "create_task": "core.tasks:create_task",
+    "notify_owner": "core.autonomy:_send_via_channel",
+    "mcp_call": "core.mcp_client:call_tool",
+    "run_code": "core.code_exec:run_code",
+    "run_shell": "core.code_exec:run_shell",
+    "fetch_page": "core.page_fetch:fetch_page",
+    "list_files": "core.file_access:list_files",
+    "read_file": "core.file_access:read_file",
+    "preview_change": "core.file_access:preview_change",
+    "write_file": "core.file_access:write_file",
+    "delete_file": "core.file_access:delete_file",
+    "request_access": "core.file_access:access_request_text",
+    "delegate": "core.subagents:run_delegation",
+}
+
+
+def _handler_identity(name) -> str:
+    """module:qualname of the function that currently does the work for a tool, read from the live function object (so a
+    function that was replaced by a wrapper or by another one changes it). "unresolved..." when it cannot be found."""
+    spec = TOOL_HANDLERS.get(str(name))
+    if not spec:
+        return "unresolved"
+    try:
+        import importlib
+        mod, _, fn = spec.partition(":")
+        f = getattr(importlib.import_module(mod), fn)
+        return f"{f.__module__}:{f.__qualname__}"
+    except Exception:
+        return "unresolved:" + spec
+
+
+def unresolved_tools(tools) -> list:
+    """Names of tools whose handler cannot be identified. A child with such a tool is not started (fails closed)."""
+    return sorted(str(k) for k in (tools or {}) if _handler_identity(k).startswith("unresolved"))
+
+
+def tools_digest(tools) -> str:
+    """SHA-256 of what a run could DO: for every tool its name, the module:qualname of the function behind it and its declared
+    effect class, sorted by name, with a version tag. Descriptions are not part of it on purpose (they embed the owner's own
+    configuration). An empty list has a real digest like any other; refusing a run with no tools is a separate, explicit check
+    (reason no_tools when starting, empty_tool_list when verifying)."""
     import hashlib
-    names = sorted(str(k) for k in (tools or {}))
-    if not names:
-        return None
-    return hashlib.sha256(json.dumps(names, separators=(",", ":")).encode("utf-8")).hexdigest()
+    from core.connector_host.policy import BUILTIN_EFFECT
+    entries = [{"name": n, "handler": _handler_identity(n), "effect": BUILTIN_EFFECT.get(n, "unknown")}
+               for n in sorted(str(k) for k in (tools or {}))]
+    return hashlib.sha256(json.dumps({"v": 2, "tools": entries}, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
 
 
-def _spawn_mac(key: bytes, key_id, spawn_id, run_id, parent_id, role, depth, forced, tools_hash) -> str:
+def task_digest(role, query) -> str:
+    """SHA-256 of a child's role and instruction text exactly as stored in its run row (P1-F): what the parent handed it."""
+    import hashlib
+    body = json.dumps({"v": 1, "role": "" if role is None else str(role), "query": "" if query is None else str(query)},
+                      sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(body.encode("utf-8", "surrogatepass")).hexdigest()
+
+
+def _spawn_mac(key: bytes, key_id, spawn_id, run_id, parent_id, role, depth, forced, tools_hash, task_hash, tainted) -> str:
     # key_id is in the message on purpose even though a wrong key id already fails today (the key lookup and the key itself
     # differ). It binds a record to the key it names, so a later change that lets two ids share a key cannot let a record be
     # re-labelled. tests/test_subagents.py proves it directly; do not drop it as redundant.
     import hashlib
     import hmac
-    # tools_hash (P1-A) binds the exact tool list the child was started with, so a swap between signing and execution is refused.
-    msg = "|".join(("spawn3", str(key_id), str(spawn_id), str(run_id), str(parent_id), str(role), str(int(depth)), "1" if forced else "0",
-                    str(tools_hash)))
+    # tools_hash binds what the child could do, task_hash what it was told, tainted the taint it started with (spawn4).
+    msg = "|".join(("spawn4", str(key_id), str(spawn_id), str(run_id), str(parent_id), str(role), str(int(depth)), "1" if forced else "0",
+                    str(tools_hash), str(task_hash), "1" if tainted else "0"))
     return hmac.new(key, msg.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
-def spawn_record(spawn_id, run_id, parent_id, role, depth, forced, tools_hash) -> Optional[Dict]:
+def spawn_record(spawn_id, run_id, parent_id, role, depth, forced, tools_hash, task_hash, tainted) -> Optional[Dict]:
     """The signed start record of a child, written once with its run (the table is append-only). None when it cannot be made."""
     key_id, keys = _signing_keys()
-    if key_id is None or not spawn_id or not run_id or not parent_id or not tools_hash:
+    if key_id is None or not spawn_id or not run_id or not parent_id or not tools_hash or not task_hash:
         return None
     return {"spawn_id": spawn_id, "run_id": run_id, "parent_id": parent_id, "role": role, "depth": int(depth), "forced": bool(forced),
-            "tools_hash": tools_hash, "key_id": key_id,
-            "sig": _spawn_mac(keys[key_id], key_id, spawn_id, run_id, parent_id, role, depth, forced, tools_hash)}
+            "tools_hash": tools_hash, "task_hash": task_hash, "tainted": bool(tainted), "key_id": key_id,
+            "sig": _spawn_mac(keys[key_id], key_id, spawn_id, run_id, parent_id, role, depth, forced, tools_hash, task_hash, tainted)}
 
 
-def verify_spawn_record(run: Dict, tools=None) -> bool:
-    """True only when the run has a start record in the append-only table, the record's parent, role and depth are the live
-    row's, the tool list the run is about to use (`tools`, else subagents.resolved_tools) has the recorded hash, its key is
-    still configured (current or previous) and its signature matches. Anything else is refused."""
+def check_spawn_record(run: Dict, tools=None):
+    """(ok, reason). ok only when the run has a start record in the append-only table; its parent, role and depth are the live
+    row's; the tool list the run is about to use (`tools`, else subagents.resolved_tools) is not empty and has the recorded
+    digest; the role and instruction text in the row hash to the recorded digest; the run's taint is not lower than the taint it
+    started with; and the key is still configured (current or previous) and the signature matches. The reason names the first
+    failing check (no_run, no_record, field_mismatch, empty_tool_list, old_record_format, tools_changed, task_changed,
+    taint_lowered, unknown_key, bad_signature, check_failed) so the audit says what really happened."""
     try:
         import hmac
         from core import agent_loop
         run = run or {}
         rid = run.get("id")
         if not rid or not run.get("parent_id"):
-            return False
+            return False, "no_run"
         rec = agent_loop.get_start_record(rid)
         if rec is None:
-            return False
+            return False, "no_record"
         if (str(rec["run_id"]), str(rec["parent_id"]), rec.get("role"), int(rec["depth"])) != \
                 (str(rid), str(run["parent_id"]), run.get("role"), int(run.get("depth") or 0)):
-            return False
+            return False, "field_mismatch"
         if tools is None:
             from core import subagents
             tools = subagents.resolved_tools(run)
-        have, recorded = tools_digest(tools), rec.get("tools_hash")
-        if not have or not recorded or not hmac.compare_digest(str(have), str(recorded)):
-            return False                           # a legacy record (no hash), an empty list or a swapped list is refused
+        if not tools:
+            return False, "empty_tool_list"
+        recorded_tools, recorded_task = rec.get("tools_hash"), rec.get("task_hash")
+        if not recorded_tools or not recorded_task or rec.get("tainted") is None:
+            return False, "old_record_format"        # a record written before spawn4
+        if not hmac.compare_digest(str(tools_digest(tools)), str(recorded_tools)):
+            return False, "tools_changed"
+        if not hmac.compare_digest(str(task_digest(run.get("role"), run.get("query"))), str(recorded_task)):
+            return False, "task_changed"
+        if rec["tainted"] and not run.get("tainted"):
+            return False, "taint_lowered"            # a child may become more tainted while it runs, never less than it started
         key = _signing_keys()[1].get(rec["key_id"])
         if key is None:
-            return False
-        # `recorded` and `have` are equal here (the compare above refused otherwise), so signing over either gives the same MAC:
-        # a mutation that swaps them is equivalent, not a test gap. The hash check above is what refuses a swapped list.
+            return False, "unknown_key"
+        # The recorded digests equal the recomputed ones here (the compares above refused otherwise), so signing over either gives
+        # the same MAC: a mutation that swaps them is equivalent, not a test gap.
         want = _spawn_mac(key, rec["key_id"], rec["spawn_id"], rec["run_id"], rec["parent_id"], rec.get("role"), rec["depth"], rec["forced"],
-                          recorded)
-        return hmac.compare_digest(want, str(rec["sig"]))
+                          recorded_tools, recorded_task, rec["tainted"])
+        if not hmac.compare_digest(want, str(rec["sig"])):
+            return False, "bad_signature"
+        return True, "ok"
     except Exception:
-        return False
+        return False, "check_failed"
+
+
+def verify_spawn_record(run: Dict, tools=None) -> bool:
+    """True only when check_spawn_record says ok."""
+    return check_spawn_record(run, tools)[0]
 
 
 def authorize_spawn(parent: Dict, target_role: str) -> Dict:

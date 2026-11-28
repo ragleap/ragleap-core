@@ -210,11 +210,31 @@ def with_delegate(tools: Dict[str, str], run: Dict) -> Dict[str, str]:
         return tools
 
 
+class _ToolView(dict):
+    """The only fields resolved_tools may read of a run. At spawn it is called with a child that has no row yet, when the child is
+    driven with the full row: reading any other field (for instance run["forced"]) would make the two digests differ and refuse
+    every in-flight child, so it raises here instead (tests/test_start_record.py)."""
+    ALLOWED = ("id", "parent_id", "role", "depth")
+
+    def _check(self, k):
+        if k not in self.ALLOWED:
+            raise KeyError(f"resolved_tools may only read {self.ALLOWED}, not {k!r}")
+
+    def __getitem__(self, k):
+        self._check(k)
+        return dict.__getitem__(self, k)
+
+    def get(self, k, default=None):
+        self._check(k)
+        return dict.get(self, k, default)
+
+
 def resolved_tools(run: Dict) -> Dict[str, str]:
-    """THE tool list of a run. The gate hashes it into a child's signed start record (P1-A) and the loop uses the same
-    function to drive the child, so what was signed is what runs."""
+    """THE tool list of a run. The gate hashes it into a child's signed start record and the loop uses the same function to
+    drive the child, so what was signed is what runs. It sees only a four-field view of the run (see _ToolView)."""
     from core.employees import actions
-    return limit_to_parent(with_delegate(actions.available_tools(), run), run)
+    view = _ToolView({k: (run or {}).get(k) for k in _ToolView.ALLOWED})
+    return limit_to_parent(with_delegate(actions.available_tools(), view), view)
 
 
 def parent_tool_names(parent: Dict) -> set:
@@ -362,10 +382,21 @@ def run_delegation(parent: Dict, service, role: Optional[str], target: str, task
     import uuid
     child_id = str(uuid.uuid4())
     child_depth = int(parent.get("depth") or 0) + 1
-    tools_hash = autonomy.tools_digest(resolved_tools({"id": child_id, "parent_id": parent["id"], "role": target, "depth": child_depth}))
-    record = autonomy.spawn_record(auth.get("spawn_id"), child_id, parent["id"], target, child_depth, auth["force_approval"], tools_hash)
+    child_tools = resolved_tools({"id": child_id, "parent_id": parent["id"], "role": target, "depth": child_depth})
+    if not child_tools:                                  # an explicit check with its own reason, not a missing record
+        _emit("subagent_denied", parent_run=parent["id"], role=target, reason="no_tools")
+        return agent_loop._finish(parent, service, role, "done", "Stopped: this sub-agent would have no tools, so it was not started.")
+    unknown = autonomy.unresolved_tools(child_tools)
+    if unknown:
+        _emit("subagent_denied", parent_run=parent["id"], role=target, reason="unknown_tool_handler", tools=",".join(unknown))
+        return agent_loop._finish(parent, service, role, "done", "Stopped: a tool of this sub-agent has no known handler, so it was not started.")
+    child_query = task[:agent_loop.TEXT_CAP]
+    child_tainted = bool(parent["tainted"])
+    record = autonomy.spawn_record(auth.get("spawn_id"), child_id, parent["id"], target, child_depth, auth["force_approval"],
+                                   autonomy.tools_digest(child_tools), autonomy.task_digest(target, child_query), child_tainted)
     if record is None:
-        return agent_loop._finish(parent, service, role, "done", "The proposed sub-agent task was not allowed.")
+        _emit("subagent_denied", parent_run=parent["id"], role=target, reason="no_record")
+        return agent_loop._finish(parent, service, role, "done", "Stopped: no start record could be made for this sub-agent.")
     step = {"tool": "delegate", "target": target, "content": task[:600], "sig": sig, "status": "running",
             "forced_approval": False, "observation": "", "child_run_id": None}
     sem = _semaphore()
@@ -381,8 +412,8 @@ def run_delegation(parent: Dict, service, role: Optional[str], target: str, task
             if _count_children(parent["id"]) >= max_children():
                 return agent_loop._finish(parent, service, role, "done", f"Stopped: the limit of {max_children()} sub-agents was reached.")
             return agent_loop._finish(parent, None, role, "budget", "Stopped: the sub-agent token budget is fully reserved.")
-        child = {"id": None, "role": target, "query": task[:agent_loop.TEXT_CAP], "context_answer": "", "status": "running",
-                 "steps": [], "tainted": bool(parent["tainted"]), "pending_action_id": None, "summary": "",
+        child = {"id": None, "role": target, "query": child_query, "context_answer": "", "status": "running",
+                 "steps": [], "tainted": child_tainted, "pending_action_id": None, "summary": "",
                  "parent_id": parent["id"], "depth": int(parent.get("depth") or 0) + 1, "tokens_used": 0,
                  "deadline": time.time() + child_seconds()}
         try:
