@@ -68,6 +68,9 @@ RETURN s.display_name AS subject, r.relation_type AS relation_type, o.display_na
 ORDER BY weight DESC
 LIMIT $limit
 `;
+/** With a temporal index only open RELATES_AS edges (valid_to not set) count for communities. */
+const RELATES_EDGES_OPEN = RELATES_EDGES.replace("RETURN a.name AS a", "AND r.valid_to IS NULL\nRETURN a.name AS a");
+const RELATIONS_OPEN = RELATIONS.replace("RETURN s.display_name AS subject", "AND r.valid_to IS NULL\nRETURN s.display_name AS subject");
 const SET_SUMMARY = `
 MATCH (c:Community {composite_key: $composite_key})
 SET c.summary = $summary, c.summary_updated_at = datetime()
@@ -105,12 +108,14 @@ export const COMMUNITY_STATEMENTS: Readonly<Record<string, string>> = Object.fre
   constraint: CONSTRAINT,
   co_occurs_edges: CO_OCCURS_EDGES,
   relates_edges: RELATES_EDGES,
+  relates_edges_open: RELATES_EDGES_OPEN,
   existing: EXISTING,
   merge: MERGE,
   members: MEMBERS,
   delete: DELETE,
   display_names: DISPLAY_NAMES,
   relations: RELATIONS,
+  relations_open: RELATIONS_OPEN,
   set_summary: SET_SUMMARY,
   list: LIST,
   by_entity: BY_ENTITY,
@@ -196,8 +201,8 @@ function checkArgs(resolution: number, minSize: number, maxEdges: number): void 
   }
 }
 
-async function fetchEdges(runner: CypherRunner, ns: string, uid: string, includeRelations: boolean, maxEdges: number): Promise<Edge[]> {
-  const queries = includeRelations ? [CO_OCCURS_EDGES, RELATES_EDGES] : [CO_OCCURS_EDGES];
+async function fetchEdges(runner: CypherRunner, ns: string, uid: string, includeRelations: boolean, maxEdges: number, temporal: boolean): Promise<Edge[]> {
+  const queries = includeRelations ? [CO_OCCURS_EDGES, temporal ? RELATES_EDGES_OPEN : RELATES_EDGES] : [CO_OCCURS_EDGES];
   const edges: Edge[] = [];
   for (const query of queries) {
     const rows = await runner.run(query, { namespace: ns, user_id: uid, limit: maxEdges + 1 });
@@ -219,7 +224,7 @@ function clip(s: string, maxCodePoints: number): string {
 }
 
 /** Groups the entities of a namespace into communities without writing anything. Bad arguments reject with a RangeError. */
-export async function detectIndexCommunities(runner: CypherRunner | null, logger: StoreLogger, options: DetectOptions = {}): Promise<Community[]> {
+export async function detectIndexCommunities(runner: CypherRunner | null, logger: StoreLogger, options: DetectOptions = {}, temporal = false): Promise<Community[]> {
   const { resolution = 1.0, minSize = 2, includeRelations = false, maxEdges = 200_000 } = options;
   checkArgs(resolution, minSize, maxEdges);
   if (runner === null) {
@@ -229,7 +234,7 @@ export async function detectIndexCommunities(runner: CypherRunner | null, logger
   const ns = options.namespace || "";
   const uid = options.userId || "";
   try {
-    const edges = await fetchEdges(runner, ns, uid, includeRelations, maxEdges);
+    const edges = await fetchEdges(runner, ns, uid, includeRelations, maxEdges, temporal);
     return detectCommunities(edges, resolution, minSize);
   } catch (e) {
     if (e instanceof CommunityArgumentError) throw e;
@@ -243,7 +248,7 @@ export async function detectIndexCommunities(runner: CypherRunner | null, logger
  * their summary), changed ones are replaced, vanished ones are deleted. The summarizer gets one object and returns text; a
  * failing or empty answer is counted in summaryErrors and the refresh carries on.
  */
-export async function refreshIndexCommunities(runner: CypherRunner | null, logger: StoreLogger, options: RefreshOptions = {}): Promise<RefreshResult> {
+export async function refreshIndexCommunities(runner: CypherRunner | null, logger: StoreLogger, options: RefreshOptions = {}, temporal = false): Promise<RefreshResult> {
   const { resolution = 1.0, minSize = 2, includeRelations = false, maxEdges = 200_000, summarizer = null, force = false, maxSummaryItems = 20 } = options;
   checkArgs(resolution, minSize, maxEdges);
   if (!positiveInt(maxSummaryItems)) {
@@ -260,7 +265,7 @@ export async function refreshIndexCommunities(runner: CypherRunner | null, logge
   const ns = options.namespace || "";
   const uid = options.userId || "";
   try {
-    const edges = await fetchEdges(runner, ns, uid, includeRelations, maxEdges);
+    const edges = await fetchEdges(runner, ns, uid, includeRelations, maxEdges, temporal);
     const found = detectCommunities(edges, resolution, minSize);
     await runner.run(CONSTRAINT, {});
     const existing = new Map<string, boolean>();
@@ -294,7 +299,7 @@ export async function refreshIndexCommunities(runner: CypherRunner | null, logge
     result.kept = kept.length;
     result.removed = removed.length;
     if (summarizer !== null) {
-      await summarize(runner, logger, found, keys, existing, edges, ns, uid, summarizer, force, maxSummaryItems, result);
+      await summarize(runner, logger, found, keys, existing, edges, ns, uid, summarizer, force, maxSummaryItems, result, temporal);
     }
     result.success = true;
     return result;
@@ -320,6 +325,7 @@ async function summarize(
   force: boolean,
   limit: number,
   result: RefreshResult,
+  temporal: boolean,
 ): Promise<void> {
   type Pair = { a: string; b: string; weight: number };
   const owner = new Map<string, string>();
@@ -352,7 +358,7 @@ async function summarize(
       names.set(String(row.name), row.display_name);
     }
     const relations: CommunityInfo["relations"] = [];
-    for (const row of await runner.run(RELATIONS, { namespace: ns, user_id: uid, members: community.members, limit })) {
+    for (const row of await runner.run(temporal ? RELATIONS_OPEN : RELATIONS, { namespace: ns, user_id: uid, members: community.members, limit })) {
       relations.push({ subject: row.subject ?? null, relationType: row.relation_type ?? null, object: row.object ?? null, weight: Number(row.weight) });
     }
     const top = (byKey.get(key) ?? [])

@@ -100,7 +100,7 @@ const DELETE_RELATIONWEIGHTS = `
 MATCH (rw:RelationWeight {namespace: $namespace, document_id: $document_id, user_id: $user_id})
 DELETE rw
 `;
-const RECOMPUTE_RELATES_AS = `
+export const RECOMPUTE_RELATES_AS = `
 MATCH (rw:RelationWeight {namespace: $namespace, subject: $subject, relation_type: $relation_type, object: $object, user_id: $user_id})
 WITH sum(rw.weight) AS total
 MATCH (es:Entity {name: $subject, namespace: $namespace, user_id: $user_id})
@@ -113,6 +113,30 @@ FOREACH (_ IN CASE WHEN total > 0 THEN [1] ELSE [] END |
 FOREACH (_ IN CASE WHEN total = 0 THEN [1] ELSE [] END |
     MERGE (es)-[r2:RELATES_AS {composite_key: $relates_as_composite_key}]->(eo)
     DELETE r2
+)
+`;
+
+/**
+ * Temporal variant of RECOMPUTE_RELATES_AS (GraphIndex with temporal true): an edge whose total support drops to 0 is closed
+ * (valid_to set) instead of deleted, and a closed edge that gets support again is reopened (valid_from restarts).
+ */
+export const RECOMPUTE_RELATES_AS_TEMPORAL = `
+MATCH (rw:RelationWeight {namespace: $namespace, subject: $subject, relation_type: $relation_type, object: $object, user_id: $user_id})
+WITH sum(rw.weight) AS total
+MATCH (es:Entity {name: $subject, namespace: $namespace, user_id: $user_id})
+MATCH (eo:Entity {name: $object, namespace: $namespace, user_id: $user_id})
+FOREACH (_ IN CASE WHEN total > 0 THEN [1] ELSE [] END |
+    MERGE (es)-[r:RELATES_AS {composite_key: $relates_as_composite_key}]->(eo)
+    ON CREATE SET r.relation_type = $relation_type, r.namespace = $namespace, r.user_id = $user_id,
+        r.valid_from = datetime()
+    SET r.valid_from = CASE WHEN r.valid_to IS NOT NULL THEN datetime() ELSE r.valid_from END
+    SET r.valid_to = null, r.weight = total
+)
+FOREACH (_ IN CASE WHEN total = 0 THEN [1] ELSE [] END |
+    MERGE (es)-[r2:RELATES_AS {composite_key: $relates_as_composite_key}]->(eo)
+    ON CREATE SET r2.relation_type = $relation_type, r2.namespace = $namespace, r2.user_id = $user_id,
+        r2.valid_from = datetime(), r2.weight = 0.0
+    SET r2.valid_to = coalesce(r2.valid_to, datetime())
 )
 `;
 
@@ -174,6 +198,7 @@ async function upsertOnce(
   title: string | null | undefined,
   chunks: readonly UpsertChunk[] | null | undefined,
   options: UpsertOptions,
+  temporal: boolean,
 ): Promise<UpsertSummary> {
   const summary = emptySummary(documentId);
   if (runner === null) {
@@ -285,7 +310,7 @@ async function upsertOnce(
     }
     await runner.run(DELETE_RELATIONWEIGHTS, { namespace: ns, document_id: docId, user_id: uid });
     for (const [subject, relationType, obj] of oldRelations.values()) {
-      await runner.run(RECOMPUTE_RELATES_AS, {
+      await runner.run(temporal ? RECOMPUTE_RELATES_AS_TEMPORAL : RECOMPUTE_RELATES_AS, {
         namespace: ns,
         subject,
         relation_type: relationType,
@@ -316,11 +341,12 @@ export async function upsertDocumentWithRetry(
   title: string | null | undefined,
   chunks: readonly UpsertChunk[] | null | undefined,
   options: UpsertOptions,
+  temporal = false,
 ): Promise<UpsertSummary> {
   let summary = emptySummary(documentId);
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     try {
-      summary = await upsertOnce(runner, logger, documentId, title, chunks, options);
+      summary = await upsertOnce(runner, logger, documentId, title, chunks, options, temporal);
       break;
     } catch (e) {
       if (!(e instanceof GraphTransientException)) throw e;

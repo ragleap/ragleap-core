@@ -25,6 +25,12 @@ export interface RelatedOptions extends LimitOptions {
 export interface RelationsOptions extends LimitOptions {
   relationType?: string | null;
   direction?: "outgoing" | "incoming" | "both";
+  /**
+   * Only relations valid at this moment (valid_from <= asOf < valid_to; edges without those properties count as always
+   * valid). A Date, or an ISO-8601 string with a time zone such as 2026-01-01T12:00:00Z or 2026-03-04T10:15:30+05:30.
+   * On a temporal index, closed edges are otherwise left out.
+   */
+  asOf?: Date | string | null;
 }
 export interface LineageOptions extends LimitOptions {
   relationType?: string | null;
@@ -346,30 +352,67 @@ export async function searchRelatedEntities(
   }
 }
 
+const AS_OF_TEXT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,9})?)?(Z|[+-]\d{2}:\d{2})$/;
+
+/** The as_of parameter as an ISO string (the HTTP Query API takes no typed parameters; the statement reads datetime($as_of)). */
+export function asOfParameter(value: Date | string | null | undefined): string | null {
+  if (value === undefined || value === null) return null;
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) throw new RangeError("asOf must be a valid date");
+    return value.toISOString();
+  }
+  if (typeof value === "string" && AS_OF_TEXT.test(value) && !Number.isNaN(Date.parse(value))) return value;
+  throw new RangeError("asOf must be a Date or an ISO-8601 string with a time zone, such as 2026-01-01T12:00:00Z");
+}
+
+/**
+ * Adds the validity filter before RETURN (before WITH DISTINCT for "both"): open edges on a temporal index, the interval
+ * valid_from <= asOf < valid_to when asOf is given.
+ */
+export function temporalRelations(query: string, both: boolean, asOf: string | null, temporal: boolean): string {
+  let clause: string;
+  if (asOf !== null) {
+    clause = "AND (r.valid_from IS NULL OR r.valid_from <= datetime($as_of))\nAND (r.valid_to IS NULL OR r.valid_to > datetime($as_of))\n";
+  } else if (temporal) {
+    clause = "AND r.valid_to IS NULL\n";
+  } else {
+    return query;
+  }
+  const marker = both ? "WITH DISTINCT" : "RETURN s.display_name";
+  const at = query.indexOf(marker);
+  if (at < 0) throw new Error(`relation query has no ${marker}`);
+  return query.slice(0, at) + clause + query.slice(at);
+}
+
 /** Typed relations involving entityName (direction: outgoing, incoming or both). */
 export async function findRelations(
   runner: CypherRunner | null,
   logger: QueryLogger,
   entityName: string,
   options: RelationsOptions = {},
+  temporal = false,
 ): Promise<RelationHit[]> {
   const { relationType = null, limit = DEFAULT_LIMIT, direction = "outgoing" } = options;
   if (direction !== "outgoing" && direction !== "incoming" && direction !== "both") {
     throw new RangeError(`direction must be "outgoing", "incoming", or "both", got ${reprOf(direction)}`);
   }
+  const asOf = asOfParameter(options.asOf);
   if (runner === null) return notAvailable(logger);
   const subject = normalizeEntityName(entityName);
   if (!subject) return [];
   const { ns, uid } = scopeOf(options);
-  const query = direction === "outgoing" ? FIND_RELATIONS_OUT : direction === "incoming" ? FIND_RELATIONS_IN : FIND_RELATIONS_BOTH;
+  const base = direction === "outgoing" ? FIND_RELATIONS_OUT : direction === "incoming" ? FIND_RELATIONS_IN : FIND_RELATIONS_BOTH;
+  const query = temporalRelations(base, direction === "both", asOf, temporal);
+  const params: Record<string, unknown> = {
+    subject: pyLower(subject),
+    namespace: ns,
+    user_id: uid,
+    relation_type: relationType,
+    limit: limitOf(limit),
+  };
+  if (asOf !== null) params.as_of = asOf;
   try {
-    const rows = await runner.run(query, {
-      subject: pyLower(subject),
-      namespace: ns,
-      user_id: uid,
-      relation_type: relationType,
-      limit: limitOf(limit),
-    });
+    const rows = await runner.run(query, params);
     return rows.map(toRelationHit);
   } catch (e) {
     logError(logger, `Relation search error: ${messageOf(e)}`);

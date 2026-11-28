@@ -29,7 +29,7 @@
   "sideEffects": false,
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/postbuild.mjs",
-    "test": "node --test test/parity.test.ts test/runner.test.ts test/graphIndex.test.ts test/upsert.test.ts test/live.test.ts test/liveIndex.test.ts test/liveUpsert.test.ts test/queries.test.ts test/liveQueries.test.ts test/communities.test.ts test/communitiesParity.test.ts test/communityIndex.test.ts test/communityIndexParity.test.ts test/liveCommunityIndex.test.ts test/tenantIsolation.test.ts test/liveTenantIsolation.test.ts test/liveUserIsolation.test.ts"
+    "test": "node --test test/parity.test.ts test/runner.test.ts test/graphIndex.test.ts test/upsert.test.ts test/live.test.ts test/liveIndex.test.ts test/liveUpsert.test.ts test/queries.test.ts test/liveQueries.test.ts test/communities.test.ts test/communitiesParity.test.ts test/communityIndex.test.ts test/communityIndexParity.test.ts test/liveCommunityIndex.test.ts test/tenantIsolation.test.ts test/liveTenantIsolation.test.ts test/liveUserIsolation.test.ts test/temporal.test.ts test/temporalParity.test.ts test/liveTemporal.test.ts"
   },
   "devDependencies": {
     "@types/node": "24.19.2",
