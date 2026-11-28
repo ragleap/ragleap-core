@@ -49,9 +49,15 @@ The Runs tab of the dashboard shows sub-agent runs under their parent and has a 
 - A child that was running when the server restarted stays "running" until you cancel it (or the cancel call finds it idle for 15 minutes).
 - Not included yet: a research skill built on this.
 
-## The start record also binds the tool list
+## The start record binds what the child can do, what it was told and its taint
 
-A child's signed start record includes a hash of the sorted names of the tools it may use (`spawn3` records). The same function (`resolved_tools`) builds that list when the child is started and when it is driven, so a child whose tool list changed in between (a tool removed, added or the list emptied) is refused, and so is an older record that has no hash. A setting change while a child waits for an approval can therefore make that child stop; that is the safe direction.
+A child's signed start record (`spawn4`) includes three things besides its ids:
+
+- **What it could do.** A digest (with a version tag) of its tool list: for every tool the name, the `module:qualname` of the function that does the work, read from the live function, and the declared effect class. The table of handlers (`TOOL_HANDLERS` in `core/autonomy.py`) is checked against the dispatcher by a test, so the two cannot drift apart. Tool descriptions are not part of it on purpose: they embed your own configuration (webhook names, allowlists). A child whose tool has no known handler is not started.
+- **What it was told.** A digest of its role and instruction text exactly as stored in its run row. Editing either after the child was signed makes it refuse to run.
+- **The taint it started with.** A child may become more tainted while it runs, never less than it started. A child whose taint was cleared is refused.
+
+The same function (`resolved_tools`) builds the tool list when the child is started and when it is driven, and it can only read four fields of the run (`id`, `parent_id`, `role`, `depth`), so the two digests cannot differ for the same child. An empty tool list is not hidden behind a missing record: a child with no tools is not started (`no_tools`), and every refusal of a record writes an audit event with its real reason (`no_record`, `field_mismatch`, `empty_tool_list`, `old_record_format`, `tools_changed`, `task_changed`, `taint_lowered`, `unknown_key`, `bad_signature`, `check_failed`) and puts it in the summary of the refused run. A setting change while a child waits (a tool removed or added, for instance) refuses that child; that is the safe direction. Records from before this version (`spawn3`) are refused.
 
 ## A child's budget is reserved before it exists
 

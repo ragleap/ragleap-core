@@ -191,6 +191,12 @@ def test_hosterror_keeps_a_known_code_and_maps_an_unknown_one():
     assert HostError("nonsense").code == c.E_CONNECTOR_ERROR
 
 
+# P1-F (deliberate change): the start record hashes each tool's DECLARED effect class, so the gate module reads the constants table
+# BUILTIN_EFFECT from the host's policy module. It is the one allowed reference, it must be a lazy import inside tools_digest, and
+# nothing else of the host may be imported until Phase 1 proper wires the gate to the host on purpose.
+ALLOWED_HOST_REFERENCES = {"core/autonomy.py": ("from core.connector_host.policy import BUILTIN_EFFECT",)}
+
+
 def test_nothing_in_the_product_imports_the_connector_host_yet():
     """Phase 0 changes no behaviour. Phase 1 will update this test on purpose when the gate starts to use the host."""
     offenders = []
@@ -199,9 +205,23 @@ def test_nothing_in_the_product_imports_the_connector_host_yet():
             rel = p.relative_to(ROOT).as_posix()
             if rel.startswith("core/connector_host/"):
                 continue
-            if "connector_host" in p.read_text(encoding="utf-8"):
+            text = p.read_text(encoding="utf-8")
+            for allowed in ALLOWED_HOST_REFERENCES.get(rel, ()):
+                assert text.count(allowed) == 1, (rel, allowed)
+                text = text.replace(allowed, "")
+            if "connector_host" in text:
                 offenders.append(rel)
     assert offenders == []
+
+
+def test_the_one_allowed_host_reference_is_a_lazy_import_inside_tools_digest():
+    import ast
+    tree = ast.parse((ROOT / "core" / "autonomy.py").read_text(encoding="utf-8"))
+    for node in tree.body:                                   # nothing at module level
+        assert not (isinstance(node, (ast.Import, ast.ImportFrom)) and "connector_host" in ast.dump(node))
+    holders = [n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)
+               and any(isinstance(s, ast.ImportFrom) and (s.module or "").startswith("core.connector_host") for s in ast.walk(n))]
+    assert holders == ["tools_digest"]
 
 
 def test_the_host_package_itself_uses_no_network_environment_or_subprocess():
