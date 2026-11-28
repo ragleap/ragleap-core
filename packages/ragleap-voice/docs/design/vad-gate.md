@@ -90,4 +90,19 @@ Status: pre-alpha, opt-in, off by default [tested: fake backend; one run of the 
 | 2.2 s Hindi stock-voice clip read as English | "Namaste! Aap ka swaagat hai." (23.8 s) | passed (speech from 0.22 s), same text (24.4 s) |
 
 So the false transcript appeared for all three non-speech inputs with the gate off, and the gate removed all three and let the speech clip through unchanged. Peak memory of the process was 4129 MB (the cause of the 1 GB above the 3 GB of the earlier checks was not investigated).
-- Limits: one run, three synthetic non-speech inputs and one synthetic speech clip. Nothing was measured on speech mixed with noise, short or quiet speech, accents, or noise recorded on a phone line; the 796-file result of section 9 (4.4% to 5.4% false accepts) remains the broader evidence. A clip with fewer than three speech windows (about 0.1 s) is dropped. The thresholds are the untuned benchmark values.
+- Limits: one run, three synthetic non-speech inputs and one synthetic speech clip. Nothing was measured on speech mixed with noise, real short or quiet speech (five synthetic clips are below), accents, or noise recorded on a phone line; the 796-file result of section 9 (4.4% to 5.4% false accepts) remains the broader evidence. A clip with fewer than three speech windows (about 0.1 s) is dropped. The thresholds are the untuned benchmark values.
+
+### Short and quiet clips (2026-11-26, laptop CPU, the detector alone, one run)
+
+Five clips from the ZONOS3-Mini engine (stock voices Ananya for Hindi and Sravya for Telugu, seed 1), each at its natural level and scaled digitally to RMS -30, -40 and -50 dBFS, run through `SileroGate` with the default options and the pinned model file (no Whisper run). Speech was detected from 0.16 to 0.38 s into each clip.
+
+| Clip (audio length) | Natural level (RMS) | -30 dBFS | -40 dBFS | -50 dBFS |
+|---|---|---|---|---|
+| Hindi, 1 word (0.53 s) | pass (-25.4) | pass | pass | dropped |
+| Hindi, 2 words (0.93 s) | pass (-22.8) | pass | pass | pass |
+| Hindi, 3 words (1.53 s) | pass (-25.8) | pass | pass | pass |
+| Telugu, 1 word (0.80 s) | pass (-20.4) | pass | pass | pass |
+| Telugu, 2 words (1.80 s) | pass (-17.5) | pass | pass | pass |
+
+19 of 20 cases passed; the only drop is the shortest clip at the lowest level.
+- Limits: two clean synthetic voices; scaling a clean clip down digitally is not a quiet recording (a real one has a noise floor, which may make the detector's job harder); five utterances, one run, the detector alone. Nothing here says how real callers, real quiet speech or short answers in noise are treated.
