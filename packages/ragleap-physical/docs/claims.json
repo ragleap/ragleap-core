@@ -702,6 +702,27 @@
    "status": "limitation",
    "evidence": [],
    "note": "A hosted Windows runner showed WinError 10053 once in the console test that fills every slot, and passed on a rerun and on other runs. Linux keeps the answer after the close, so only repeated Windows runs can show whether the helper removes the reset."
+  },
+  {
+   "id": "C49",
+   "claim": "a burst of 200 connections opened from another process while every console slot is taken is accepted within 10 s",
+   "where": "CHANGELOG.md",
+   "status": "verified",
+   "evidence": [
+    {
+     "type": "test",
+     "ref": "tests/test_console_busy_linger_review.py::test_a_burst_of_busy_refusals_from_another_process_is_accepted_within_ten_seconds"
+    }
+   ],
+   "note": "Issue 1336. REAL, Python 3.10.12, Linux loopback, simulated adapters only. Measured by a separate script, one run each: 0.04 s with the console's listen queue of 128 and 32.77 s with the standard library default of 5 and the same helper threads. Deliberate break checked: the queue set back to 5 fails the test."
+  },
+  {
+   "id": "C50",
+   "claim": "A burst far larger than the console's listen queue of 128 can still overflow it, and a client whose connection is dropped then waits about a second for the kernel's retry",
+   "where": "CHANGELOG.md",
+   "status": "limitation",
+   "evidence": [],
+   "note": "A larger queue moves the limit and does not remove it. A stop request sent during such a burst can wait for the kernel's retry (about a second per dropped connection). Local clients only: the console listens on loopback and needs a token."
   }
  ]
 }
