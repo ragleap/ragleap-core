@@ -723,6 +723,14 @@
    "status": "limitation",
    "evidence": [],
    "note": "A larger queue moves the limit and does not remove it. A stop request sent during such a burst can wait for the kernel's retry (about a second per dropped connection). Local clients only: the console listens on loopback and needs a token."
+  },
+  {
+   "id": "C51",
+   "claim": "When every helper thread is busy, a refused connection is closed at once and a Windows client that has already sent its request can lose the 503 (seen on hosted Windows runners with Python 3.11 and 3.13, one run)",
+   "where": "CHANGELOG.md",
+   "status": "limitation",
+   "evidence": [],
+   "note": "REAL, hosted Windows runners, Python 3.11 and 3.13, one run: tests/test_console_busy_linger_review.py::test_when_every_helper_is_busy_a_refusal_is_still_answered_and_closed_at_once returned no answer in both jobs and passes on Linux and macOS. The tests where a helper thread is free passed on the same Windows runs. The exact exception was not recorded. An improvement is not built yet."
   }
  ]
 }

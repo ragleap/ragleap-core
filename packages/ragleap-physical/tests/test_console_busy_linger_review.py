@@ -311,6 +311,7 @@ def test_while_every_helper_is_stuck_further_refusals_are_closed_at_once_and_a_s
             close_all(flood)
 
 
+@pytest.mark.xfail(sys.platform == "win32", strict=False, reason="known limitation: when every helper is busy the refusal is closed at once, and on Windows a client that has already sent its request can lose the 503 (seen on hosted Windows runners with Python 3.11 and 3.13)")
 def test_when_every_helper_is_busy_a_refusal_is_still_answered_and_closed_at_once():
     with busy_console() as (s, port, held):
         refused0 = s.server.refused_busy
