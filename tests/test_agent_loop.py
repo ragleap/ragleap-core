@@ -196,6 +196,9 @@ def test_rejection_ends_the_run_without_calling_the_model(world, monkeypatch):
 
 def test_approved_fetch_taints_the_resumed_run(world, monkeypatch):
     import core.autonomy as au
+    # P1-D (deliberate change): this test switches the mode between the proposal and the approval to look at the resumed run.
+    # An approval now refuses that (policy_changed, see tests/test_approval_binding.py), so the digest is pinned here.
+    monkeypatch.setattr(au, "policy_digest", lambda *a, **k: "pinned-for-this-test")
     world["mode"] = "semi"
     out = agent_loop.run(QUERY, "d", FakeService([plan("fetch_page", target=URL, content="read")]), None)
     world["mode"] = "full"

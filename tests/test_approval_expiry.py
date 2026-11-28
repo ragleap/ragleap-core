@@ -5,22 +5,16 @@ import uuid
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+import sys as _s, os as _o
+_s.path.insert(0, _o.path.dirname(__file__))
+from _bound_rows import insert_bound  # noqa: E402
 from core import autonomy
 from core.employees._db import get_connection
 
 
 def _pending(age_hours):
     aid = uuid.uuid4().hex[:8].upper()
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute(
-        "INSERT INTO autonomy_pending (action_id, action_type, channel, target, content, created_at) "
-        "VALUES (%s, 'send_slack', 'slack', 'x', 'expiry-test', now() - make_interval(hours => %s))",
-        (aid, age_hours),
-    )
-    conn.commit()
-    cur.close()
-    conn.close()
+    insert_bound(aid, "send_slack", "slack", "x", "expiry-test", age_hours=age_hours)
     return aid
 
 
